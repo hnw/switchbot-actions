@@ -1,0 +1,7 @@
+pyswitchbot
+blinker
+prometheus-client
+PyYAML
+requests
+pytest
+pytest-mock

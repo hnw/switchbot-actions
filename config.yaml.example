@@ -1,0 +1,59 @@
+# ----------------------------------------------------
+# Prometheus Exporter Settings
+# ----------------------------------------------------
+prometheus_exporter:
+  # Enable/disable the exporter feature.
+  # Default: true
+  enabled: true
+
+  # Port for the exporter to listen on.
+  # Default: 8000
+  port: 8000
+
+  # Specify the devices and metrics to target.
+  target:
+    # Only devices with an address in this list will be targeted.
+    # If this key is missing or the list is empty, all discovered devices will be targeted.
+    addresses:
+      #  - "00:00:5E:00:53:00"
+      #  - "00:00:5E:00:53:01"
+
+    # Only metrics in this list will be exported.
+    # If this key is missing or the list is empty, all available metrics will be exported.
+    metrics:
+      # - "temperature"
+      # - "humidity"
+      # - "battery"
+
+# ----------------------------------------------------
+# Event Action Settings
+# ----------------------------------------------------
+actions:
+  # - name: "Example: Living Room Button Press"
+  #   # Conditions that the event data must match for the trigger to fire.
+  #   event_conditions:
+  #     modelName: "Bot"
+  #     address: "DE:AD:BE:EF:00:03"
+  #     data:
+  #       isOn: True
+  #   # The action to perform when conditions are met.
+  #   trigger:
+  #     type: "shell_command"
+  #     command: "echo 'Living room button was pressed' >> /var/log/switchbot.log"
+
+  # - name: "Example: Bedroom Temperature Alert"
+  #   event_conditions:
+  #     modelName: "Meter"
+  #     address: "DE:AD:BE:EF:00:04"
+  #     # For numeric values, you can use operators in a string:
+  #     # '==', '!=', '>', '<', '>=', '<='
+  #     data:
+  #       temperature: "> 28.0"
+  #   trigger:
+  #     type: "webhook"
+  #     url: "https://example.com/notify"
+  #     method: "POST" # "GET" or "POST"
+  #     # You can use placeholders like {temperature}, {humidity}, {address}, etc.
+  #     # to insert values from the event data into the payload.
+  #     payload:
+  #       message: "Bedroom is too hot! Current temperature is {temperature}°C."
