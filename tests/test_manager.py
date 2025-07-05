@@ -1,7 +1,7 @@
 # tests/test_manager.py
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from switchbot_exporter.manager import SwitchbotManager
 from switchbot_exporter.signals import advertisement_received
 
@@ -47,3 +47,18 @@ async def test_manager_start_scan(manager, mock_scanner):
     assert received_signal[0].data['data']['isOn'] is True
 
     advertisement_received.disconnect(on_advertisement)
+
+@pytest.mark.asyncio
+@patch('logging.Logger.error')
+@patch('asyncio.sleep', new_callable=AsyncMock)
+async def test_manager_scan_error_handling(mock_sleep, mock_log_error, manager, mock_scanner):
+    """Test that the manager handles scan errors gracefully and logs them."""
+    mock_scanner.discover.side_effect = [Exception("Bluetooth device is turned off"), asyncio.CancelledError]
+
+    with pytest.raises(asyncio.CancelledError):
+        await manager.start_scan()
+
+    mock_log_error.assert_called_once_with(
+        "Error during BLE scan: Bluetooth device is turned off. Please ensure your Bluetooth adapter is turned on.", exc_info=True
+    )
+    mock_sleep.assert_called_once() # Should sleep after an error before retrying

@@ -27,7 +27,11 @@ def load_config(path='config.yaml'):
         logger.error(f"Configuration file not found at {path}. Please create it from config.yaml.example.")
         sys.exit(1)
     except yaml.YAMLError as e:
-        logger.error(f"Error parsing YAML file: {e}")
+        if hasattr(e, 'mark'):
+            mark = e.mark
+            logger.error(f"Error parsing YAML file: {e}\n  Line: {mark.line + 1}, Column: {mark.column + 1}")
+        else:
+            logger.error(f"Error parsing YAML file: {e}")
         sys.exit(1)
 
 async def main():

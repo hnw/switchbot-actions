@@ -1,4 +1,5 @@
 import pytest
+import requests
 from unittest.mock import MagicMock, patch
 from switchbot_exporter.dispatcher import EventDispatcher
 
@@ -120,6 +121,27 @@ def test_unknown_trigger_type(mock_log_warning, mock_advertisement_bot):
     dispatcher = EventDispatcher(actions_config=actions_config)
     dispatcher.handle_advertisement(None, device_data=mock_advertisement_bot)
     mock_log_warning.assert_called_once_with("Unknown trigger type: non_existent_type")
+
+@patch('requests.post')
+@patch('logging.Logger.error')
+def test_webhook_failure(mock_log_error, mock_post, mock_advertisement_meter):
+    """Test that a webhook failure is logged correctly."""
+    mock_post.side_effect = requests.RequestException("Test connection error")
+    actions_config = [{
+        "name": "Failing Webhook",
+        "event_conditions": {"modelName": "Meter"},
+        "trigger": {
+            "type": "webhook",
+            "url": "http://fail.example.com",
+            "method": "POST",
+            "payload": {}
+        }
+    }]
+    dispatcher = EventDispatcher(actions_config=actions_config)
+    dispatcher.handle_advertisement(None, device_data=mock_advertisement_meter)
+    
+    mock_post.assert_called_once()
+    mock_log_error.assert_called_once_with("Webhook failed: Test connection error. Please check the URL in your config.yaml and your network connection.")
 
 def test_no_trigger_if_conditions_not_met(mock_advertisement_bot):
     """Test that no action is triggered if conditions are not met."""

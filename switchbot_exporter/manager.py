@@ -31,7 +31,18 @@ class SwitchbotManager:
                     self._process_advertisement(device)
 
             except Exception as e:
-                logger.error(f"Error during BLE scan: {e}", exc_info=True)
+                error_message = f"Error during BLE scan: {e}. "
+                if "bluetooth device is turned off" in str(e).lower():
+                    error_message += "Please ensure your Bluetooth adapter is turned on."
+                elif "ble is not authorized" in str(e).lower():
+                    error_message += "Please check your operating system's privacy settings for Bluetooth permissions."
+                elif "permission denied" in str(e).lower() or "not permitted" in str(e).lower() or "access denied" in str(e).lower():
+                    error_message += "Please check if the program has the necessary Bluetooth permissions (e.g., run with sudo or ensure proper udev rules)."
+                elif "no such device" in str(e).lower():
+                    error_message += "Bluetooth device not found. Ensure your Bluetooth hardware is working correctly."
+                else:
+                    error_message += "This might be due to Bluetooth adapter issues, permissions, or other environmental factors."
+                logger.error(error_message, exc_info=True)
                 await asyncio.sleep(self._scan_interval)
 
     async def stop_scan(self):

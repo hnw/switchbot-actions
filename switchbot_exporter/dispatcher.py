@@ -68,7 +68,8 @@ class EventDispatcher:
                         # Try to cast the expected value to the same type as the actual value
                         if not op(actual_value, type(actual_value)(val_str)):
                             return False
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Could not compare values for condition '{key} {op_str} {val_str}' (actual: {actual_value}, expected: {expected_value}). This might indicate an invalid value in your config.yaml. Error: {e}")
                         return False # Could not compare values
                 else:
                     # Handle direct equality comparison
@@ -106,7 +107,7 @@ class EventDispatcher:
                 elif method == 'GET':
                     requests.get(url, params=formatted_payload, timeout=10)
             except requests.RequestException as e:
-                logger.error(f"Webhook failed: {e}")
+                logger.error(f"Webhook failed: {e}. Please check the URL in your config.yaml and your network connection.")
 
         else:
             logger.warning(f"Unknown trigger type: {trigger_type}")
