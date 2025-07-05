@@ -8,6 +8,7 @@ from .manager import SwitchbotManager
 from .store import DeviceStateStore
 from .exporter import PrometheusExporter
 from .dispatcher import EventDispatcher
+from switchbot import GetSwitchbotDevices
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +36,8 @@ async def main():
 
     # Initialize core components
     store = DeviceStateStore()
-    manager = SwitchbotManager()
+    scanner = GetSwitchbotDevices()
+    manager = SwitchbotManager(scanner=scanner)
 
     # Initialize optional components based on config
     if config.get('prometheus_exporter', {}).get('enabled', True):

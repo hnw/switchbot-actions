@@ -14,9 +14,9 @@ class SwitchbotManager:
     Manages the scanning for SwitchBot devices and dispatches signals
     when new advertisement data is received.
     """
-    def __init__(self, scan_interval: int = 10):
+    def __init__(self, scanner: GetSwitchbotDevices, scan_interval: int = 10):
         self._scan_interval = scan_interval
-        self._scanner = GetSwitchbotDevices()
+        self._scanner = scanner
         self._running = False
 
     async def start_scan(self):
@@ -32,9 +32,7 @@ class SwitchbotManager:
 
             except Exception as e:
                 logger.error(f"Error during BLE scan: {e}", exc_info=True)
-                # Wait a bit before retrying to avoid spamming errors
                 await asyncio.sleep(self._scan_interval)
-
 
     async def stop_scan(self):
         """Stops the scanning loop."""
@@ -44,8 +42,6 @@ class SwitchbotManager:
 
     def _process_advertisement(self, advertisement: SwitchBotAdvertisement):
         """Parses advertisement data and sends a signal."""
-        # The advertisement object from get_advertisements is already parsed.
-        # We just need to send it.
         if advertisement.data:
             logger.debug(f"Received advertisement from {advertisement.address}: {advertisement.data}")
             advertisement_received.send(self, device_data=advertisement)
