@@ -46,7 +46,20 @@ class PrometheusExporter:
                 state for addr, state in all_states.items() if addr in target_addresses
             ]
         else:
-            devices_to_export = all_states.values()
+            devices_to_export = list(all_states.values())
+
+        # Add RSSI metric if not filtered out
+        if not target_metrics or 'rssi' in target_metrics:
+            rssi_gauge = GaugeMetricFamily(
+                "switchbot_rssi", "Received Signal Strength Indicator (RSSI)", labels=label_names
+            )
+            for device in devices_to_export:
+                address = device.address
+                model = device.data.get('modelName', 'Unknown')
+                label_values = [address, model]
+                if hasattr(device, 'rssi') and device.rssi is not None:
+                    rssi_gauge.add_metric(label_values, device.rssi)
+            yield rssi_gauge
 
         for device in devices_to_export:
             address = device.address

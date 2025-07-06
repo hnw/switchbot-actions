@@ -72,6 +72,7 @@ prometheus_exporter:
       - "temperature"
       - "humidity"
       - "battery"
+      - "rssi"
 
 # Event Action Settings
 actions:
