@@ -9,7 +9,7 @@ def mock_advertisement_1():
     adv = MagicMock()
     adv.address = "DE:AD:BE:EF:33:33"
     adv.data = {
-        'modelName': 'Meter',
+        'modelName': 'WoSensorTH',
         'data': {
             'temperature': 22.5,
             'humidity': 45,
@@ -24,7 +24,7 @@ def mock_advertisement_2():
     adv = MagicMock()
     adv.address = "DE:AD:BE:EF:44:44"
     adv.data = {
-        'modelName': 'Bot',
+        'modelName': 'WoHand',
         'data': {
             'battery': 95,
             'isOn': True

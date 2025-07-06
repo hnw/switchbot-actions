@@ -14,7 +14,7 @@ def mock_advertisement():
     adv = MagicMock()
     adv.address = "DE:AD:BE:EF:00:01"
     adv.data = {
-        'modelName': 'Meter',
+        'modelName': 'WoSensorTH',
         'data': {
             'temperature': 25.5,
             'humidity': 50,
@@ -59,7 +59,7 @@ def test_state_overwrite(store, mock_advertisement):
     updated_advertisement = MagicMock()
     updated_advertisement.address = "DE:AD:BE:EF:00:01"
     updated_advertisement.data = {
-        'modelName': 'Meter',
+        'modelName': 'WoSensorTH',
         'data': {
             'temperature': 26.0, # Updated temperature
             'humidity': 51,

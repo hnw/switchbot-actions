@@ -13,7 +13,7 @@ def mock_scanner():
     scanner.discover.side_effect = [
         {"DE:AD:BE:EF:44:44": MagicMock(
             address="DE:AD:BE:EF:44:44",
-            data={'modelName': 'Bot', 'data': {'isOn': True}}
+            data={'modelName': 'WoHand', 'data': {'isOn': True}}
         )},
         asyncio.CancelledError,
     ]
