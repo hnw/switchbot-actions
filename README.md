@@ -20,7 +20,7 @@ All behavior is controlled through a single `config.yaml` file, allowing for fle
 
 ### Prerequisites
 
--   Python 3.9+
+-   Python 3.11+
 -   A Linux-based system with a Bluetooth adapter that supports BLE (e.g., Raspberry Pi).
 
 ### Installation
