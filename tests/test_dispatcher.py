@@ -54,11 +54,19 @@ def mock_advertisement_bot():
     ({"address": "DE:AD:BE:EF:22:22", "data": {"isOn": False}}, "mock_advertisement_bot", False),
     # Condition key does not exist in advertisement
     ({"data": {"non_existent_key": True}}, "mock_advertisement_bot", False),
+    # Invalid comparison value
+    ({"data": {"temperature": "> abc"}}, "mock_advertisement_meter", False),
 ])
-def test_conditions_met(conditions, advertisement_fixture, should_match, request):
+@patch('logging.Logger.warning')
+def test_conditions_met(mock_log_warning, conditions, advertisement_fixture, should_match, request):
     advertisement = request.getfixturevalue(advertisement_fixture)
     dispatcher = EventDispatcher(actions_config=[])
-    assert dispatcher._conditions_met(conditions, advertisement) == should_match
+    result = dispatcher._conditions_met(conditions, advertisement)
+    assert result == should_match
+    if conditions.get("data", {}).get("temperature") == "> abc":
+        mock_log_warning.assert_called_once()
+    else:
+        mock_log_warning.assert_not_called()
 
 @patch('subprocess.run')
 def test_shell_command_trigger(mock_run, mock_advertisement_bot):
