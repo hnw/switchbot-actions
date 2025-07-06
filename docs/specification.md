@@ -98,7 +98,9 @@ All application behavior is controlled by `config.yaml`.
 -   **`prometheus_exporter` section**:
     -   `enabled`: (boolean) Toggles the entire exporter feature.
     -   `port`: (integer) The port for the metrics server.
-    -   `devices`: (list, optional) A list of devices to include for exporting. If omitted, all devices are included. Each item can specify an `address` and an optional list of `allowed_metrics`.
+    -   `target`: (dict, optional) A dictionary to specify which devices and metrics to target.
+        -   `addresses`: (list, optional) A list of device MAC addresses to export. If this key is missing or the list is empty, all discovered devices will be targeted.
+        -   `metrics`: (list, optional) A list of metric names (e.g., "temperature", "humidity") to export. If this key is missing or the list is empty, all available metrics for the targeted devices will be exported.
 
 -   **`actions` section**:
     -   A list of action rules. Each rule has:
