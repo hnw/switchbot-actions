@@ -1,4 +1,4 @@
-# switchbot_exporter/manager.py
+# switchbot_exporter/scanner.py
 import asyncio
 import logging
 from switchbot import (
@@ -6,17 +6,19 @@ from switchbot import (
     SwitchBotAdvertisement,
 )
 from .signals import advertisement_received
+from .store import DeviceStateStore
 
 logger = logging.getLogger(__name__)
 
-class SwitchbotManager:
+class DeviceScanner:
     """
-    Manages the scanning for SwitchBot devices and dispatches signals
-    when new advertisement data is received.
+    Continuously scans for SwitchBot BLE advertisements and serves as the
+    central publisher of device events.
     """
-    def __init__(self, scanner: GetSwitchbotDevices, scan_interval: int = 10):
+    def __init__(self, scanner: GetSwitchbotDevices, store: DeviceStateStore, scan_interval: int = 10):
         self._scan_interval = scan_interval
         self._scanner = scanner
+        self._store = store
         self._running = False
 
     async def start_scan(self):
@@ -48,11 +50,21 @@ class SwitchbotManager:
     async def stop_scan(self):
         """Stops the scanning loop."""
         self._running = False
-        if self._scanner._scanner and self._scanner._scanner.is_scanning:
-             await self._scanner.stop()
 
-    def _process_advertisement(self, advertisement: SwitchBotAdvertisement):
-        """Parses advertisement data and sends a signal."""
-        if advertisement.data:
-            logger.debug(f"Received advertisement from {advertisement.address}: {advertisement.data}")
-            advertisement_received.send(self, device_data=advertisement)
+    def _process_advertisement(self, new_data: SwitchBotAdvertisement):
+        """
+        Retrieves the last known state and emits an advertisement_received
+        signal with both the new and old data.
+        """
+        if not new_data.data:
+            return
+
+        address = new_data.address
+        old_data = self._store.get_state(address)
+
+        logger.debug(f"Received advertisement from {address}: {new_data.data}")
+        advertisement_received.send(
+            self,
+            new_data=new_data,
+            old_data=old_data
+        )

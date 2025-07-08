@@ -40,7 +40,6 @@ jobs:
           path: htmlcov
 
       - name: Add coverage summary to job summary
-        # このステップを追加
         run: |
           echo "### 🧪 Coverage Summary (${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

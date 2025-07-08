@@ -27,34 +27,71 @@ prometheus_exporter:
       # - "rssi"
 
 # ----------------------------------------------------
-# Event Action Settings
+# Actions (Event-Driven)
+# Reacts immediately when a device event occurs.
 # ----------------------------------------------------
 actions:
-  # - name: "Example: Living Room Button Press"
-  #   # Conditions that the event data must match for the trigger to fire.
-  #   event_conditions:
-  #     modelName: "Bot"
-  #     address: "DE:AD:BE:EF:00:03"
-  #     data:
-  #       isOn: True
-  #   # The action to perform when conditions are met.
-  #   trigger:
-  #     type: "shell_command"
-  #     command: "echo 'Living room button was pressed' >> /var/log/switchbot.log"
+  - name: "Turn on Fan when Temperature Rises"
+    # Optional: Mutes this action for 10 minutes after it triggers to prevent spam.
+    mute_for: "10m"
+    conditions:
+      # Defines which device(s) this rule applies to.
+      device:
+        modelName: "Meter"
+      # Defines the state conditions that trigger the action.
+      state:
+        # Triggers only when the temperature *changes to* a value greater than 28.
+        temperature: "changes to > 28.0"
+    trigger:
+      type: "shell_command"
+      command: "echo 'High temperature detected ({temperature}°C), turning on fan...'"
 
-  # - name: "Example: Bedroom Temperature Alert"
-  #   event_conditions:
-  #     modelName: "Meter"
-  #     address: "DE:AD:BE:EF:00:04"
-  #     # For numeric values, you can use operators in a string:
-  #     # '==', '!=', '>', '<', '>=', '<='
-  #     data:
-  #       temperature: "> 28.0"
-  #   trigger:
-  #     type: "webhook"
-  #     url: "https://example.com/notify"
-  #     method: "POST" # "GET" or "POST"
-  #     # You can use placeholders like {temperature}, {humidity}, {address}, etc.
-  #     # to insert values from the event data into the payload.
-  #     payload:
-  #       message: "Bedroom is too hot! Current temperature is {temperature}°C."
+  - name: "Button Press Notification"
+    # Mute for 2 seconds to prevent bouncing/chattering effects.
+    mute_for: "2s"
+    conditions:
+      device:
+        modelName: "Bot"
+        address: "XX:XX:XX:XX:XX:AA"
+      state:
+        # Triggers whenever the 'button_count' value changes.
+        button_count: "changes"
+    trigger:
+      type: "webhook"
+      url: "https://example.com/notify"
+      payload:
+        message: "Button on device {address} was pressed. Total count: {button_count}."
+
+# ----------------------------------------------------
+# Timers (Time-Driven)
+# Reacts when a device has been in a specific state for a continuous duration.
+# ----------------------------------------------------
+timers:
+  - name: "Turn off Lights if No Motion for 5 Minutes"
+    conditions:
+      device:
+        modelName: "WoPresence"
+        address: "YY:YY:YY:YY:YY:BB"
+      # The state that must be true for the whole duration.
+      state:
+        motion_detected: False
+      # The duration the state must be sustained for the trigger to fire.
+      duration: "5m"
+    trigger:
+      type: "shell_command"
+      command: "echo 'No motion for 5 minutes, turning off lights.'"
+
+  - name: "Alert if Door is Open for 10 Minutes"
+    # Mute for 1 hour after triggering to avoid repeated alerts for the same event.
+    mute_for: "1h"
+    conditions:
+      device:
+        modelName: "WoContact"
+      state:
+        contact_open: True
+      duration: "10m"
+    trigger:
+      type: "webhook"
+      url: "https://example.com/alert"
+      payload:
+        message: "Warning: Device {address} has been open for 10 minutes!"

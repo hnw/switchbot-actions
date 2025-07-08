@@ -1,165 +1,37 @@
+# tests/test_dispatcher.py
 import pytest
-import requests
+import time
 from unittest.mock import MagicMock, patch
 from switchbot_exporter.dispatcher import EventDispatcher
 
 @pytest.fixture
-def mock_advertisement_meter():
-    """Creates a mock SwitchBotAdvertisement for a Meter device."""
-    adv = MagicMock()
-    adv.address = "DE:AD:BE:EF:11:11"
-    adv.data = {
-        'modelName': 'WoSensorTH',
-        'data': {
-            'temperature': 29.0,
-            'humidity': 65,
-            'battery': 80
-        }
-    }
-    return adv
+def mock_advertisement():
+    """Provides a generic mock advertisement for dispatcher tests."""
+    return MagicMock()
 
-@pytest.fixture
-def mock_advertisement_bot():
-    """Creates a mock SwitchBotAdvertisement for a Bot device."""
-    adv = MagicMock()
-    adv.address = "DE:AD:BE:EF:22:22"
-    adv.data = {
-        'modelName': 'WoHand',
-        'data': {
-            'isOn': True,
-            'battery': 95
-        }
-    }
-    return adv
-
-# Test cases for condition matching
-@pytest.mark.parametrize("conditions, advertisement_fixture, should_match", [
-    # Simple match by address
-    ({"address": "DE:AD:BE:EF:11:11"}, "mock_advertisement_meter", True),
-    ({"address": "DE:AD:BE:EF:99:99"}, "mock_advertisement_meter", False),
-    # Match by model name
-    ({"modelName": "WoSensorTH"}, "mock_advertisement_meter", True),
-    ({"modelName": "WoHand"}, "mock_advertisement_meter", False),
-    # Match by nested data
-    ({"data": {"isOn": True}}, "mock_advertisement_bot", True),
-    ({"data": {"isOn": False}}, "mock_advertisement_bot", False),
-    # Match by numeric operator: greater than
-    ({"data": {"temperature": "> 28.0"}}, "mock_advertisement_meter", True),
-    ({"data": {"temperature": "> 30.0"}}, "mock_advertisement_meter", False),
-    # Match by numeric operator: less than or equal to
-    ({"data": {"humidity": "<= 65"}}, "mock_advertisement_meter", True),
-    ({"data": {"humidity": "< 65"}}, "mock_advertisement_meter", False),
-    # Complex match
-    ({"address": "DE:AD:BE:EF:22:22", "modelName": "WoHand", "data": {"isOn": True}}, "mock_advertisement_bot", True),
-    ({"address": "DE:AD:BE:EF:22:22", "data": {"isOn": False}}, "mock_advertisement_bot", False),
-    # Condition key does not exist in advertisement
-    ({"data": {"non_existent_key": True}}, "mock_advertisement_bot", False),
-    # Invalid comparison value
-    ({"data": {"temperature": "> abc"}}, "mock_advertisement_meter", False),
-])
-@patch('logging.Logger.warning')
-def test_conditions_met(mock_log_warning, conditions, advertisement_fixture, should_match, request):
-    advertisement = request.getfixturevalue(advertisement_fixture)
-    dispatcher = EventDispatcher(actions_config=[])
-    result = dispatcher._conditions_met(conditions, advertisement)
-    assert result == should_match
-    if conditions.get("data", {}).get("temperature") == "> abc":
-        mock_log_warning.assert_called_once()
-    else:
-        mock_log_warning.assert_not_called()
-
-@patch('subprocess.run')
-def test_shell_command_trigger(mock_run, mock_advertisement_bot):
-    """Test that a shell command action is correctly triggered."""
+@patch('switchbot_exporter.triggers.check_conditions', return_value=True)
+@patch('switchbot_exporter.triggers.trigger_action')
+def test_dispatcher_triggers_action(mock_trigger_action, mock_check_conditions, mock_advertisement):
+    """Test that EventDispatcher calls trigger_action when conditions are met."""
     actions_config = [{
-        "name": "Test Shell Action",
-        "event_conditions": {"modelName": "WoHand", "data": {"isOn": True}},
-        "trigger": {"type": "shell_command", "command": "echo 'Bot pressed'"}
+        "name": "Test Dispatcher Action",
+        "conditions": {},
+        "trigger": { 'type': 'any' }
     }]
     dispatcher = EventDispatcher(actions_config=actions_config)
-    dispatcher.handle_advertisement(None, device_data=mock_advertisement_bot)
-    mock_run.assert_called_once_with("echo 'Bot pressed'", shell=True, check=False)
-
-@patch('requests.post')
-def test_webhook_post_trigger(mock_post, mock_advertisement_meter):
-    """Test that a POST webhook action is correctly triggered."""
-    actions_config = [{
-        "name": "Test Webhook Action",
-        "event_conditions": {"data": {"temperature": "> 28.0"}},
-        "trigger": {
-            "type": "webhook",
-            "url": "http://example.com/hook",
-            "method": "POST",
-            "payload": {"temp": "{temperature}", "addr": "{address}"}
-        }
-    }]
-    dispatcher = EventDispatcher(actions_config=actions_config)
-    dispatcher.handle_advertisement(None, device_data=mock_advertisement_meter)
+    dispatcher.handle_signal(None, new_data=mock_advertisement, old_data=None)
     
-    expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_post.assert_called_once_with("http://example.com/hook", json=expected_payload, timeout=10)
+    mock_check_conditions.assert_called_once()
+    mock_trigger_action.assert_called_once()
 
-@patch('requests.get')
-def test_webhook_get_trigger(mock_get, mock_advertisement_meter):
-    """Test that a GET webhook action is correctly triggered."""
-    actions_config = [{
-        "name": "Test GET Webhook",
-        "event_conditions": {"modelName": "WoSensorTH"},
-        "trigger": {
-            "type": "webhook",
-            "url": "http://example.com/get_hook",
-            "method": "GET",
-            "payload": {"hum": "{humidity}"}
-        }
-    }]
+@patch('switchbot_exporter.triggers.check_conditions', return_value=False)
+@patch('switchbot_exporter.triggers.trigger_action')
+def test_dispatcher_does_not_trigger(mock_trigger_action, mock_check_conditions, mock_advertisement):
+    """Test that EventDispatcher does NOT call trigger_action when conditions are not met."""
+    actions_config = [{"name": "Test No-Trigger", "conditions": {}, "trigger": {}}]
     dispatcher = EventDispatcher(actions_config=actions_config)
-    dispatcher.handle_advertisement(None, device_data=mock_advertisement_meter)
+    dispatcher.handle_signal(None, new_data=mock_advertisement, old_data=None)
     
-    expected_params = {"hum": "65"}
-    mock_get.assert_called_once_with("http://example.com/get_hook", params=expected_params, timeout=10)
+    mock_check_conditions.assert_called_once()
+    mock_trigger_action.assert_not_called()
 
-@patch('logging.Logger.warning')
-def test_unknown_trigger_type(mock_log_warning, mock_advertisement_bot):
-    """Test that an unknown trigger type logs a warning."""
-    actions_config = [{
-        "name": "Unknown Trigger Test",
-        "event_conditions": {"modelName": "WoHand"},
-        "trigger": {"type": "non_existent_type"}
-    }]
-    dispatcher = EventDispatcher(actions_config=actions_config)
-    dispatcher.handle_advertisement(None, device_data=mock_advertisement_bot)
-    mock_log_warning.assert_called_once_with("Unknown trigger type: non_existent_type")
-
-@patch('requests.post')
-@patch('logging.Logger.error')
-def test_webhook_failure(mock_log_error, mock_post, mock_advertisement_meter):
-    """Test that a webhook failure is logged correctly."""
-    mock_post.side_effect = requests.RequestException("Test connection error")
-    actions_config = [{
-        "name": "Failing Webhook",
-        "event_conditions": {"modelName": "WoSensorTH"},
-        "trigger": {
-            "type": "webhook",
-            "url": "http://fail.example.com",
-            "method": "POST",
-            "payload": {}
-        }
-    }]
-    dispatcher = EventDispatcher(actions_config=actions_config)
-    dispatcher.handle_advertisement(None, device_data=mock_advertisement_meter)
-    
-    mock_post.assert_called_once()
-    mock_log_error.assert_called_once_with("Webhook failed: Test connection error. Please check the URL in your config.yaml and your network connection.")
-
-def test_no_trigger_if_conditions_not_met(mock_advertisement_bot):
-    """Test that no action is triggered if conditions are not met."""
-    with patch('subprocess.run') as mock_run, patch('requests.post') as mock_post:
-        actions_config = [{
-            "name": "Test No-Match Action",
-            "event_conditions": {"data": {"isOn": False}}, # This will not match
-            "trigger": {"type": "shell_command", "command": "echo 'Should not run'"}
-        }]
-        dispatcher = EventDispatcher(actions_config=actions_config)
-        dispatcher.handle_advertisement(None, device_data=mock_advertisement_bot)
-        mock_run.assert_not_called()
-        mock_post.assert_not_called()

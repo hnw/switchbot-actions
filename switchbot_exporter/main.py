@@ -4,10 +4,11 @@ import logging
 import yaml
 import sys
 
-from .manager import SwitchbotManager
+from .scanner import DeviceScanner
 from .store import DeviceStateStore
 from .exporter import PrometheusExporter
 from .dispatcher import EventDispatcher
+from .timers import TimerHandler
 from switchbot import GetSwitchbotDevices
 
 # Configure logging
@@ -40,8 +41,8 @@ async def main():
 
     # Initialize core components
     store = DeviceStateStore()
-    scanner = GetSwitchbotDevices()
-    manager = SwitchbotManager(scanner=scanner)
+    ble_scanner = GetSwitchbotDevices()
+    scanner = DeviceScanner(scanner=ble_scanner, store=store)
 
     # Initialize optional components based on config
     if config.get('prometheus_exporter', {}).get('enabled', True):
@@ -52,19 +53,21 @@ async def main():
             target_config=exporter_config.get('target', {})
         )
         exporter.start_server()
-        logger.info(f"Prometheus exporter started on port {exporter.port}")
 
     if 'actions' in config and config['actions']:
         dispatcher = EventDispatcher(actions_config=config['actions'])
-        logger.info(f"Event dispatcher initialized with {len(config['actions'])} actions.")
+
+    if 'timers' in config and config['timers']:
+        timer_handler = TimerHandler(timers_config=config['timers'], store=store)
+        
 
     # Start the main scanning loop
     logger.info("Starting SwitchBot BLE scanner...")
     try:
-        await manager.start_scan()
+        await scanner.start_scan()
     except KeyboardInterrupt:
         logger.info("Stopping scanner...")
-        await manager.stop_scan()
+        await scanner.stop_scan()
         logger.info("Scanner stopped.")
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)

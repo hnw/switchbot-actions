@@ -5,127 +5,178 @@
 This document outlines the design for `switchbot-exporter`, a Python application designed to monitor SwitchBot Bluetooth Low Energy (BLE) devices. The project has two primary goals:
 
 1.  **Prometheus Exporter**: To expose sensor and state data from SwitchBot devices as metrics that can be scraped by a Prometheus server.
-2.  **Event-Driven Actions**: To provide a mechanism for executing custom actions (e.g., shell commands, webhooks) in near real-time when specific device events occur (e.g., a button is pressed, a sensor value crosses a threshold).
+2.  **Automation Engine**: To provide a mechanism for executing custom actions based on two distinct trigger types:
+    * **Event-Driven Actions**: Execute actions immediately when a device's state changes.
+    * **Time-Driven Timers**: Execute actions when a device remains in a specific state for a continuous duration.
 
-The application is designed to be a long-running service, managed entirely through a YAML configuration file, ensuring flexibility and ease of use without requiring code modification for new setups.
+The application is designed to be a long-running service, managed entirely through a single YAML configuration file, ensuring flexibility and ease of use without requiring code modification for new setups.
 
 ## 2. Architecture
 
-The application employs a decoupled, event-driven architecture based on the **Hub & Spoke** model, facilitated by the `blinker` library's signal/slot mechanism. This approach avoids tight coupling between components, enhancing modularity and extensibility.
+The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it retrieves the device's previous state from the `DeviceStateStore` and then emits a single, rich `advertisement_received` signal containing both the new and old state data as its payload.
 
--   **Hub**: A central `SwitchbotManager` component is responsible for scanning for BLE advertisements and parsing the data. Upon receiving data, it emits a signal.
--   **Spokes**: Various listener components (`PrometheusExporter`, `EventDispatcher`) connect to the signal and react to the data independently.
-
-This design ensures that the BLE scanning logic is centralized, preventing conflicts that could arise from multiple components trying to access the Bluetooth adapter simultaneously.
+All other core components, such as the `EventDispatcher`, `TimerHandler`, and the `DeviceStateStore` itself, listen to this signal and react independently. This design ensures components are loosely coupled and prevents race conditions by providing all necessary context within the signal itself.
 
 ### Mermaid Class Diagram
-
 ```mermaid
 classDiagram
-    class SwitchbotManager {
+    class DeviceScanner {
         +start_scan()
-        +stop_scan()
-        -on_advertisement(device, adv_data)
     }
-
-    class Signal {
-        <<blinker>>
-        +send(sender, **kwargs)
-        +connect(receiver)
-    }
-
     class DeviceStateStore {
-        -states: dict
-        +handle_advertisement(sender, **kwargs)
         +get_state(mac)
-        +get_all_states()
+        +handle_signal(payload)
     }
-
-    class PrometheusExporter {
-        -state_store: DeviceStateStore
-        +start_server()
-        -update_metrics()
-    }
-
     class EventDispatcher {
-        -action_mappings: dict
-        +handle_advertisement(sender, **kwargs)
-        +register_action(event_type, action)
+        +handle_signal(payload)
+    }
+    class TimerHandler {
+        +handle_signal(payload)
+    }
+    class PrometheusExporter{
+        +start_server()
     }
 
-    SwitchbotManager ..> Signal : sends
-    Signal ..> DeviceStateStore : notifies
-    Signal ..> EventDispatcher : notifies
-    PrometheusExporter --> DeviceStateStore : uses
-```
+    DeviceScanner --> DeviceStateStore : reads previous state
+    PrometheusExporter --> DeviceStateStore : reads current state
+    
+    DeviceScanner ..> EventDispatcher : notifies via signal
+    DeviceScanner ..> DeviceStateStore : notifies via signal
+    DeviceScanner ..> TimerHandler : notifies via signal
+````
 
 ## 3. Components
 
-### 3.1. `SwitchbotManager`
--   **Responsibility**: The core of the application. It continuously scans for SwitchBot BLE advertisements using the `pyswitchbot` library.
--   **Functionality**:
-    -   Initializes and manages the BLE scanning loop.
-    -   Receives raw advertisement data.
-    -   Uses `pyswitchbot`'s parsers to decode the raw data into a structured format.
-    -   Emits an `advertisement_received` signal with the parsed data, making it available to the rest of the application.
+### 3.1. `DeviceScanner`
+
+  - **Responsibility**: Continuously scans for SwitchBot BLE advertisements and serves as the central publisher of device events.
+  - **Functionality**:
+    1.  Scans for and receives a new device advertisement (`new_data`).
+    2.  Retrieves the last known state (`old_data`) for that device from the `DeviceStateStore`.
+    3.  Emits an `advertisement_received` signal with a payload containing both `new_data` and `old_data`.
 
 ### 3.2. `DeviceStateStore`
--   **Responsibility**: Acts as an in-memory cache for the latest known state of every observed device.
--   **Functionality**:
-    -   Connects to the `advertisement_received` signal.
-    -   On receiving data, it updates a dictionary, using the device's MAC address as the key.
-    -   Provides methods for other components (like the `PrometheusExporter`) to retrieve the latest state of one or all devices.
+
+  - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed device. It is the single source of truth for the current state of devices.
+  - **Functionality**: Connects to the `advertisement_received` signal. Upon receiving a signal, it **immediately** updates its internal state for the relevant device using the `new_data` from the signal's payload.
 
 ### 3.3. `PrometheusExporter`
--   **Responsibility**: Exposes device states as Prometheus metrics.
--   **Functionality**:
-    -   Starts a small HTTP server on a configurable port.
-    -   When scraped, it fetches the latest data from the `DeviceStateStore`.
-    -   Filters devices based on the `config.yaml` settings.
-    -   Formats the data into Prometheus metrics (e.g., gauges for temperature, humidity, battery level).
+
+  - **Responsibility**: Exposes device states as Prometheus metrics.
+  - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all devices from the `DeviceStateStore` and formats it into Prometheus metrics.
 
 ### 3.4. `EventDispatcher`
--   **Responsibility**: Executes custom actions based on incoming device data and predefined rules.
--   **Functionality**:
-    -   Connects to the `advertisement_received` signal.
-    -   For each incoming event, it checks against a list of action rules defined in `config.yaml`.
-    -   If an event's data matches the `event_conditions` of a rule, it executes the corresponding `trigger` (e.g., runs a shell command, sends a webhook).
+
+  - **Responsibility**: Handles **event-driven** automation based on rules in the `actions` section of the configuration.
+  - **Functionality**: Connects to the `advertisement_received` signal. It uses both the new and old state from the signal's payload to evaluate if any conditions are met and, if so, triggers the appropriate action. The success or failure of its actions does not affect any other components.
+
+### 3.5. `TimerHandler`
+
+  - **Responsibility**: Handles **time-driven** automation by creating and managing individual asynchronous tasks for each timer.
+  - **Functionality**: Connects to the `advertisement_received` signal and manages timers based on device state changes:
+  - **Timer Start**: When a device's state meets a timer's `conditions` and a timer for that device/rule is not already running, it creates a new asynchronous task via `asyncio.create_task`. This dedicated task then waits for the specified `duration`. If the wait completes without interruption, the action is triggered.
+  - **Timer Cancellation**: If a running timer's conditions are no longer met due to a new device state, the corresponding task is cancelled, effectively resetting the timer.
 
 ## 4. Configuration (`config.yaml`)
 
-All application behavior is controlled by `config.yaml`.
+The application is controlled by `config.yaml`. The `mute_for` and `duration` values should be specified in a format compatible with the **`pytimeparse2`** library (e.g., "10s", "5m", "1.5h").
 
--   **`prometheus_exporter` section**:
-    -   `enabled`: (boolean) Toggles the entire exporter feature.
-    -   `port`: (integer) The port for the metrics server.
-    -   `target`: (dict, optional) A dictionary to specify which devices and metrics to target.
-        -   `addresses`: (list, optional) A list of device MAC addresses to export. If this key is missing or the list is empty, all discovered devices will be targeted.
-        -   `metrics`: (list, optional) A list of metric names (e.g., "temperature", "humidity") to export. If this key is missing or the list is empty, all available metrics for the targeted devices will be exported.
+### 4.1. `prometheus_exporter`
 
--   **`actions` section**:
-    -   A list of action rules. Each rule has:
-        -   `name`: A descriptive name for the action.
-        -   `event_conditions`: A dictionary of criteria that the incoming data must match. Supports operators (`>`, `<`, `==`, etc.) for numeric values.
-        -   `trigger`: The action to perform, defined by a `type` (e.g., `shell_command`, `webhook`) and its required parameters.
+Configures the Prometheus metrics endpoint.
+
+  - `enabled`: (boolean) Toggles the feature.
+  - `port`: (integer) The server port.
+  - `target`: (dict, optional) Settings to filter the exported targets. **If this section is omitted, or if the `addresses`/`metrics` lists are empty, all discovered devices and all available metrics will be targeted, respectively.**
+      - `addresses`: (list, optional) Only devices with a MAC address in this list will be targeted.
+      - `metrics`: (list, optional) Only metrics with a name in this list will be exported.
+
+### 4.2. `actions` (Event-Driven Triggers)
+
+This section defines a list of rules that trigger **immediately** when a device's state changes. Each rule is a map that can contain the following keys:
+
+  - **`name`**: (string) A unique, human-readable name for the action.
+  - **`mute_for`**: (string, optional) A duration (e.g., "5s", "10m") during which this action will not be re-triggered after it fires. This is useful for preventing spam from rapid events. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
+  - **`conditions`**: (map, required) The "IF" part of the rule.
+      - **`device`**: Filters which devices this rule applies to based on attributes like `modelName` or `address`.
+      - **`state`**: Defines the state conditions that must be met. Most keys (e.g., `temperature`, `isOn`) are evaluated against the key-value pairs within the nested `data` object of the advertisement. As a special case, the key `rssi` is evaluated against the top-level RSSI value. In addition to standard comparisons (e.g., `temperature: "> 25.0"`), it supports special operators for tracking changes:
+          - `"changes"`: Triggers if the value is different from the previously seen value.
+          - `"changes to [value]"`: Triggers only if the value changes *and* the new value matches the specified one.
+              - You can also use a comparison operator with a numeric value (e.g., `"changes to > 28.0"`). In this case, the trigger fires only at the moment the state changes from not meeting the condition to meeting it. For example, a trigger for `temperature: "changes to > 28.0"` will fire when the temperature changes from 27.9 to 28.1, but it will not fire for a subsequent change from 28.1 to 28.2.
+  - **`trigger`**: (map, required) The "THEN" part of the rule. It defines the action to be performed and consists of a `type` (e.g., `shell_command`, `webhook`) and its corresponding parameters.
+
+```yaml
+actions:
+  - name: "A unique name for the action"
+    mute_for: "5s" # Optional: Mutes this action for 5 seconds after it fires.
+    conditions:
+      # Conditions to identify the target device(s).
+      device:
+        modelName: "Bot"
+      # Conditions based on the device's state.
+      state:
+        # Triggers only when 'isOn' value changes TO True.
+        isOn: "changes to True" 
+        # Triggers on ANY change to 'button_count'.
+        button_count: "changes"
+        # Triggers when temperature is greater than 25.0.
+        temperature: "> 25.0"
+    # The action to perform.
+    trigger:
+      type: "shell_command" # or "webhook"
+      command: "echo 'Action Triggered for {address}'"
+```
+
+### 4.3. `timers` (Time-Driven Triggers)
+
+This section defines a list of rules that trigger when a device's state has been sustained for a specific duration. If the state changes and the conditions are no longer met before the `duration` has elapsed, the timer for that device is automatically reset and will only start again when the conditions are met.
+
+**Note**: The state of timers is held in memory. If the application is restarted, all timer counts will be reset.
+
+Each rule in the list is a map that can contain the following keys:
+
+  - **`name`**: (string) A unique, human-readable name for the timer.
+  - **`mute_for`**: (string, optional) An optional duration during which this timer will not be re-triggered after it fires. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
+  - **`conditions`**: (map, required) The "IF" part of the rule.
+      - **`device`**: Filters which devices this rule applies to.
+      - **`state`**: Defines the state that must be sustained. These conditions are evaluated against the **`data`** object within the advertisement data. It supports standard comparisons like `temperature: "> 25.0"` or `motion_detected: False`. **Note:** The `changes` and `changes to` operators are designed for instantaneous events and are conceptually incompatible with a sustained `duration`. Their use in a `timers` rule is not supported.
+  - **`duration`**: (string, required) The period the state defined in `conditions` must be continuously met for the trigger to fire.
+  - **`trigger`**: (map, required) The "THEN" part of the rule, defining the action to be performed.
+
+```yaml
+timers:
+  - name: "A unique name for the timer"
+    mute_for: "1h" # Optional: Mutes this timer for 1 hour after it fires.
+    conditions:
+      # Conditions to identify the target device(s).
+      device:
+        modelName: "WoPresence"
+      # The state that must be sustained for the entire duration.
+      state:
+          motion_detected: False
+      # The duration the state must be continuously met.
+      duration: "5m" 
+    # The action to perform.
+    trigger:
+      type: "shell_command"
+      command: "echo 'No motion detected for 5 minutes at {address}!'"
+```
 
 ## 5. Project Structure
 
 ```
 /switchbot-exporter/
-├── .git/
 ├── docs/
 │   └── specification.md
 ├── switchbot_exporter/
-│   ├── __init__.py
 │   ├── main.py             # Application entry point
 │   ├── signals.py          # Blinker signals
-│   ├── manager.py          # SwitchbotManager
+│   ├── scanner.py          # DeviceScanner
 │   ├── store.py            # DeviceStateStore
 │   ├── exporter.py         # PrometheusExporter
-│   └── dispatcher.py       # EventDispatcher
+│   ├── dispatcher.py       # EventDispatcher (handles 'actions')
+│   └── timers.py           # TimerHandler (handles 'timers')
 ├── tests/
-├── .gitignore
 ├── config.yaml.example
-├── README.md
-└── requirements.txt
+└── README.md
 ```
