@@ -16,32 +16,8 @@ OPERATORS = {
     '<=': operator.le,
 }
 
-def evaluate_condition(condition: str, new_value, old_value) -> bool:
+def evaluate_condition(condition: str, new_value) -> bool:
     """Evaluates a single state condition."""
-    if condition == "changes":
-        # A change can only be detected if a previous value exists.
-        return old_value is not None and new_value != old_value
-
-    if isinstance(condition, str) and condition.startswith("changes to"):
-        parts = condition.split(" ", 2)
-        if len(parts) < 3:
-            return False
-        
-        target_condition = parts[2]
-        
-        # The new value must meet the target condition.
-        new_value_meets_condition = evaluate_condition(target_condition, new_value, None)
-        if not new_value_meets_condition:
-            return False
-
-        # If there was no old value, it cannot be a "change to".
-        if old_value is None:
-            return False
-
-        # The old value must NOT have met the condition.
-        old_value_meets_condition = evaluate_condition(target_condition, old_value, None)
-        return not old_value_meets_condition
-
     # Standard comparison
     parts = str(condition).split(' ', 1)
     op_str = '=='
@@ -55,6 +31,8 @@ def evaluate_condition(condition: str, new_value, old_value) -> bool:
 
     try:
         # Cast the expected value to the same type as the actual value
+        if new_value is None:
+            return False
         if isinstance(new_value, bool):
             expected_value = val_str.lower() in ('true', '1', 't', 'y', 'yes')
         else:
@@ -63,7 +41,7 @@ def evaluate_condition(condition: str, new_value, old_value) -> bool:
     except (ValueError, TypeError):
         return False # Could not compare
 
-def check_conditions(conditions: dict, new_data: SwitchBotAdvertisement, old_data: SwitchBotAdvertisement | None) -> bool:
+def check_conditions(conditions: dict, new_data: SwitchBotAdvertisement) -> bool:
     """Checks if the device data meets all specified conditions."""
     device_conditions = conditions.get('device', {})
     state_conditions = conditions.get('state', {})
@@ -82,13 +60,11 @@ def check_conditions(conditions: dict, new_data: SwitchBotAdvertisement, old_dat
         if key == 'rssi':
             # Special handling for RSSI, which is not in the 'data' dict
             new_value = getattr(new_data, 'rssi', None)
-            old_value = getattr(old_data, 'rssi', None) if old_data else None
         else:
             # For all other keys, look inside the 'data' dict
             new_value = new_data.data.get('data', {}).get(key)
-            old_value = old_data.data.get('data', {}).get(key) if old_data and old_data.data else None
 
-        if not evaluate_condition(condition, new_value, old_value):
+        if not evaluate_condition(condition, new_value):
             return False
     
     return True

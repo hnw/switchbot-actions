@@ -1,17 +1,11 @@
 # tests/test_timers.py
+
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
 from switchbot_exporter.timers import TimerHandler
 from switchbot_exporter.store import DeviceStateStore
-from switchbot_exporter.signals import advertisement_received
 
-pytestmark = pytest.mark.asyncio
-
-def consume_coroutine_and_return_mock_task(coro):
-    """Consumes a coroutine to prevent 'never awaited' warnings and returns a mock for test assertions."""
-    coro.close()
-    return MagicMock()
 
 @pytest.fixture
 def mock_store():
@@ -23,59 +17,79 @@ def mock_advertisement():
     """Creates a mock SwitchBotAdvertisement."""
     adv = MagicMock()
     adv.address = "DE:AD:BE:EF:AA:BB"
-    adv.data = {
-        'modelName': 'WoContact',
-        'data': {'contact_open': True}
-    }
     return adv
 
 @pytest.fixture
 def timer_config():
     """Provides a sample timer configuration."""
     return [{
-        "name": "Door Open Alert",
-        "conditions": {"state": {"contact_open": True}},
+        "name": "One-Shot Timer",
+        "conditions": {"state": {"dummy": True}},
         "duration": "0.01s",
+        "cooldown": "1s",
         "trigger": {"type": "shell_command"}
     }]
 
-@patch('switchbot_exporter.triggers.check_conditions', return_value=True)
-async def test_timer_task_starts_when_conditions_met(mock_check, timer_config, mock_store, mock_advertisement):
-    """Test that an asyncio.Task is created when timer conditions are met."""
+@pytest.mark.asyncio
+async def test_timer_starts_on_false_to_true_transition(timer_config, mock_store, mock_advertisement):
+    """
+    Test that a timer task is created only on the False -> True transition
+    and that it gets cleaned up properly.
+    """
     handler = TimerHandler(timers_config=timer_config, store=mock_store)
-    assert not handler._active_timers
+    timer_name = timer_config[0].get('name')
+    device_address = mock_advertisement.address
+    key = (timer_name, device_address)
 
-    with patch('asyncio.create_task', side_effect=consume_coroutine_and_return_mock_task) as mock_create_task:
-        advertisement_received.send(None, new_data=mock_advertisement)
-        mock_create_task.assert_called_once()
+    with patch('switchbot_exporter.triggers.check_conditions') as mock_check:
+        # 1. State is False -> no task
+        mock_check.return_value = False
+        handler.handle_signal(None, new_data=mock_advertisement)
+        assert not handler._active_timers
+
+        # 2. State becomes True -> task created
+        mock_check.return_value = True
+        handler.handle_signal(None, new_data=mock_advertisement)
+        assert key in handler._active_timers
+        assert isinstance(handler._active_timers[key], asyncio.Task)
+        initial_task = handler._active_timers[key]
+
+        # 3. State stays True -> no new task is created
+        handler.handle_signal(None, new_data=mock_advertisement)
         assert len(handler._active_timers) == 1
+        assert handler._active_timers[key] is initial_task
 
-@patch('switchbot_exporter.triggers.check_conditions', return_value=False)
-async def test_timer_task_cancels_when_conditions_not_met(mock_check, timer_config, mock_store, mock_advertisement):
-    """Test that a running asyncio.Task is cancelled if conditions are no longer met."""
-    handler = TimerHandler(timers_config=timer_config, store=mock_store)
-    
-    # Manually add a mock task to simulate it running
-    mock_task = MagicMock()
-    timer_key = ("Door Open Alert", mock_advertisement.address)
-    handler._active_timers[timer_key] = mock_task
-    assert len(handler._active_timers) == 1
+        # --- Cleanup ---
+        # Explicitly cancel the created task to prevent RuntimeWarning
+        task = handler._active_timers.pop(key)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass  # This is the expected outcome of cancellation.
 
-    # Signal that conditions are no longer met
-    advertisement_received.send(None, new_data=mock_advertisement)
-    
-    mock_task.cancel.assert_called_once()
-    assert not handler._active_timers
 
+@pytest.mark.asyncio
 @patch('switchbot_exporter.triggers.trigger_action')
-async def test_timer_run_triggers_action(mock_trigger_action, timer_config, mock_store, mock_advertisement):
-    """Test that the _run_timer coroutine triggers an action after sleeping."""
+async def test_timer_completes_and_triggers_action(mock_trigger_action, timer_config, mock_store, mock_advertisement):
+    """Test that a timer that runs to completion triggers its action."""
     mock_store.get_state.return_value = mock_advertisement
     handler = TimerHandler(timers_config=timer_config, store=mock_store)
 
-    # Directly call the coroutine
-    await handler._run_timer(timer_config[0], mock_advertisement.address, 0.01)
-    
-    mock_trigger_action.assert_called_once()
+    with patch('switchbot_exporter.triggers.check_conditions', return_value=True):
+        # Directly call _run_timer to simulate completion
+        await handler._run_timer(timer_config[0], mock_advertisement.address, "0.01s")
+        mock_trigger_action.assert_called_once()
 
+def test_timer_cancels_on_true_to_false_transition(timer_config, mock_store, mock_advertisement):
+    """Test that a running timer is cancelled if the state becomes False."""
+    handler = TimerHandler(timers_config=timer_config, store=mock_store)
+    mock_task = MagicMock()
+    key = (timer_config[0]["name"], mock_advertisement.address)
+    handler._active_timers[key] = mock_task
+    handler._last_condition_results[key] = True # Pretend last state was True
 
+    with patch('switchbot_exporter.triggers.check_conditions', return_value=False) as mock_check:
+        handler.handle_signal(None, new_data=mock_advertisement)
+        mock_task.cancel.assert_called_once()
+        assert not handler._active_timers # Task should be removed

@@ -19,12 +19,12 @@ class MuteMixin:
             return False
         return time.time() < mute_until
 
-    def _mute_action(self, name: str, device_address: str, mute_for: str | None):
+    def _mute_action(self, name: str, device_address: str, cooldown: str | None):
         """Starts the mute period for a named action on a specific device."""
-        if not mute_for:
+        if not cooldown:
             return
         
-        duration_seconds = parse(mute_for)
+        duration_seconds = parse(cooldown)
         if duration_seconds is not None and duration_seconds > 0:
             mute_key = (name, device_address)
             self._last_triggered[mute_key] = time.time() + duration_seconds

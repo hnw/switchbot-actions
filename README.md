@@ -76,19 +76,19 @@ prometheus_exporter:
 
 ### Event-Driven Actions (`actions`)
 
-Trigger an action **immediately** when a device state changes.
+Trigger an action **the moment** a device's state changes to meet the specified conditions (edge-triggered). The action will only fire once and will not fire again until the conditions have first become false and then true again.
 
 ```yaml
 actions:
   - name: "High Temperature Alert"
-    # Mute for 10 minutes to prevent repeated alerts
-    mute_for: "10m"
+    # Cooldown for 10 minutes to prevent repeated alerts
+    cooldown: "10m"
     conditions:
       device:
         modelName: "Meter"
       state:
-        # Triggers the moment temperature changes to a value > 28.0
-        temperature: "changes to > 28.0"
+        # Triggers the moment temperature becomes greater than 28.0
+        temperature: "> 28.0"
     trigger:
       type: "webhook"
       url: "https://example.com/alert"
@@ -109,7 +109,7 @@ actions:
 
 ### Time-Driven Timers (`timers`)
 
-Trigger an action when a device has been in a specific state for a **continuous duration**.
+Trigger an action when a device has been in a specific state for a **continuous duration** (one-shot). Once the timer fires, it will not restart until the conditions have first become false and then true again.
 
 ```yaml
 timers:

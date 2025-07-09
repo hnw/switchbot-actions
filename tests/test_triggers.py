@@ -50,35 +50,22 @@ def mock_advertisement_bot_off():
     return adv
 
 # --- Tests for check_conditions (which uses evaluate_condition) ---
-@pytest.mark.parametrize("conditions, new_data_fixture, old_data_fixture, should_match", [
+@pytest.mark.parametrize("conditions, new_data_fixture, should_match", [
     # Device conditions
-    ({"device": {"address": "DE:AD:BE:EF:11:11"}}, "mock_advertisement_meter", None, True),
-    ({"device": {"modelName": "WoSensorTH"}}, "mock_advertisement_meter", None, True),
-    ({"device": {"address": "DE:AD:BE:EF:99:99"}}, "mock_advertisement_meter", None, False),
+    ({"device": {"address": "DE:AD:BE:EF:11:11"}}, "mock_advertisement_meter", True),
+    ({"device": {"modelName": "WoSensorTH"}}, "mock_advertisement_meter", True),
+    ({"device": {"address": "DE:AD:BE:EF:99:99"}}, "mock_advertisement_meter", False),
     # State conditions (standard)
-    ({"state": {"isOn": True}}, "mock_advertisement_bot", None, True),
-    ({"state": {"temperature": "> 28.0"}}, "mock_advertisement_meter", None, True),
-    ({"state": {"temperature": "< 28.0"}}, "mock_advertisement_meter", None, False),
-    # State conditions (changes)
-    ({"state": {"temperature": "changes"}}, "mock_advertisement_meter", "mock_advertisement_meter_old", True),
-    ({"state": {"temperature": "changes"}}, "mock_advertisement_meter", "mock_advertisement_meter", False),
-    ({"state": {"temperature": "changes"}}, "mock_advertisement_meter", None, False), # No old data
-    # State conditions (changes to)
-    ({"state": {"isOn": "changes to True"}}, "mock_advertisement_bot", "mock_advertisement_bot_off", True),
-    ({"state": {"isOn": "changes to True"}}, "mock_advertisement_bot", "mock_advertisement_bot", False),
-    ({"state": {"isOn": "changes to True"}}, "mock_advertisement_bot", None, False), # No old data
-    # State conditions (changes to with operator)
-    ({"state": {"temperature": "changes to > 28.0"}}, "mock_advertisement_meter", "mock_advertisement_meter_old", True),
-    ({"state": {"temperature": "changes to > 28.0"}}, "mock_advertisement_meter_old", "mock_advertisement_meter", False),
+    ({"state": {"isOn": True}}, "mock_advertisement_bot", True),
+    ({"state": {"temperature": "> 28.0"}}, "mock_advertisement_meter", True),
+    ({"state": {"temperature": "< 28.0"}}, "mock_advertisement_meter", False),
     # RSSI conditions
-    ({"state": {"rssi": "> -75"}}, "mock_advertisement_meter", None, True),
-    ({"state": {"rssi": "< -75"}}, "mock_advertisement_meter", None, False),
-    ({"state": {"rssi": "changes"}}, "mock_advertisement_meter", "mock_advertisement_meter_old", True),
+    ({"state": {"rssi": "> -75"}}, "mock_advertisement_meter", True),
+    ({"state": {"rssi": "< -75"}}, "mock_advertisement_meter", False),
 ])
-def test_check_conditions(conditions, new_data_fixture, old_data_fixture, should_match, request):
+def test_check_conditions(conditions, new_data_fixture, should_match, request):
     new_data = request.getfixturevalue(new_data_fixture)
-    old_data = request.getfixturevalue(old_data_fixture) if old_data_fixture else None
-    assert triggers.check_conditions(conditions, new_data, old_data) == should_match
+    assert triggers.check_conditions(conditions, new_data) == should_match
 
 # --- Tests for format_string --- 
 def test_format_string(mock_advertisement_meter):

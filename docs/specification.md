@@ -13,13 +13,31 @@ The application is designed to be a long-running service, managed entirely throu
 
 ## 2. Architecture
 
-The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it retrieves the device's previous state from the `DeviceStateStore` and then emits a single, rich `advertisement_received` signal containing both the new and old state data as its payload.
+The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it emits a single, rich `advertisement_received` signal.
 
-All other core components, such as the `EventDispatcher`, `TimerHandler`, and the `DeviceStateStore` itself, listen to this signal and react independently. This design ensures components are loosely coupled and prevents race conditions by providing all necessary context within the signal itself.
+This signal is consumed by several independent components. To handle stateful rule processing, `EventDispatcher` and `TimerHandler` inherit from a common `RuleHandlerBase`. This base class contains the core logic for detecting state transitions (e.g., a condition changing from `False` to `True`), while the subclasses implement the specific actions to take upon those transitions. This design ensures that components are loosely coupled and that state-change detection logic is centralized and reusable.
 
 ### Mermaid Class Diagram
 ```mermaid
 classDiagram
+    direction LR
+    class RuleHandlerBase {
+        <<Abstract>>
+        #_rules
+        #_last_condition_results
+        +handle_signal(payload)
+        +on_conditions_met(rule, data)*
+        +on_conditions_no_longer_met(rule, data)*
+    }
+    class EventDispatcher {
+        +on_conditions_met(rule, data)
+        +on_conditions_no_longer_met(rule, data)
+    }
+    class TimerHandler {
+        #_active_timers
+        +on_conditions_met(rule, data)
+        +on_conditions_no_longer_met(rule, data)
+    }
     class DeviceScanner {
         +start_scan()
     }
@@ -27,59 +45,57 @@ classDiagram
         +get_state(mac)
         +handle_signal(payload)
     }
-    class EventDispatcher {
-        +handle_signal(payload)
-    }
-    class TimerHandler {
-        +handle_signal(payload)
-    }
     class PrometheusExporter{
         +start_server()
     }
 
+    RuleHandlerBase <|-- EventDispatcher
+    RuleHandlerBase <|-- TimerHandler
+
     DeviceScanner --> DeviceStateStore : reads previous state
     PrometheusExporter --> DeviceStateStore : reads current state
     
-    DeviceScanner ..> EventDispatcher : notifies via signal
+    DeviceScanner ..> RuleHandlerBase : notifies via signal
     DeviceScanner ..> DeviceStateStore : notifies via signal
-    DeviceScanner ..> TimerHandler : notifies via signal
-````
+```
 
 ## 3. Components
 
 ### 3.1. `DeviceScanner`
 
   - **Responsibility**: Continuously scans for SwitchBot BLE advertisements and serves as the central publisher of device events.
-  - **Functionality**:
-    1.  Scans for and receives a new device advertisement (`new_data`).
-    2.  Retrieves the last known state (`old_data`) for that device from the `DeviceStateStore`.
-    3.  Emits an `advertisement_received` signal with a payload containing both `new_data` and `old_data`.
+  - **Functionality**: Emits an `advertisement_received` signal with the new advertisement data as its payload.
 
 ### 3.2. `DeviceStateStore`
 
   - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed device. It is the single source of truth for the current state of devices.
-  - **Functionality**: Connects to the `advertisement_received` signal. Upon receiving a signal, it **immediately** updates its internal state for the relevant device using the `new_data` from the signal's payload.
+  - **Functionality**: Connects to the `advertisement_received` signal. Upon receiving a signal, it **immediately** updates its internal state for the relevant device.
 
 ### 3.3. `PrometheusExporter`
 
   - **Responsibility**: Exposes device states as Prometheus metrics.
   - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all devices from the `DeviceStateStore` and formats it into Prometheus metrics.
 
-### 3.4. `EventDispatcher`
+### 3.4. `RuleHandlerBase` (Abstract)
+
+  - **Responsibility**: Provides the core state-transition detection logic for all rule-based handlers.
+  - **Functionality**: Connects to the `advertisement_received` signal. For each rule and each device, it stores the result of the last condition evaluation. It compares the current result with the last known result to detect a change. When a change occurs, it calls one of its abstract methods (`on_conditions_met` or `on_conditions_no_longer_met`), which must be implemented by subclasses.
+
+### 3.5. `EventDispatcher`
 
   - **Responsibility**: Handles **event-driven** automation based on rules in the `actions` section of the configuration.
-  - **Functionality**: Connects to the `advertisement_received` signal. It uses both the new and old state from the signal's payload to evaluate if any conditions are met and, if so, triggers the appropriate action. The success or failure of its actions does not affect any other components.
+  - **Functionality**: Inherits from `RuleHandlerBase`. It implements `on_conditions_met` to trigger an action immediately when a condition state transitions from `False` to `True` (an edge trigger). This prevents actions from firing repeatedly if a state remains true.
 
-### 3.5. `TimerHandler`
+### 3.6. `TimerHandler`
 
-  - **Responsibility**: Handles **time-driven** automation by creating and managing individual asynchronous tasks for each timer.
-  - **Functionality**: Connects to the `advertisement_received` signal and manages timers based on device state changes:
-  - **Timer Start**: When a device's state meets a timer's `conditions` and a timer for that device/rule is not already running, it creates a new asynchronous task via `asyncio.create_task`. This dedicated task then waits for the specified `duration`. If the wait completes without interruption, the action is triggered.
-  - **Timer Cancellation**: If a running timer's conditions are no longer met due to a new device state, the corresponding task is cancelled, effectively resetting the timer.
+  - **Responsibility**: Handles **time-driven** automation.
+  - **Functionality**: Inherits from `RuleHandlerBase`.
+  - **Timer Start**: Implements `on_conditions_met` to create and start a new asynchronous timer task when a device's state transitions from `False` to `True`.
+  - **Timer Cancellation**: Implements `on_conditions_no_longer_met` to cancel the running timer task if the conditions transition back from `True` to `False`.
 
 ## 4. Configuration (`config.yaml`)
 
-The application is controlled by `config.yaml`. The `mute_for` and `duration` values should be specified in a format compatible with the **`pytimeparse2`** library (e.g., "10s", "5m", "1.5h").
+The application is controlled by `config.yaml`. The `cooldown` and `duration` values should be specified in a format compatible with the **`pytimeparse2`** library (e.g., "10s", "5m", "1.5h").
 
 ### 4.1. `prometheus_exporter`
 
@@ -93,32 +109,27 @@ Configures the Prometheus metrics endpoint.
 
 ### 4.2. `actions` (Event-Driven Triggers)
 
-This section defines a list of rules that trigger **immediately** when a device's state changes. Each rule is a map that can contain the following keys:
+This section defines a list of rules that trigger **only at the moment** a device's state changes to meet the conditions (edge-triggered). Each rule is a map that can contain the following keys:
 
   - **`name`**: (string) A unique, human-readable name for the action.
-  - **`mute_for`**: (string, optional) A duration (e.g., "5s", "10m") during which this action will not be re-triggered after it fires. This is useful for preventing spam from rapid events. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
+  - **`cooldown`**: (string, optional) A duration (e.g., "5s", "10m") during which this action will not be re-triggered after it fires. This is useful for preventing spam from rapid events. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
   - **`conditions`**: (map, required) The "IF" part of the rule.
       - **`device`**: Filters which devices this rule applies to based on attributes like `modelName` or `address`.
-      - **`state`**: Defines the state conditions that must be met. Most keys (e.g., `temperature`, `isOn`) are evaluated against the key-value pairs within the nested `data` object of the advertisement. As a special case, the key `rssi` is evaluated against the top-level RSSI value. In addition to standard comparisons (e.g., `temperature: "> 25.0"`), it supports special operators for tracking changes:
-          - `"changes"`: Triggers if the value is different from the previously seen value.
-          - `"changes to [value]"`: Triggers only if the value changes *and* the new value matches the specified one.
-              - You can also use a comparison operator with a numeric value (e.g., `"changes to > 28.0"`). In this case, the trigger fires only at the moment the state changes from not meeting the condition to meeting it. For example, a trigger for `temperature: "changes to > 28.0"` will fire when the temperature changes from 27.9 to 28.1, but it will not fire for a subsequent change from 28.1 to 28.2.
+      - **`state`**: Defines the state conditions that must be met. Most keys (e.g., `temperature`, `isOn`) are evaluated against the key-value pairs within the nested `data` object of the advertisement. As a special case, the key `rssi` is evaluated against the top-level RSSI value. Conditions are simple comparisons (e.g., `temperature: "> 25.0"`).
   - **`trigger`**: (map, required) The "THEN" part of the rule. It defines the action to be performed and consists of a `type` (e.g., `shell_command`, `webhook`) and its corresponding parameters.
 
 ```yaml
 actions:
   - name: "A unique name for the action"
-    mute_for: "5s" # Optional: Mutes this action for 5 seconds after it fires.
+    cooldown: "5s" # Optional: Mutes this action for 5 seconds after it fires.
     conditions:
       # Conditions to identify the target device(s).
       device:
         modelName: "Bot"
       # Conditions based on the device's state.
       state:
-        # Triggers only when 'isOn' value changes TO True.
-        isOn: "changes to True" 
-        # Triggers on ANY change to 'button_count'.
-        button_count: "changes"
+        # Triggers when 'isOn' is True.
+        isOn: True
         # Triggers when temperature is greater than 25.0.
         temperature: "> 25.0"
     # The action to perform.
@@ -129,24 +140,24 @@ actions:
 
 ### 4.3. `timers` (Time-Driven Triggers)
 
-This section defines a list of rules that trigger when a device's state has been sustained for a specific duration. If the state changes and the conditions are no longer met before the `duration` has elapsed, the timer for that device is automatically reset and will only start again when the conditions are met.
+This section defines a list of "one-shot" rules that trigger when a device's state has been sustained for a specific duration. Once a timer fires, it will not be re-armed until the conditions have first become `False` and then `True` again.
 
 **Note**: The state of timers is held in memory. If the application is restarted, all timer counts will be reset.
 
 Each rule in the list is a map that can contain the following keys:
 
   - **`name`**: (string) A unique, human-readable name for the timer.
-  - **`mute_for`**: (string, optional) An optional duration during which this timer will not be re-triggered after it fires. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
+  - **`cooldown`**: (string, optional) An optional duration during which this timer will not be re-triggered after it fires. When a rule applies to multiple devices (e.g., by targeting a `modelName`), this cooldown is managed independently for each device.
   - **`conditions`**: (map, required) The "IF" part of the rule.
       - **`device`**: Filters which devices this rule applies to.
-      - **`state`**: Defines the state that must be sustained. These conditions are evaluated against the **`data`** object within the advertisement data. It supports standard comparisons like `temperature: "> 25.0"` or `motion_detected: False`. **Note:** The `changes` and `changes to` operators are designed for instantaneous events and are conceptually incompatible with a sustained `duration`. Their use in a `timers` rule is not supported.
+      - **`state`**: Defines the state that must be sustained. These conditions are evaluated against the **`data`** object within the advertisement data. It supports standard comparisons like `temperature: "> 25.0"` or `motion_detected: False`.
   - **`duration`**: (string, required) The period the state defined in `conditions` must be continuously met for the trigger to fire.
   - **`trigger`**: (map, required) The "THEN" part of the rule, defining the action to be performed.
 
 ```yaml
 timers:
   - name: "A unique name for the timer"
-    mute_for: "1h" # Optional: Mutes this timer for 1 hour after it fires.
+    cooldown: "1h" # Optional: Mutes this timer for 1 hour after it fires.
     conditions:
       # Conditions to identify the target device(s).
       device:
@@ -174,6 +185,7 @@ timers:
 │   ├── scanner.py          # DeviceScanner
 │   ├── store.py            # DeviceStateStore
 │   ├── exporter.py         # PrometheusExporter
+│   ├── handlers.py         # RuleHandlerBase
 │   ├── dispatcher.py       # EventDispatcher (handles 'actions')
 │   └── timers.py           # TimerHandler (handles 'timers')
 ├── tests/
