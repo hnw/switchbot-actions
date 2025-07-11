@@ -1,16 +1,19 @@
 # tests/test_timers.py
 
-import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
-from switchbot_exporter.timers import TimerHandler
+
+import pytest
+
 from switchbot_exporter.store import DeviceStateStore
+from switchbot_exporter.timers import TimerHandler
 
 
 @pytest.fixture
 def mock_store():
     """Provides a mock DeviceStateStore."""
     return MagicMock(spec=DeviceStateStore)
+
 
 @pytest.fixture
 def mock_advertisement():
@@ -19,29 +22,35 @@ def mock_advertisement():
     adv.address = "DE:AD:BE:EF:AA:BB"
     return adv
 
+
 @pytest.fixture
 def timer_config():
     """Provides a sample timer configuration."""
-    return [{
-        "name": "One-Shot Timer",
-        "conditions": {"state": {"dummy": True}},
-        "duration": "0.01s",
-        "cooldown": "1s",
-        "trigger": {"type": "shell_command"}
-    }]
+    return [
+        {
+            "name": "One-Shot Timer",
+            "conditions": {"state": {"dummy": True}},
+            "duration": "0.01s",
+            "cooldown": "1s",
+            "trigger": {"type": "shell_command"},
+        }
+    ]
+
 
 @pytest.mark.asyncio
-async def test_timer_starts_on_false_to_true_transition(timer_config, mock_store, mock_advertisement):
+async def test_timer_starts_on_false_to_true_transition(
+    timer_config, mock_store, mock_advertisement
+):
     """
     Test that a timer task is created only on the False -> True transition
     and that it gets cleaned up properly.
     """
     handler = TimerHandler(timers_config=timer_config, store=mock_store)
-    timer_name = timer_config[0].get('name')
+    timer_name = timer_config[0].get("name")
     device_address = mock_advertisement.address
     key = (timer_name, device_address)
 
-    with patch('switchbot_exporter.triggers.check_conditions') as mock_check:
+    with patch("switchbot_exporter.triggers.check_conditions") as mock_check:
         # 1. State is False -> no task
         mock_check.return_value = False
         handler.handle_signal(None, new_data=mock_advertisement)
@@ -70,26 +79,31 @@ async def test_timer_starts_on_false_to_true_transition(timer_config, mock_store
 
 
 @pytest.mark.asyncio
-@patch('switchbot_exporter.triggers.trigger_action')
-async def test_timer_completes_and_triggers_action(mock_trigger_action, timer_config, mock_store, mock_advertisement):
+@patch("switchbot_exporter.triggers.trigger_action")
+async def test_timer_completes_and_triggers_action(
+    mock_trigger_action, timer_config, mock_store, mock_advertisement
+):
     """Test that a timer that runs to completion triggers its action."""
     mock_store.get_state.return_value = mock_advertisement
     handler = TimerHandler(timers_config=timer_config, store=mock_store)
 
-    with patch('switchbot_exporter.triggers.check_conditions', return_value=True):
+    with patch("switchbot_exporter.triggers.check_conditions", return_value=True):
         # Directly call _run_timer to simulate completion
         await handler._run_timer(timer_config[0], mock_advertisement.address, "0.01s")
         mock_trigger_action.assert_called_once()
 
-def test_timer_cancels_on_true_to_false_transition(timer_config, mock_store, mock_advertisement):
+
+def test_timer_cancels_on_true_to_false_transition(
+    timer_config, mock_store, mock_advertisement
+):
     """Test that a running timer is cancelled if the state becomes False."""
     handler = TimerHandler(timers_config=timer_config, store=mock_store)
     mock_task = MagicMock()
     key = (timer_config[0]["name"], mock_advertisement.address)
     handler._active_timers[key] = mock_task
-    handler._last_condition_results[key] = True # Pretend last state was True
+    handler._last_condition_results[key] = True  # Pretend last state was True
 
-    with patch('switchbot_exporter.triggers.check_conditions', return_value=False) as mock_check:
+    with patch("switchbot_exporter.triggers.check_conditions", return_value=False):
         handler.handle_signal(None, new_data=mock_advertisement)
         mock_task.cancel.assert_called_once()
-        assert not handler._active_timers # Task should be removed
+        assert not handler._active_timers  # Task should be removed

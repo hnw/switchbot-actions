@@ -1,21 +1,30 @@
 # switchbot_exporter/scanner.py
 import asyncio
 import logging
+
 from switchbot import (
     GetSwitchbotDevices,
     SwitchBotAdvertisement,
 )
+
 from .signals import advertisement_received
 from .store import DeviceStateStore
 
 logger = logging.getLogger(__name__)
+
 
 class DeviceScanner:
     """
     Continuously scans for SwitchBot BLE advertisements and serves as the
     central publisher of device events.
     """
-    def __init__(self, scanner: GetSwitchbotDevices, store: DeviceStateStore, scan_interval: int = 10):
+
+    def __init__(
+        self,
+        scanner: GetSwitchbotDevices,
+        store: DeviceStateStore,
+        scan_interval: int = 10,
+    ):
         self._scan_interval = scan_interval
         self._scanner = scanner
         self._store = store
@@ -34,16 +43,34 @@ class DeviceScanner:
 
             except Exception as e:
                 error_message = f"Error during BLE scan: {e}. "
-                if "bluetooth device is turned off" in str(e).lower():
-                    error_message += "Please ensure your Bluetooth adapter is turned on."
-                elif "ble is not authorized" in str(e).lower():
-                    error_message += "Please check your operating system's privacy settings for Bluetooth permissions."
-                elif "permission denied" in str(e).lower() or "not permitted" in str(e).lower() or "access denied" in str(e).lower():
-                    error_message += "Please check if the program has the necessary Bluetooth permissions (e.g., run with sudo or ensure proper udev rules)."
-                elif "no such device" in str(e).lower():
-                    error_message += "Bluetooth device not found. Ensure your Bluetooth hardware is working correctly."
+                err_str = str(e).lower()
+                if "bluetooth device is turned off" in err_str:
+                    error_message += (
+                        "Please ensure your Bluetooth adapter is turned on."
+                    )
+                elif "ble is not authorized" in err_str:
+                    error_message += (
+                        "Please check your OS's privacy settings for Bluetooth."
+                    )
+                elif (
+                    "permission denied" in err_str
+                    or "not permitted" in err_str
+                    or "access denied" in err_str
+                ):
+                    error_message += (
+                        "Check if the program has Bluetooth permissions "
+                        "(e.g., run with sudo or set udev rules)."
+                    )
+                elif "no such device" in err_str:
+                    error_message += (
+                        "Bluetooth device not found. "
+                        "Ensure hardware is working correctly."
+                    )
                 else:
-                    error_message += "This might be due to Bluetooth adapter issues, permissions, or other environmental factors."
+                    error_message += (
+                        "This might be due to adapter issues, permissions, "
+                        "or other environmental factors."
+                    )
                 logger.error(error_message, exc_info=True)
                 await asyncio.sleep(self._scan_interval)
 
@@ -63,8 +90,4 @@ class DeviceScanner:
         old_data = self._store.get_state(address)
 
         logger.debug(f"Received advertisement from {address}: {new_data.data}")
-        advertisement_received.send(
-            self,
-            new_data=new_data,
-            old_data=old_data
-        )
+        advertisement_received.send(self, new_data=new_data, old_data=old_data)

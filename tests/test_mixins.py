@@ -1,7 +1,10 @@
 # tests/test_mixins.py
-import pytest
 import time
+
+import pytest
+
 from switchbot_exporter.mixins import MuteMixin
+
 
 class TestMuteMixin:
     @pytest.fixture
@@ -14,7 +17,7 @@ class TestMuteMixin:
     def test_muting_is_per_device(self, mixin_instance):
         """Test that muting one device does not affect another."""
         mixin_instance._mute_action("test_action", "addr1", "1s")
-        
+
         assert mixin_instance._is_muted("test_action", "addr1")
         assert not mixin_instance._is_muted("test_action", "addr2")
         assert not mixin_instance._is_muted("another_action", "addr1")

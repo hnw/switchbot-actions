@@ -1,12 +1,14 @@
 # switchbot_exporter/timers.py
-import logging
 import asyncio
-from switchbot import SwitchBotAdvertisement
+import logging
+
 from pytimeparse2 import parse
-from .store import DeviceStateStore
+from switchbot import SwitchBotAdvertisement
+
 from . import triggers
 from .handlers import RuleHandlerBase
 from .mixins import MuteMixin
+from .store import DeviceStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +25,11 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
         self._store = store
         self._active_timers = {}  # Stores {key: asyncio.Task}
 
-    def on_conditions_met(
-        self, rule: dict, new_data: SwitchBotAdvertisement
-    ):
+    def on_conditions_met(self, rule: dict, new_data: SwitchBotAdvertisement):
         """
         Starts a timer when its conditions transition from False to True.
         """
-        timer_name = rule.get('name')
+        timer_name = rule.get("name")
         device_address = new_data.address
         key = (timer_name, device_address)
 
@@ -38,20 +38,18 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
                 f"Conditions met for timer '{timer_name}' on device "
                 f"{device_address}. Starting timer."
             )
-            duration_str = rule.get('duration')
+            duration_str = rule.get("duration")
             task = asyncio.create_task(
                 self._run_timer(rule, device_address, duration_str)
             )
             self._active_timers[key] = task
 
-    def on_conditions_no_longer_met(
-        self, rule: dict, new_data: SwitchBotAdvertisement
-    ):
+    def on_conditions_no_longer_met(self, rule: dict, new_data: SwitchBotAdvertisement):
         """
         Cancels an active timer when its conditions transition from
         True to False.
         """
-        timer_name = rule.get('name')
+        timer_name = rule.get("name")
         device_address = new_data.address
         key = (timer_name, device_address)
 
@@ -75,17 +73,20 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
 
         duration_sec = parse(duration_str)
         if duration_sec is None:
-            logger.error(f"Invalid duration '{duration_str}' for timer '{timer_config.get('name')}'.")
+            logger.error(
+                f"Invalid duration '{duration_str}' for timer "
+                f"'{timer_config.get('name')}'."
+            )
             return
 
-        timer_name = timer_config.get('name')
+        timer_name = timer_config.get("name")
         timer_key = (timer_name, device_address)
         try:
             await asyncio.sleep(duration_sec)
 
             current_data = self._store.get_state(device_address)
             if not current_data or not triggers.check_conditions(
-                timer_config['conditions'], current_data
+                timer_config["conditions"], current_data
             ):
                 logger.info(
                     f"Timer '{timer_name}' for device {device_address} expired, but "
@@ -97,16 +98,17 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
                 logger.info(f"Timer '{timer_name}' expired but is currently muted.")
                 return
 
-            logger.info(f"Timer '{timer_name}' for device {device_address} expired. Triggering action.")
-            triggers.trigger_action(timer_config['trigger'], current_data)
-            self._mute_action(
-                timer_name, 
-                device_address, 
-                timer_config.get('cooldown')
+            logger.info(
+                f"Timer '{timer_name}' for device {device_address} expired. "
+                "Triggering action."
             )
+            triggers.trigger_action(timer_config["trigger"], current_data)
+            self._mute_action(timer_name, device_address, timer_config.get("cooldown"))
 
         except asyncio.CancelledError:
-            logger.info(f"Timer '{timer_name}' for device {device_address} was cancelled.")
+            logger.info(
+                f"Timer '{timer_name}' for device {device_address} was cancelled."
+            )
 
         finally:
             self._active_timers.pop(timer_key, None)

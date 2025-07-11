@@ -1,15 +1,19 @@
 # switchbot_exporter/exporter.py (修正後)
 import logging
-from prometheus_client import start_http_server, REGISTRY
+
+from prometheus_client import REGISTRY, start_http_server
 from prometheus_client.core import GaugeMetricFamily
+
 from .store import DeviceStateStore
 
 logger = logging.getLogger(__name__)
+
 
 class PrometheusExporter:
     """
     Exposes device states from the DeviceStateStore as Prometheus metrics.
     """
+
     def __init__(self, state_store: DeviceStateStore, port: int, target_config: dict):
         self.store = state_store
         self.port = port
@@ -18,7 +22,7 @@ class PrometheusExporter:
         # Unregister default collectors to avoid exposing unwanted metrics
         for coll in list(REGISTRY._collector_to_names.keys()):
             REGISTRY.unregister(coll)
-        
+
         # Register our custom collector
         REGISTRY.register(self)
 
@@ -34,11 +38,11 @@ class PrometheusExporter:
         """
         logger.info("Collecting metrics for Prometheus scrape")
 
-        target_addresses = self.target_config.get('addresses')
-        target_metrics = self.target_config.get('metrics')
+        target_addresses = self.target_config.get("addresses")
+        target_metrics = self.target_config.get("metrics")
 
         gauges = {}
-        label_names = ['address', 'model']
+        label_names = ["address", "model"]
         all_states = self.store.get_all_states()
         # Filter devices based on target_addresses
         if target_addresses:
@@ -49,24 +53,26 @@ class PrometheusExporter:
             devices_to_export = list(all_states.values())
 
         # Add RSSI metric if not filtered out
-        if not target_metrics or 'rssi' in target_metrics:
+        if not target_metrics or "rssi" in target_metrics:
             rssi_gauge = GaugeMetricFamily(
-                "switchbot_rssi", "Received Signal Strength Indicator (RSSI)", labels=label_names
+                "switchbot_rssi",
+                "Received Signal Strength Indicator (RSSI)",
+                labels=label_names,
             )
             for device in devices_to_export:
                 address = device.address
-                model = device.data.get('modelName', 'Unknown')
+                model = device.data.get("modelName", "Unknown")
                 label_values = [address, model]
-                if hasattr(device, 'rssi') and device.rssi is not None:
+                if hasattr(device, "rssi") and device.rssi is not None:
                     rssi_gauge.add_metric(label_values, device.rssi)
             yield rssi_gauge
 
         for device in devices_to_export:
             address = device.address
-            model = device.data.get('modelName', 'Unknown')
+            model = device.data.get("modelName", "Unknown")
             label_values = [address, model]
-            
-            for key, value in device.data.get('data', {}).items():
+
+            for key, value in device.data.get("data", {}).items():
                 if not isinstance(value, (int, float, bool)):
                     continue
                 # Filter metrics based on target_metrics
@@ -74,12 +80,12 @@ class PrometheusExporter:
                     continue
 
                 metric_name = f"switchbot_{key}"
-                
+
                 if metric_name not in gauges:
                     gauges[metric_name] = GaugeMetricFamily(
                         metric_name, f"SwitchBot metric {key}", labels=label_names
                     )
-                
+
                 gauges[metric_name].add_metric(label_values, float(value))
 
         for gauge in gauges.values():

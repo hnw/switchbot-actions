@@ -1,12 +1,15 @@
 # switchbot_exporter/mixins.py
 import logging
 import time
+
 from pytimeparse2 import parse
 
 logger = logging.getLogger(__name__)
 
+
 class MuteMixin:
     """A mixin to provide timed, per-device muting functionality."""
+
     def __init__(self):
         # The key is a tuple: (name, device_address)
         self._last_triggered = {}
@@ -23,9 +26,12 @@ class MuteMixin:
         """Starts the mute period for a named action on a specific device."""
         if not cooldown:
             return
-        
+
         duration_seconds = parse(cooldown)
         if duration_seconds is not None and duration_seconds > 0:
             mute_key = (name, device_address)
             self._last_triggered[mute_key] = time.time() + duration_seconds
-            logger.info(f"Action '{name}' for device {device_address} muted for {duration_seconds}s.")
+            logger.info(
+                f"Action '{name}' for device {device_address} muted "
+                f"for {duration_seconds}s."
+            )

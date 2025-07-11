@@ -1,7 +1,9 @@
 # switchbot_exporter/handlers.py
 import logging
 from abc import ABC, abstractmethod
+
 from switchbot import SwitchBotAdvertisement
+
 from . import triggers
 from .signals import advertisement_received
 
@@ -30,8 +32,7 @@ class RuleHandlerBase(ABC):
         self._last_condition_results = {}  # Stores {key: bool}
         advertisement_received.connect(self.handle_signal)
         logger.info(
-            f"{self.__class__.__name__} initialized with "
-            f"{len(self._rules)} rule(s)."
+            f"{self.__class__.__name__} initialized with {len(self._rules)} rule(s)."
         )
 
     def handle_signal(self, sender, **kwargs):
@@ -39,19 +40,17 @@ class RuleHandlerBase(ABC):
         Receives device data, checks conditions, and triggers actions
         on state changes.
         """
-        new_data: SwitchBotAdvertisement = kwargs.get('new_data')
+        new_data: SwitchBotAdvertisement = kwargs.get("new_data")
         if not new_data:
             return
 
         for rule in self._rules:
-            rule_name = rule.get('name', 'Unnamed Rule')
+            rule_name = rule.get("name", "Unnamed Rule")
             device_address = new_data.address
             key = (rule_name, device_address)
 
             try:
-                current_result = triggers.check_conditions(
-                    rule['conditions'], new_data
-                )
+                current_result = triggers.check_conditions(rule["conditions"], new_data)
                 last_result = self._last_condition_results.get(key, False)
 
                 # State changed: False -> True
@@ -68,22 +67,18 @@ class RuleHandlerBase(ABC):
                 logger.error(
                     f"Error processing rule '{rule_name}' in "
                     f"{self.__class__.__name__}: {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
 
     @abstractmethod
-    def on_conditions_met(
-        self, rule: dict, new_data: SwitchBotAdvertisement
-    ):
+    def on_conditions_met(self, rule: dict, new_data: SwitchBotAdvertisement):
         """
         Callback executed when conditions transition from False to True.
         """
         pass
 
     @abstractmethod
-    def on_conditions_no_longer_met(
-        self, rule: dict, new_data: SwitchBotAdvertisement
-    ):
+    def on_conditions_no_longer_met(self, rule: dict, new_data: SwitchBotAdvertisement):
         """
         Callback executed when conditions transition from True to False.
         """
