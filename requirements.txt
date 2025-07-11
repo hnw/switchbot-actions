@@ -9,3 +9,4 @@ pytest-asyncio
 pytest-cov
 pytimeparse2
 ruff
+pre-commit
