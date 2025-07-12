@@ -1,4 +1,5 @@
 # switchbot_exporter/main.py
+import argparse
 import asyncio
 import logging
 import sys
@@ -12,13 +13,43 @@ from .scanner import DeviceScanner
 from .store import DeviceStateStore
 from .timers import TimerHandler
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,
-)
 logger = logging.getLogger(__name__)
+
+
+def setup_logging(config, debug=False):
+    """Configures logging based on config file and command-line arguments."""
+    if debug:
+        # Debug mode: hardcode levels, ignore config
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            stream=sys.stdout,
+        )
+        # Set bleak to INFO to reduce noise
+        logging.getLogger("bleak").setLevel(logging.INFO)
+        logger.info("Debug mode enabled. Root logger set to DEBUG, bleak set to INFO.")
+        return
+
+    # Normal mode: use config file
+    log_config = config.get("logging", {})
+    level = log_config.get("level", "INFO")
+    fmt = log_config.get(
+        "format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format=fmt,
+        stream=sys.stdout,
+    )
+
+    # Apply specific logger levels from config
+    for logger_name, logger_level in log_config.get("loggers", {}).items():
+        logging.getLogger(logger_name).setLevel(
+            getattr(logging, logger_level.upper(), logging.INFO)
+        )
+
+    logger.info(f"Logging configured with level {level}")
 
 
 def load_config(path="config.yaml"):
@@ -27,26 +58,39 @@ def load_config(path="config.yaml"):
         with open(path, "r") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
-        logger.error(
-            f"Configuration file not found at {path}. "
-            "Please create it from config.yaml.example."
+        print(
+            f"Configuration file not found at {path}, using defaults.", file=sys.stderr
         )
-        sys.exit(1)
+        return {}
     except yaml.YAMLError as e:
-        if hasattr(e, "mark"):
-            mark = e.mark
-            logger.error(
+        mark = getattr(e, "mark", None)
+        if mark:
+            print(
                 f"Error parsing YAML file: {e}\n"
-                f"  Line: {mark.line + 1}, Column: {mark.column + 1}"
+                f"  Line: {mark.line + 1}, Column: {mark.column + 1}",
+                file=sys.stderr,
             )
         else:
-            logger.error(f"Error parsing YAML file: {e}")
+            print(f"Error parsing YAML file: {e}", file=sys.stderr)
         sys.exit(1)
 
 
 async def main():
     """Main entry point for the application."""
-    config = load_config()
+    parser = argparse.ArgumentParser(description="SwitchBot Prometheus Exporter")
+    parser.add_argument(
+        "-c",
+        "--config",
+        default="config.yaml",
+        help="Path to the configuration file (default: config.yaml)",
+    )
+    parser.add_argument(
+        "-d", "--debug", action="store_true", help="Enable debug logging"
+    )
+    args = parser.parse_args()
+
+    config = load_config(args.config)
+    setup_logging(config, args.debug)
 
     # Initialize core components
     store = DeviceStateStore()

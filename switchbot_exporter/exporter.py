@@ -36,7 +36,7 @@ class PrometheusExporter:
         This method is called by the Prometheus client library when scraping.
         It yields metrics for the devices.
         """
-        logger.info("Collecting metrics for Prometheus scrape")
+        logger.debug("Collecting metrics for Prometheus scrape")
 
         target_addresses = self.target_config.get("addresses")
         target_metrics = self.target_config.get("metrics")

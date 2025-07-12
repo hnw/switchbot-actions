@@ -56,6 +56,57 @@ All behavior is controlled through a single `config.yaml` file, allowing for fle
 
 The application is controlled by `config.yaml`. See `config.yaml.example` for a full list of options.
 
+### Command-Line Options
+
+-   `--config <path>` or `-c <path>`: Specifies the path to the configuration file (default: `config.yaml`).
+-   `--debug` or `-d`: Enables `DEBUG` level logging, overriding any setting in the config file. This is useful for temporary troubleshooting.
+
+### Logging (`logging`)
+
+Configure the log output format and verbosity. This allows for fine-grained control over log output for both the application and its underlying libraries.
+
+```yaml
+logging:
+  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log format using Python's logging syntax
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Set specific log levels for noisy libraries.
+  # This is useful for debugging specific components without enabling global debug.
+  loggers:
+    bleak: "WARNING" # Can be set to DEBUG for deep BLE troubleshooting
+    # aiohttp: "WARNING"
+```
+
+#### Debugging Notes
+
+-   **For Application Development (`--debug` flag):**
+    When you run the exporter with `--debug` or `-d`, the `logging` section in your `config.yaml` is **ignored**. This flag is a shortcut that:
+    1.  Sets the log level for `switchbot-exporter` to `DEBUG`.
+    2.  Sets the log level for the `bleak` library to `INFO` to keep the output clean.
+
+-   **For Library Troubleshooting (e.g., `bleak`):**
+    If you need to see `DEBUG` messages from a specific library like `bleak`, do **not** use the `--debug` flag. Instead, edit `config.yaml` and set the desired level in the `loggers` section:
+    ```yaml
+    logging:
+      level: "INFO" # Keep the main app quiet
+      loggers:
+        bleak: "DEBUG" # Enable detailed output only for bleak
+    ```
+
+-   **Troubleshooting Actions and Timers:**
+    By default, the execution of `actions` and `timers` is not logged to `INFO` to avoid excessive noise. If you need to verify that your triggers are running, enable `DEBUG` logging for the triggers module in `config.yaml`:
+    ```yaml
+    logging:
+      level: "INFO"
+      loggers:
+        switchbot_exporter.triggers: "DEBUG"
+        switchbot_exporter.dispatcher: "DEBUG"
+        switchbot_exporter.timers: "DEBUG"
+    ```
+
 ### Prometheus Exporter (`prometheus_exporter`)
 
 ```yaml

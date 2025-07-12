@@ -1,4 +1,26 @@
 # ----------------------------------------------------
+# Logging Settings
+# ----------------------------------------------------
+logging:
+  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
+  # This is overridden by the --debug flag.
+  level: "INFO"
+
+  # Log format, using Python's logging format syntax.
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Set specific log levels for noisy libraries.
+  # This is useful for debugging specific components without enabling global debug.
+  # These settings are ignored if the --debug flag is used.
+  loggers:
+    bleak: "WARNING"
+    # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
+    # bleak: "DEBUG"
+    # Example: Enable trigger execution logs for debugging actions/timers
+    # switchbot_exporter.triggers: "DEBUG"
+
+
+# ----------------------------------------------------
 # Prometheus Exporter Settings
 # ----------------------------------------------------
 prometheus_exporter:

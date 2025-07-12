@@ -32,7 +32,7 @@ class EventDispatcher(RuleHandlerBase, MuteMixin):
         if self._is_muted(action_name, device_address):
             return
 
-        logger.info(
+        logger.debug(
             f"Conditions met for action '{action_name}' on device "
             f"{device_address}. Triggering."
         )

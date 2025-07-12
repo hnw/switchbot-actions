@@ -90,7 +90,7 @@ def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
 
     if trigger_type == "shell_command":
         command = format_string(trigger["command"], device_data)
-        logger.info(f"Executing shell command: {command}")
+        logger.debug(f"Executing shell command: {command}")
         subprocess.run(command, shell=True, check=False)
 
     elif trigger_type == "webhook":
@@ -105,7 +105,9 @@ def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
         else:
             formatted_payload = format_string(str(payload), device_data)
 
-        logger.info(f"Sending webhook: {method} {url} with payload {formatted_payload}")
+        logger.debug(
+            f"Sending webhook: {method} {url} with payload {formatted_payload}"
+        )
         try:
             if method == "POST":
                 requests.post(url, json=formatted_payload, timeout=10)

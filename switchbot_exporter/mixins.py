@@ -31,7 +31,7 @@ class MuteMixin:
         if duration_seconds is not None and duration_seconds > 0:
             mute_key = (name, device_address)
             self._last_triggered[mute_key] = time.time() + duration_seconds
-            logger.info(
+            logger.debug(
                 f"Action '{name}' for device {device_address} muted "
                 f"for {duration_seconds}s."
             )

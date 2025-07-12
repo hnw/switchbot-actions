@@ -34,7 +34,7 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
         key = (timer_name, device_address)
 
         if key not in self._active_timers:
-            logger.info(
+            logger.debug(
                 f"Conditions met for timer '{timer_name}' on device "
                 f"{device_address}. Starting timer."
             )
@@ -54,7 +54,7 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
         key = (timer_name, device_address)
 
         if key in self._active_timers:
-            logger.info(
+            logger.debug(
                 f"Conditions no longer met for timer '{timer_name}' on "
                 f"device {device_address}. Cancelling."
             )
@@ -88,17 +88,17 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
             if not current_data or not triggers.check_conditions(
                 timer_config["conditions"], current_data
             ):
-                logger.info(
+                logger.debug(
                     f"Timer '{timer_name}' for device {device_address} expired, but "
                     f"conditions are no longer met. Not triggering."
                 )
                 return
 
             if self._is_muted(timer_name, device_address):
-                logger.info(f"Timer '{timer_name}' expired but is currently muted.")
+                logger.debug(f"Timer '{timer_name}' expired but is currently muted.")
                 return
 
-            logger.info(
+            logger.debug(
                 f"Timer '{timer_name}' for device {device_address} expired. "
                 "Triggering action."
             )
@@ -106,7 +106,7 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
             self._mute_action(timer_name, device_address, timer_config.get("cooldown"))
 
         except asyncio.CancelledError:
-            logger.info(
+            logger.debug(
                 f"Timer '{timer_name}' for device {device_address} was cancelled."
             )
 
