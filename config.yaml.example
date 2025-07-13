@@ -1,25 +1,4 @@
 # ----------------------------------------------------
-# Logging Settings
-# ----------------------------------------------------
-logging:
-  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
-  # This is overridden by the --debug flag.
-  level: "INFO"
-
-  # Log format, using Python's logging format syntax.
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-  # Set specific log levels for noisy libraries.
-  # This is useful for debugging specific components without enabling global debug.
-  # These settings are ignored if the --debug flag is used.
-  loggers:
-    bleak: "WARNING"
-    # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
-    # bleak: "DEBUG"
-    # Example: Enable trigger execution logs for debugging actions/timers
-    # switchbot_actions.triggers: "DEBUG"
-
-# ----------------------------------------------------
 # BLE Scanner Settings
 # ----------------------------------------------------
 scanner:
@@ -35,35 +14,6 @@ scanner:
   # Bluetooth interface to use (e.g., hci0, hci1).
   # Default: "hci0"
   interface: "hci0"
-
-
-# ----------------------------------------------------
-# Prometheus Exporter Settings
-# ----------------------------------------------------
-prometheus_exporter:
-  # Enable/disable the exporter feature.
-  # Default: true
-  enabled: true
-
-  # Port for the exporter to listen on.
-  # Default: 8000
-  port: 8000
-
-  # Specify the devices and metrics to target.
-  target:
-    # Only devices with an address in this list will be targeted.
-    # If this key is missing or the list is empty, all discovered devices will be targeted.
-    addresses:
-      #  - "00:00:5E:00:53:00"
-      #  - "00:00:5E:00:53:01"
-
-    # Only metrics in this list will be exported.
-    # If this key is missing or the list is empty, all available metrics will be exported.
-    metrics:
-      # - "temperature"
-      # - "humidity"
-      # - "battery"
-      # - "rssi"
 
 # ----------------------------------------------------
 # Actions (Event-Driven)
@@ -138,3 +88,52 @@ timers:
       url: "https://example.com/alert"
       payload:
         message: "Warning: Device {address} has been open for 10 minutes!"
+
+# ----------------------------------------------------
+# Prometheus Exporter Settings
+# ----------------------------------------------------
+prometheus_exporter:
+  # Enable/disable the exporter feature.
+  # Default: true
+  enabled: true
+
+  # Port for the exporter to listen on.
+  # Default: 8000
+  port: 8000
+
+  # Specify the devices and metrics to target.
+  target:
+    # Only devices with an address in this list will be targeted.
+    # If this key is missing or the list is empty, all discovered devices will be targeted.
+    addresses:
+      #  - "00:00:5E:00:53:00"
+      #  - "00:00:5E:00:53:01"
+
+    # Only metrics in this list will be exported.
+    # If this key is missing or the list is empty, all available metrics will be exported.
+    metrics:
+      # - "temperature"
+      # - "humidity"
+      # - "battery"
+      # - "rssi"
+
+# ----------------------------------------------------
+# Logging Settings
+# ----------------------------------------------------
+logging:
+  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
+  # This is overridden by the --debug flag.
+  level: "INFO"
+
+  # Log format, using Python's logging format syntax.
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Set specific log levels for noisy libraries.
+  # This is useful for debugging specific components without enabling global debug.
+  # These settings are ignored if the --debug flag is used.
+  loggers:
+    bleak: "WARNING"
+    # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
+    # bleak: "DEBUG"
+    # Example: Enable trigger execution logs for debugging actions/timers
+    # switchbot_actions.triggers: "DEBUG"

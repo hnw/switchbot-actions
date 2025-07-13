@@ -48,9 +48,14 @@ classDiagram
     class PrometheusExporter{
         +start_server()
     }
-
+    class MuteMixin {
+        + _is_muted()
+        + _mute_action()
+    }
     RuleHandlerBase <|-- EventDispatcher
+    MuteMixin <|.. EventDispatcher
     RuleHandlerBase <|-- TimerHandler
+    MuteMixin <|.. TimerHandler
 
     DeviceScanner --> DeviceStateStore : reads previous state
     PrometheusExporter --> DeviceStateStore : reads current state
@@ -189,7 +194,9 @@ timers:
 │   ├── exporter.py         # PrometheusExporter
 │   ├── handlers.py         # RuleHandlerBase
 │   ├── dispatcher.py       # EventDispatcher (handles 'actions')
-│   └── timers.py           # TimerHandler (handles 'timers')
+│   ├── timers.py           # TimerHandler (handles 'timers')
+│   ├── triggers.py         # Condition evaluation and action execution
+│   └── mixins.py           # Muting/cooldown functionality
 ├── tests/
 ├── config.yaml.example
 └── README.md

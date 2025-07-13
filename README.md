@@ -64,50 +64,6 @@ The application is controlled by `config.yaml`. See `config.yaml.example` for a 
 -   `--scan-duration <seconds>`: Overrides the scan duration time.
 -   `--interface <device>`: Overrides the Bluetooth interface (e.g., `hci1`).
 
-### Logging (`logging`)
-
-Configure the log output format and verbosity. This allows for fine-grained control over log output for both the application and its underlying libraries.
-
-```yaml
-logging:
-  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
-  level: "INFO"
-
-  # Log format using Python's logging syntax
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-  # Set specific log levels for noisy libraries.
-  # This is useful for debugging specific components without enabling global debug.
-  loggers:
-    bleak: "WARNING" # Can be set to DEBUG for deep BLE troubleshooting
-    # aiohttp: "WARNING"
-```
-
-#### Debugging Notes
-
--   **For Application Development (`--debug` flag):**
-    When you run the exporter with `--debug` or `-d`, the `logging` section in your `config.yaml` is **ignored**. This flag is a shortcut that:
-    1.  Sets the log level for `switchbot-actions` to `DEBUG`.
-    2.  Sets the log level for the `bleak` library to `INFO` to keep the output clean.
-
--   **For Library Troubleshooting (e.g., `bleak`):**
-    If you need to see `DEBUG` messages from a specific library like `bleak`, do **not** use the `--debug` flag. Instead, edit `config.yaml` and set the desired level in the `loggers` section:
-    ```yaml
-    logging:
-      level: "INFO" # Keep the main app quiet
-      loggers:
-        bleak: "DEBUG" # Enable detailed output only for bleak
-    ```
-
--   **Troubleshooting Actions and Timers:**
-    By default, the execution of `actions` and `timers` is not logged to `INFO` to avoid excessive noise. If you need to verify that your triggers are running, enable `DEBUG` logging for the triggers module in `config.yaml`:
-    ```yaml
-    logging:
-      level: "INFO"
-      loggers:
-        switchbot_actions.triggers: "DEBUG"
-    ```
-
 ### Scanner (`scanner`)
 
 Configure the behavior of the Bluetooth (BLE) scanner.
@@ -121,27 +77,6 @@ scanner:
   duration: 3
   # Bluetooth interface to use.
   interface: "hci0"
-```
-        switchbot_actions.dispatcher: "DEBUG"
-        switchbot_actions.timers: "DEBUG"
-    ```
-
-### Prometheus Exporter (`prometheus_exporter`)
-
-```yaml
-prometheus_exporter:
-  enabled: true
-  port: 8000
-  target:
-    # Optional: Only export metrics for these MAC addresses
-    addresses:
-      - "XX:XX:XX:XX:XX:AA"
-    # Optional: Only export these specific metrics
-    metrics:
-      - "temperature"
-      - "humidity"
-      - "battery"
-      - "rssi"
 ```
 
 ### Event-Driven Actions (`actions`)
@@ -213,3 +148,65 @@ timers:
       payload:
         message: "Warning: Door {address} has been open for 10 minutes!"
 ```
+
+### Prometheus Exporter (`prometheus_exporter`)
+
+```yaml
+prometheus_exporter:
+  enabled: true
+  port: 8000
+  target:
+    # Optional: Only export metrics for these MAC addresses
+    addresses:
+      - "XX:XX:XX:XX:XX:AA"
+    # Optional: Only export these specific metrics
+    metrics:
+      - "temperature"
+      - "humidity"
+      - "battery"
+      - "rssi"
+```
+
+### Logging (`logging`)
+
+Configure the log output format and verbosity. This allows for fine-grained control over log output for both the application and its underlying libraries.
+
+```yaml
+logging:
+  # Default log level for the application: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log format using Python's logging syntax
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # Set specific log levels for noisy libraries.
+  # This is useful for debugging specific components without enabling global debug.
+  loggers:
+    bleak: "WARNING" # Can be set to DEBUG for deep BLE troubleshooting
+    # aiohttp: "WARNING"
+```
+
+#### Debugging Notes
+
+-   **For Application Development (`--debug` flag):**
+    When you run the exporter with `--debug` or `-d`, the `logging` section in your `config.yaml` is **ignored**. This flag is a shortcut that:
+    1.  Sets the log level for `switchbot-actions` to `DEBUG`.
+    2.  Sets the log level for the `bleak` library to `INFO` to keep the output clean.
+
+-   **For Library Troubleshooting (e.g., `bleak`):**
+    If you need to see `DEBUG` messages from a specific library like `bleak`, do **not** use the `--debug` flag. Instead, edit `config.yaml` and set the desired level in the `loggers` section:
+    ```yaml
+    logging:
+      level: "INFO" # Keep the main app quiet
+      loggers:
+        bleak: "DEBUG" # Enable detailed output only for bleak
+    ```
+
+-   **Troubleshooting Actions and Timers:**
+    By default, the execution of `actions` and `timers` is not logged to `INFO` to avoid excessive noise. If you need to verify that your triggers are running, enable `DEBUG` logging for the triggers module in `config.yaml`:
+    ```yaml
+    logging:
+      level: "INFO"
+      loggers:
+        switchbot_actions.triggers: "DEBUG"
+    ```
