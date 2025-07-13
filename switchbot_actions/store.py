@@ -1,7 +1,6 @@
 # switchbot_actions/store.py
 import logging
 from threading import Lock
-from typing import Optional
 
 from switchbot import SwitchBotAdvertisement
 
@@ -32,7 +31,7 @@ class DeviceStateStore:
             self._states[address] = new_data
         logger.debug(f"State updated for device {address}")
 
-    def get_state(self, address: str) -> Optional[SwitchBotAdvertisement]:
+    def get_state(self, address: str) -> SwitchBotAdvertisement | None:
         """
         Retrieves the latest state for a specific device by its MAC address.
         Returns None if the device has not been seen.

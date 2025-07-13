@@ -24,7 +24,7 @@ Inspired by services like GitHub Actions, all behavior is controlled through a s
 
 ### Prerequisites
 
-  * Python 3.9.2+
+  * Python 3.10+
   * A Linux-based system with a Bluetooth adapter that supports BLE (e.g., Raspberry Pi).
 
 ### Installation (Recommended using pipx)

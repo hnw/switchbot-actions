@@ -1,7 +1,6 @@
 # switchbot_actions/mixins.py
 import logging
 import time
-from typing import Optional
 
 from pytimeparse2 import parse
 
@@ -23,7 +22,7 @@ class MuteMixin:
             return False
         return time.time() < mute_until
 
-    def _mute_action(self, name: str, device_address: str, cooldown: Optional[str]):
+    def _mute_action(self, name: str, device_address: str, cooldown: str | None):
         """Starts the mute period for a named action on a specific device."""
         if not cooldown:
             return
