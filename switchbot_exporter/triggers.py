@@ -97,7 +97,9 @@ def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
         url = format_string(trigger["url"], device_data)
         method = trigger.get("method", "POST").upper()
         payload = trigger.get("payload", {})
+        headers = trigger.get("headers", {})
 
+        # Format payload
         if isinstance(payload, dict):
             formatted_payload = {
                 k: format_string(str(v), device_data) for k, v in payload.items()
@@ -105,14 +107,24 @@ def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
         else:
             formatted_payload = format_string(str(payload), device_data)
 
+        # Format headers
+        formatted_headers = {
+            k: format_string(str(v), device_data) for k, v in headers.items()
+        }
+
         logger.debug(
-            f"Sending webhook: {method} {url} with payload {formatted_payload}"
+            f"Sending webhook: {method} {url} with payload {formatted_payload} "
+            f"and headers {formatted_headers}"
         )
         try:
             if method == "POST":
-                requests.post(url, json=formatted_payload, timeout=10)
+                requests.post(
+                    url, json=formatted_payload, headers=formatted_headers, timeout=10
+                )
             elif method == "GET":
-                requests.get(url, params=formatted_payload, timeout=10)
+                requests.get(
+                    url, params=formatted_payload, headers=formatted_headers, timeout=10
+                )
         except requests.RequestException as e:
             logger.error(f"Webhook failed: {e}")
 

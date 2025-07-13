@@ -111,7 +111,7 @@ def test_trigger_action_webhook_post(mock_post, mock_advertisement_meter):
     triggers.trigger_action(trigger_config, mock_advertisement_meter)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_post.assert_called_once_with(
-        "http://example.com/hook", json=expected_payload, timeout=10
+        "http://example.com/hook", json=expected_payload, headers={}, timeout=10
     )
 
 
@@ -126,7 +126,33 @@ def test_trigger_action_webhook_get(mock_get, mock_advertisement_meter):
     triggers.trigger_action(trigger_config, mock_advertisement_meter)
     expected_params = {"hum": "65"}
     mock_get.assert_called_once_with(
-        "http://example.com/get_hook", params=expected_params, timeout=10
+        "http://example.com/get_hook", params=expected_params, headers={}, timeout=10
+    )
+
+
+@patch("requests.post")
+def test_trigger_action_webhook_with_headers(mock_post, mock_advertisement_meter):
+    """Test that webhook triggers can include custom formatted headers."""
+    trigger_config = {
+        "type": "webhook",
+        "url": "http://example.com/hook",
+        "payload": {"temp": "{temperature}"},
+        "headers": {
+            "Authorization": "Bearer MY_TOKEN",
+            "X-Device-Address": "{address}",
+        },
+    }
+    triggers.trigger_action(trigger_config, mock_advertisement_meter)
+    expected_payload = {"temp": "29.0"}
+    expected_headers = {
+        "Authorization": "Bearer MY_TOKEN",
+        "X-Device-Address": "DE:AD:BE:EF:11:11",
+    }
+    mock_post.assert_called_once_with(
+        "http://example.com/hook",
+        json=expected_payload,
+        headers=expected_headers,
+        timeout=10,
     )
 
 

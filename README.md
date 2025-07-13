@@ -164,6 +164,10 @@ actions:
       url: "https://example.com/alert"
       payload:
         message: "High temperature detected: {temperature}°C"
+      # Optional: Add custom headers for APIs that require them
+      headers:
+        Authorization: "Bearer YOUR_API_KEY"
+        X-Custom-Header: "Value for {address}"
 
   - name: "Weak Signal Notification"
     conditions:

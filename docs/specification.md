@@ -54,7 +54,7 @@ classDiagram
 
     DeviceScanner --> DeviceStateStore : reads previous state
     PrometheusExporter --> DeviceStateStore : reads current state
-    
+
     DeviceScanner ..> RuleHandlerBase : notifies via signal
     DeviceScanner ..> DeviceStateStore : notifies via signal
 ```
@@ -117,6 +117,7 @@ This section defines a list of rules that trigger **only at the moment** a devic
       - **`device`**: Filters which devices this rule applies to based on attributes like `modelName` or `address`.
       - **`state`**: Defines the state conditions that must be met. Most keys (e.g., `temperature`, `isOn`) are evaluated against the key-value pairs within the nested `data` object of the advertisement. As a special case, the key `rssi` is evaluated against the top-level RSSI value. Conditions are simple comparisons (e.g., `temperature: "> 25.0"`).
   - **`trigger`**: (map, required) The "THEN" part of the rule. It defines the action to be performed and consists of a `type` (e.g., `shell_command`, `webhook`) and its corresponding parameters.
+      - For `webhook` triggers, you can optionally add a `headers` map to include custom HTTP headers in the request. Header values also support placeholders.
 
 ```yaml
 actions:
@@ -153,6 +154,7 @@ Each rule in the list is a map that can contain the following keys:
       - **`state`**: Defines the state that must be sustained. These conditions are evaluated against the **`data`** object within the advertisement data. It supports standard comparisons like `temperature: "> 25.0"` or `motion_detected: False`.
   - **`duration`**: (string, required) The period the state defined in `conditions` must be continuously met for the trigger to fire.
   - **`trigger`**: (map, required) The "THEN" part of the rule, defining the action to be performed.
+      - For `webhook` triggers, you can optionally add a `headers` map to include custom HTTP headers in the request. Header values also support placeholders.
 
 ```yaml
 timers:
@@ -166,7 +168,7 @@ timers:
       state:
           motion_detected: False
       # The duration the state must be continuously met.
-      duration: "5m" 
+      duration: "5m"
     # The action to perform.
     trigger:
       type: "shell_command"

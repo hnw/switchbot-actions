@@ -100,6 +100,10 @@ actions:
       url: "https://example.com/notify"
       payload:
         message: "Button on device {address} was pressed."
+      # Optional: Add custom headers for authentication, etc.
+      headers:
+        Content-Type: "application/json"
+        Authorization: "Bearer YOUR_SECRET_TOKEN"
 
 # ----------------------------------------------------
 # Timers (Time-Driven)
