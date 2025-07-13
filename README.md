@@ -24,37 +24,90 @@ Inspired by services like GitHub Actions, all behavior is controlled through a s
 
 ### Prerequisites
 
--   Python 3.11+
--   A Linux-based system with a Bluetooth adapter that supports BLE (e.g., Raspberry Pi).
+  * Python 3.11+
+  * A Linux-based system with a Bluetooth adapter that supports BLE (e.g., Raspberry Pi).
 
-### Installation
+### Installation (Recommended using pipx)
 
-1.  **Clone the repository:**
+For command-line applications like this, we strongly recommend installing with `pipx` to keep your system clean and avoid dependency conflicts.
+
+1.  **Install pipx:**
+
     ```bash
-    git clone https://github.com/hnw/switchbot-actions.git
-    cd switchbot-actions
+    pip install pipx
+    pipx ensurepath
     ```
 
-2.  **Install dependencies:**
+    *(You may need to restart your terminal after this step for the path changes to take effect.)*
+
+2.  **Install the application:**
+
     ```bash
-    pip install -r requirements.txt
+    pipx install switchbot-actions
     ```
 
-3.  **Configure the application:**
-    -   Copy the example configuration file:
-        ```bash
-        cp config.yaml.example config.yaml
-        ```
-    -   Edit `config.yaml` to match your environment. See the **Configuration** section below for details.
+3.  **Create your configuration file:**
+    Download the example configuration from the GitHub repository to get started.
 
-4.  **Run the application:**
     ```bash
-    switchbot-actions
+    curl -o config.yaml https://raw.githubusercontent.com/hnw/switchbot-actions/main/config.yaml.example
     ```
+
+    Then, edit `config.yaml` to suit your needs.
+
+### Alternative Installation (using pip)
+
+If you prefer to manage your environments manually, you can use `pip`. It is recommended to do this within a virtual environment (`venv`).
+
+```bash
+# This command installs the package.
+# To avoid polluting your global packages, consider running this in a venv.
+pip install switchbot-actions
+```
+
+## Usage
+
+We recommend a two-step process to get started smoothly.
+
+### Step 1: Verify Hardware and Device Discovery
+
+First, run the application without any configuration file to confirm that your Bluetooth adapter is working and can discover your SwitchBot devices.
+
+```bash
+switchbot-actions --debug
+```
+
+The `--debug` flag will show detailed logs. If you see lines containing "Received advertisement from...", your hardware setup is correct.
+
+> [\!IMPORTANT]
+> **A Note on Permissions on Linux**
+>
+> If you encounter errors related to "permission denied," you may need to run the command with `sudo`:
+>
+> ```bash
+> sudo switchbot-actions --debug
+> ```
+
+### Step 2: Configure and Run
+
+Once you've confirmed that device discovery is working, create your `config.yaml` file. You can use the example as a starting point:
+
+```bash
+curl -o config.yaml https://raw.githubusercontent.com/hnw/switchbot-actions/main/config.yaml.example
+```
+
+Edit `config.yaml` to define your automations. Then, run the application normally:
+
+```bash
+switchbot-actions -c config.yaml
+```
 
 ## Configuration
 
 The application is controlled by `config.yaml`. See `config.yaml.example` for a full list of options.
+
+> [!NOTE]
+> This section provides a quick overview. For a detailed and complete reference of all configuration options, please see the [**Project Specification**](./docs/specification.md#4-configuration-configyaml).
 
 ### Command-Line Options
 
@@ -83,11 +136,13 @@ scanner:
 
 Trigger an action **the moment** a device's state changes to meet the specified conditions (edge-triggered). The action will only fire once and will not fire again until the conditions have first become false and then true again.
 
+In the `state` conditions, you can use the following operators for comparison: `>` (greater than), `<` (less than), `>=` (greater/equal), `<=` (less/equal), `==` (equal), and `!=` (not equal).
+
 ```yaml
 actions:
   - name: "High Temperature Alert"
     # Cooldown for 10 minutes to prevent repeated alerts
-    cooldown: "10m"
+    cooldown: "10m" # Supports formats like "5s", "10m", "1.5h"
     conditions:
       device:
         modelName: "Meter"
@@ -115,6 +170,9 @@ actions:
       type: "shell_command"
       command: "echo 'Device {address} has a weak signal (RSSI: {rssi})'"
 ```
+
+> [!NOTE]
+> You can use placeholders in `command`, `url`, `payload`, and `headers`. Available placeholders include `{address}`, `{modelName}`, `{rssi}`, and any sensor value found in the device's data (e.g., `{temperature}`, `{humidity}`, `{isOn}`).
 
 ### Time-Driven Timers (`timers`)
 
@@ -150,6 +208,8 @@ timers:
 ```
 
 ### Prometheus Exporter (`prometheus_exporter`)
+
+This feature exposes all collected SwitchBot device data as Prometheus metrics, allowing for powerful monitoring and visualization. Once enabled, metrics will be available at the `/metrics` endpoint (e.g., `http://localhost:8000/metrics`). You can scrape this endpoint with a Prometheus server and use tools like Grafana to create dashboards for temperature, humidity, battery levels, and more.
 
 ```yaml
 prometheus_exporter:
