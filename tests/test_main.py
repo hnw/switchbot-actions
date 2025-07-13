@@ -4,7 +4,7 @@ from unittest.mock import ANY, AsyncMock, mock_open, patch
 
 import pytest
 
-from switchbot_exporter.main import load_config, main, setup_logging
+from switchbot_actions.main import load_config, main, setup_logging
 
 
 @patch("logging.getLogger")
@@ -86,13 +86,13 @@ def test_load_config_yaml_error(mock_file):
         load_config("invalid.yaml")
 
 
-@patch("switchbot_exporter.main.setup_logging")
-@patch("switchbot_exporter.main.GetSwitchbotDevices")
-@patch("switchbot_exporter.main.DeviceScanner")
-@patch("switchbot_exporter.main.PrometheusExporter")
-@patch("switchbot_exporter.main.EventDispatcher")
-@patch("switchbot_exporter.main.TimerHandler")
-@patch("switchbot_exporter.main.load_config")
+@patch("switchbot_actions.main.setup_logging")
+@patch("switchbot_actions.main.GetSwitchbotDevices")
+@patch("switchbot_actions.main.DeviceScanner")
+@patch("switchbot_actions.main.PrometheusExporter")
+@patch("switchbot_actions.main.EventDispatcher")
+@patch("switchbot_actions.main.TimerHandler")
+@patch("switchbot_actions.main.load_config")
 @patch("argparse.ArgumentParser")
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -163,7 +163,7 @@ async def test_main_scanner_config_priority(
     )
 
 
-@patch("switchbot_exporter.main.logger.error")
+@patch("switchbot_actions.main.logger.error")
 @patch("argparse.ArgumentParser")
 @pytest.mark.asyncio
 async def test_main_invalid_scanner_config_exits(mock_arg_parser, mock_logger_error):
@@ -177,7 +177,7 @@ async def test_main_invalid_scanner_config_exits(mock_arg_parser, mock_logger_er
     mock_args.interface = None  # use default
 
     # Patch load_config to return an empty config
-    with patch("switchbot_exporter.main.load_config", return_value={}):
+    with patch("switchbot_actions.main.load_config", return_value={}):
         with pytest.raises(SystemExit) as e:
             await main()
 

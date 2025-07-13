@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from switchbot_exporter.scanner import DeviceScanner
-from switchbot_exporter.signals import advertisement_received
-from switchbot_exporter.store import DeviceStateStore
+from switchbot_actions.scanner import DeviceScanner
+from switchbot_actions.signals import advertisement_received
+from switchbot_actions.store import DeviceStateStore
 
 
 @pytest.fixture

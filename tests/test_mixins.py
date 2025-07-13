@@ -3,7 +3,7 @@ import time
 
 import pytest
 
-from switchbot_exporter.mixins import MuteMixin
+from switchbot_actions.mixins import MuteMixin
 
 
 class TestMuteMixin:

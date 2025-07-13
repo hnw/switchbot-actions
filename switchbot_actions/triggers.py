@@ -1,4 +1,4 @@
-# switchbot_exporter/triggers.py
+# switchbot_actions/triggers.py
 import logging
 import operator
 import subprocess

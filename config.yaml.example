@@ -17,7 +17,7 @@ logging:
     # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
     # bleak: "DEBUG"
     # Example: Enable trigger execution logs for debugging actions/timers
-    # switchbot_exporter.triggers: "DEBUG"
+    # switchbot_actions.triggers: "DEBUG"
 
 # ----------------------------------------------------
 # BLE Scanner Settings

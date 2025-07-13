@@ -1,4 +1,4 @@
-# switchbot_exporter/exporter.py (修正後)
+# switchbot_actions/exporter.py
 import logging
 
 from prometheus_client import REGISTRY, start_http_server

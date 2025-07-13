@@ -1,4 +1,4 @@
-# switchbot_exporter/dispatcher.py
+# switchbot_actions/dispatcher.py
 import logging
 
 from switchbot import SwitchBotAdvertisement

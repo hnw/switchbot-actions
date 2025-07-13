@@ -1,4 +1,4 @@
-# switchbot_exporter/signals.py
+# switchbot_actions/signals.py
 from blinker import signal
 
 # Signal that is sent when a new advertisement is received and parsed.

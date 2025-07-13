@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from switchbot_exporter.signals import advertisement_received
-from switchbot_exporter.store import DeviceStateStore
+from switchbot_actions.signals import advertisement_received
+from switchbot_actions.store import DeviceStateStore
 
 
 @pytest.fixture

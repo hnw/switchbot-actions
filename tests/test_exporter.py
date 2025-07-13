@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from switchbot_exporter.exporter import PrometheusExporter
-from switchbot_exporter.store import DeviceStateStore
+from switchbot_actions.exporter import PrometheusExporter
+from switchbot_actions.store import DeviceStateStore
 
 
 @pytest.fixture

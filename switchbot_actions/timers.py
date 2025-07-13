@@ -1,4 +1,4 @@
-# switchbot_exporter/timers.py
+# switchbot_actions/timers.py
 import asyncio
 import logging
 

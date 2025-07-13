@@ -1,4 +1,4 @@
-# switchbot_exporter/mixins.py
+# switchbot_actions/mixins.py
 import logging
 import time
 

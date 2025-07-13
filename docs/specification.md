@@ -1,8 +1,8 @@
-# Project Specification: switchbot-exporter
+# Project Specification: switchbot-actions
 
 ## 1. Overview
 
-This document outlines the design for `switchbot-exporter`, a Python application designed to monitor SwitchBot Bluetooth Low Energy (BLE) devices. The project has two primary goals:
+This document outlines the design for `switchbot-actions`, a Python application designed to monitor SwitchBot Bluetooth Low Energy (BLE) devices. The project has two primary goals:
 
 1.  **Prometheus Exporter**: To expose sensor and state data from SwitchBot devices as metrics that can be scraped by a Prometheus server.
 2.  **Automation Engine**: To provide a mechanism for executing custom actions based on two distinct trigger types:
@@ -178,10 +178,10 @@ timers:
 ## 5. Project Structure
 
 ```
-/switchbot-exporter/
+/switchbot-actions/
 ├── docs/
 │   └── specification.md
-├── switchbot_exporter/
+├── switchbot_actions/
 │   ├── main.py             # Application entry point
 │   ├── signals.py          # Blinker signals
 │   ├── scanner.py          # DeviceScanner

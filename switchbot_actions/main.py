@@ -1,4 +1,4 @@
-# switchbot_exporter/main.py
+# switchbot_actions/main.py
 import argparse
 import asyncio
 import logging
@@ -155,5 +155,14 @@ async def main():
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
 
 
+def cli_main():
+    """Synchronous entry point for the command-line interface."""
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Application terminated by user.")
+        sys.exit(0)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    cli_main()

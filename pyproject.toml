@@ -1,5 +1,5 @@
 [project]
-name = "switchbot_exporter"
+name = "switchbot-actions"
 version = "0.1.0"
 requires-python = ">=3.11"
 
@@ -8,7 +8,7 @@ testpaths = ["tests"]
 addopts = "--cov"
 
 [tool.coverage.run]
-source = ["switchbot_exporter"]
+source = ["switchbot_actions"]
 
 [tool.coverage.report]
 show_missing = true
@@ -21,3 +21,6 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[project.scripts]
+switchbot-actions = "switchbot_actions.main:cli_main"

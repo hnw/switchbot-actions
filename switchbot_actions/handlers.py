@@ -1,4 +1,4 @@
-# switchbot_exporter/handlers.py
+# switchbot_actions/handlers.py
 import logging
 from abc import ABC, abstractmethod
 

@@ -1,4 +1,4 @@
-# switchbot_exporter/scanner.py
+# switchbot_actions/scanner.py
 import asyncio
 import logging
 

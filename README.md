@@ -1,15 +1,15 @@
-# SwitchBot Exporter
+# SwitchBot Actions: A YAML-based Automation Engine
 
-A Prometheus exporter for SwitchBot BLE devices, with a powerful, configurable automation engine.
+A powerful, configurable automation engine for SwitchBot BLE devices, with an optional Prometheus exporter.
 
-This application continuously scans for SwitchBot Bluetooth Low Energy (BLE) devices and provides two core functionalities:
+This application continuously scans for SwitchBot Bluetooth Low Energy (BLE) devices and provides a powerful automation engine that can:
 
-1.  **Prometheus Exporter**: Exposes sensor data (temperature, humidity, motion, etc.) and device state (battery, RSSI) as Prometheus metrics.
-2.  **Automation Engine**: Triggers custom actions (like shell commands or webhooks) based on two distinct trigger types:
-    *   **Event-Driven Actions**: React immediately when a device's state changes.
-    *   **Time-Driven Timers**: React when a device remains in a specific state for a continuous duration.
+-   **React to Events**: Trigger custom actions (like shell commands or webhooks) the moment a device's state changes.
+-   **Monitor Sustained States**: Trigger actions when a device remains in a specific state for a continuous duration.
 
-All behavior is controlled through a single `config.yaml` file, allowing for flexible deployment and management without any code changes.
+It also includes an optional **Prometheus Exporter** to expose sensor data (temperature, humidity, etc.) and device state as Prometheus metrics.
+
+Inspired by services like GitHub Actions, all behavior is controlled through a single `config.yaml` file, allowing you to define flexible and powerful automation workflows without any code changes.
 
 ## Features
 
@@ -31,8 +31,8 @@ All behavior is controlled through a single `config.yaml` file, allowing for fle
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/hnw/switchbot-exporter.git
-    cd switchbot-exporter
+    git clone https://github.com/hnw/switchbot-actions.git
+    cd switchbot-actions
     ```
 
 2.  **Install dependencies:**
@@ -49,7 +49,7 @@ All behavior is controlled through a single `config.yaml` file, allowing for fle
 
 4.  **Run the application:**
     ```bash
-    python -m switchbot_exporter.main
+    switchbot-actions
     ```
 
 ## Configuration
@@ -87,7 +87,7 @@ logging:
 
 -   **For Application Development (`--debug` flag):**
     When you run the exporter with `--debug` or `-d`, the `logging` section in your `config.yaml` is **ignored**. This flag is a shortcut that:
-    1.  Sets the log level for `switchbot-exporter` to `DEBUG`.
+    1.  Sets the log level for `switchbot-actions` to `DEBUG`.
     2.  Sets the log level for the `bleak` library to `INFO` to keep the output clean.
 
 -   **For Library Troubleshooting (e.g., `bleak`):**
@@ -105,7 +105,7 @@ logging:
     logging:
       level: "INFO"
       loggers:
-        switchbot_exporter.triggers: "DEBUG"
+        switchbot_actions.triggers: "DEBUG"
     ```
 
 ### Scanner (`scanner`)
@@ -122,8 +122,8 @@ scanner:
   # Bluetooth interface to use.
   interface: "hci0"
 ```
-        switchbot_exporter.dispatcher: "DEBUG"
-        switchbot_exporter.timers: "DEBUG"
+        switchbot_actions.dispatcher: "DEBUG"
+        switchbot_actions.timers: "DEBUG"
     ```
 
 ### Prometheus Exporter (`prometheus_exporter`)

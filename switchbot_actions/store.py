@@ -1,4 +1,4 @@
-# switchbot_exporter/store.py
+# switchbot_actions/store.py
 import logging
 from threading import Lock
 

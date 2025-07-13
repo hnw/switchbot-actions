@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from switchbot_exporter.dispatcher import EventDispatcher
+from switchbot_actions.dispatcher import EventDispatcher
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def actions_config():
     ]
 
 
-@patch("switchbot_exporter.triggers.trigger_action")
+@patch("switchbot_actions.triggers.trigger_action")
 @patch("time.time")
 def test_dispatcher_edge_trigger_behavior(
     mock_time, mock_trigger_action, mock_advertisement, actions_config
@@ -37,7 +37,7 @@ def test_dispatcher_edge_trigger_behavior(
     """
     dispatcher = EventDispatcher(actions_config=actions_config)
 
-    with patch("switchbot_exporter.triggers.check_conditions") as mock_check_conditions:
+    with patch("switchbot_actions.triggers.check_conditions") as mock_check_conditions:
         # 1. First event: condition is False -> should not trigger
         mock_time.return_value = 1000
         mock_check_conditions.return_value = False
@@ -69,7 +69,7 @@ def test_dispatcher_edge_trigger_behavior(
         assert mock_trigger_action.call_count == 2
 
 
-@patch("switchbot_exporter.triggers.trigger_action")
+@patch("switchbot_actions.triggers.trigger_action")
 @patch("time.time")
 def test_dispatcher_cooldown(
     mock_time, mock_trigger_action, mock_advertisement, actions_config
@@ -77,7 +77,7 @@ def test_dispatcher_cooldown(
     """Test that cooldown prevents an action from firing."""
     dispatcher = EventDispatcher(actions_config=actions_config)
 
-    with patch("switchbot_exporter.triggers.check_conditions") as mock_check_conditions:
+    with patch("switchbot_actions.triggers.check_conditions") as mock_check_conditions:
         # --- First Trigger ---
         # Event 1: condition is False
         mock_time.return_value = 999
