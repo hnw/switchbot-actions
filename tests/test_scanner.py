@@ -35,7 +35,7 @@ def mock_store():
 @pytest.fixture
 def scanner(mock_scanner, mock_store):
     """Provides a DeviceScanner with mock dependencies."""
-    return DeviceScanner(scanner=mock_scanner, store=mock_store, scan_interval=0.01)
+    return DeviceScanner(scanner=mock_scanner, store=mock_store, cycle=1, duration=0.5)
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,7 @@ async def test_scanner_start_scan(scanner, mock_scanner, mock_store):
     with pytest.raises(asyncio.CancelledError):
         await scanner.start_scan()
 
-    mock_scanner.discover.assert_called()
+    mock_scanner.discover.assert_called_with(scan_timeout=0.5)
     mock_store.get_state.assert_called_with("DE:AD:BE:EF:44:44")
 
     assert len(received_signal) == 1
@@ -77,4 +77,5 @@ async def test_scanner_error_handling(
 
     mock_log_error.assert_called_once()
     assert "Error during BLE scan: BLE error." in mock_log_error.call_args[0][0]
-    mock_sleep.assert_called_once()
+    # In case of error, it should sleep for the full cycle time
+    mock_sleep.assert_called_with(1)

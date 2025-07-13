@@ -19,6 +19,23 @@ logging:
     # Example: Enable trigger execution logs for debugging actions/timers
     # switchbot_exporter.triggers: "DEBUG"
 
+# ----------------------------------------------------
+# BLE Scanner Settings
+# ----------------------------------------------------
+scanner:
+  # Time in seconds between the start of each scan cycle.
+  # Default: 10
+  cycle: 10
+
+  # Time in seconds the scanner will actively listen for BLE advertisements.
+  # This value must be less than or equal to `cycle`.
+  # Default: 3
+  duration: 3
+
+  # Bluetooth interface to use (e.g., hci0, hci1).
+  # Default: "hci0"
+  interface: "hci0"
+
 
 # ----------------------------------------------------
 # Prometheus Exporter Settings

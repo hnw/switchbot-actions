@@ -87,15 +87,45 @@ async def main():
     parser.add_argument(
         "-d", "--debug", action="store_true", help="Enable debug logging"
     )
+    parser.add_argument(
+        "--scan-cycle", type=int, help="Time in seconds between BLE scan cycles"
+    )
+    parser.add_argument(
+        "--scan-duration", type=int, help="Time in seconds to scan for BLE devices"
+    )
+    parser.add_argument(
+        "--interface", type=str, help="Bluetooth interface to use (e.g., hci0)"
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
     setup_logging(config, args.debug)
 
+    # Resolve scanner settings (CLI > config > default)
+    scanner_config = config.get("scanner", {})
+    scan_cycle = args.scan_cycle or scanner_config.get("cycle", 10)
+    scan_duration = args.scan_duration or scanner_config.get("duration", 3)
+    interface = args.interface or scanner_config.get("interface", "hci0")
+
+    # Validate settings
+    if scan_duration > scan_cycle:
+        logger.error(
+            f"Scan duration ({scan_duration}s) cannot be longer than "
+            f"the scan cycle ({scan_cycle}s)."
+        )
+        sys.exit(1)
+
+    logger.info(
+        f"Scanner configured with cycle={scan_cycle}s, duration={scan_duration}s, "
+        f"interface={interface}"
+    )
+
     # Initialize core components
     store = DeviceStateStore()
-    ble_scanner = GetSwitchbotDevices()
-    scanner = DeviceScanner(scanner=ble_scanner, store=store)
+    ble_scanner = GetSwitchbotDevices(interface=interface)
+    scanner = DeviceScanner(
+        scanner=ble_scanner, store=store, cycle=scan_cycle, duration=scan_duration
+    )
 
     # Initialize optional components based on config
     if config.get("prometheus_exporter", {}).get("enabled", True):

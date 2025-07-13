@@ -60,6 +60,9 @@ The application is controlled by `config.yaml`. See `config.yaml.example` for a 
 
 -   `--config <path>` or `-c <path>`: Specifies the path to the configuration file (default: `config.yaml`).
 -   `--debug` or `-d`: Enables `DEBUG` level logging, overriding any setting in the config file. This is useful for temporary troubleshooting.
+-   `--scan-cycle <seconds>`: Overrides the scan cycle time.
+-   `--scan-duration <seconds>`: Overrides the scan duration time.
+-   `--interface <device>`: Overrides the Bluetooth interface (e.g., `hci1`).
 
 ### Logging (`logging`)
 
@@ -103,6 +106,22 @@ logging:
       level: "INFO"
       loggers:
         switchbot_exporter.triggers: "DEBUG"
+    ```
+
+### Scanner (`scanner`)
+
+Configure the behavior of the Bluetooth (BLE) scanner.
+
+```yaml
+scanner:
+  # Time in seconds between the start of each scan cycle.
+  cycle: 10
+  # Time in seconds the scanner will actively listen for devices.
+  # Must be less than or equal to `cycle`.
+  duration: 3
+  # Bluetooth interface to use.
+  interface: "hci0"
+```
         switchbot_exporter.dispatcher: "DEBUG"
         switchbot_exporter.timers: "DEBUG"
     ```

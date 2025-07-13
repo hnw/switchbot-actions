@@ -23,11 +23,13 @@ class DeviceScanner:
         self,
         scanner: GetSwitchbotDevices,
         store: DeviceStateStore,
-        scan_interval: int = 10,
+        cycle: int = 10,
+        duration: int = 3,
     ):
-        self._scan_interval = scan_interval
         self._scanner = scanner
         self._store = store
+        self._cycle = cycle
+        self._duration = duration
         self._running = False
 
     async def start_scan(self):
@@ -35,11 +37,17 @@ class DeviceScanner:
         self._running = True
         while self._running:
             try:
-                devices = await self._scanner.discover()
-                await asyncio.sleep(self._scan_interval)
+                logger.debug(f"Starting BLE scan for {self._duration} seconds...")
+                devices = await self._scanner.discover(scan_timeout=self._duration)
 
                 for address, device in devices.items():
                     self._process_advertisement(device)
+
+                # Wait for the remainder of the cycle
+                wait_time = self._cycle - self._duration
+                if self._running and wait_time > 0:
+                    logger.debug(f"Scan finished, waiting for {wait_time} seconds.")
+                    await asyncio.sleep(wait_time)
 
             except Exception as e:
                 error_message = f"Error during BLE scan: {e}. "
@@ -72,7 +80,9 @@ class DeviceScanner:
                         "or other environmental factors."
                     )
                 logger.error(error_message, exc_info=True)
-                await asyncio.sleep(self._scan_interval)
+                # In case of error, wait for the full cycle time to avoid spamming
+                if self._running:
+                    await asyncio.sleep(self._cycle)
 
     async def stop_scan(self):
         """Stops the scanning loop."""

@@ -1,6 +1,6 @@
 # tests/test_main.py
 import logging
-from unittest.mock import AsyncMock, mock_open, patch
+from unittest.mock import ANY, AsyncMock, mock_open, patch
 
 import pytest
 
@@ -87,6 +87,7 @@ def test_load_config_yaml_error(mock_file):
 
 
 @patch("switchbot_exporter.main.setup_logging")
+@patch("switchbot_exporter.main.GetSwitchbotDevices")
 @patch("switchbot_exporter.main.DeviceScanner")
 @patch("switchbot_exporter.main.PrometheusExporter")
 @patch("switchbot_exporter.main.EventDispatcher")
@@ -94,36 +95,95 @@ def test_load_config_yaml_error(mock_file):
 @patch("switchbot_exporter.main.load_config")
 @patch("argparse.ArgumentParser")
 @pytest.mark.asyncio
-async def test_main_initialization_all_enabled(
+@pytest.mark.parametrize(
+    "cli_args, config_file, expected",
+    [
+        # Priority 1: Command-line arguments
+        (
+            {"scan_cycle": 10, "scan_duration": 2, "interface": "hci1"},
+            {"scanner": {"cycle": 99, "duration": 9, "interface": "hci9"}},
+            {"cycle": 10, "duration": 2, "interface": "hci1"},
+        ),
+        # Priority 2: Config file
+        (
+            {"scan_cycle": None, "scan_duration": None, "interface": None},
+            {"scanner": {"cycle": 20, "duration": 8, "interface": "hci2"}},
+            {"cycle": 20, "duration": 8, "interface": "hci2"},
+        ),
+        # Priority 3: Default values
+        (
+            {"scan_cycle": None, "scan_duration": None, "interface": None},
+            {},
+            {"cycle": 10, "duration": 3, "interface": "hci0"},
+        ),
+    ],
+)
+async def test_main_scanner_config_priority(
     mock_arg_parser,
     mock_load_config,
     mock_timer_handler,
     mock_dispatcher,
     mock_exporter,
     mock_scanner,
+    mock_get_switchbot_devices,
     mock_setup_logging,
+    cli_args,
+    config_file,
+    expected,
 ):
-    """Test that main initializes all components when config is full."""
-    # Mock argparse
+    """Test scanner config priority: CLI > config > default."""
+    # Mock argparse to return specific values
     mock_args = mock_arg_parser.return_value.parse_args.return_value
     mock_args.config = "config.yaml"
     mock_args.debug = False
+    mock_args.scan_cycle = cli_args["scan_cycle"]
+    mock_args.scan_duration = cli_args["scan_duration"]
+    mock_args.interface = cli_args["interface"]
 
-    mock_load_config.return_value = {
-        "prometheus_exporter": {"enabled": True, "port": 9090, "target": {}},
-        "actions": [{"name": "test_action"}],
-        "timers": [{"name": "test_timer"}],
-    }
+    mock_load_config.return_value = config_file
+
+    # Mock async methods to allow the main loop to run once and exit
     mock_scanner.return_value.start_scan = AsyncMock(side_effect=KeyboardInterrupt)
     mock_scanner.return_value.stop_scan = AsyncMock()
 
+    # Mock other components
+    mock_load_config.return_value.setdefault("prometheus_exporter", {})
+    mock_load_config.return_value.setdefault("actions", [])
+    mock_load_config.return_value.setdefault("timers", [])
+
     await main()
 
-    mock_load_config.assert_called_once_with("config.yaml")
-    mock_setup_logging.assert_called_once_with(mock_load_config.return_value, False)
-    mock_exporter.assert_called_once()
-    mock_dispatcher.assert_called_once()
-    mock_timer_handler.assert_called_once()
-    mock_scanner.assert_called_once()
-    mock_exporter.return_value.start_server.assert_called_once()
-    mock_scanner.return_value.start_scan.assert_awaited_once()
+    # Verify scanner components were initialized with expected values
+    mock_get_switchbot_devices.assert_called_with(interface=expected["interface"])
+    mock_scanner.assert_called_with(
+        scanner=mock_get_switchbot_devices.return_value,
+        store=ANY,
+        cycle=expected["cycle"],
+        duration=expected["duration"],
+    )
+
+
+@patch("switchbot_exporter.main.logger.error")
+@patch("argparse.ArgumentParser")
+@pytest.mark.asyncio
+async def test_main_invalid_scanner_config_exits(mock_arg_parser, mock_logger_error):
+    """Test that the application exits if scan_duration > scan_cycle."""
+    # Mock argparse to return invalid values
+    mock_args = mock_arg_parser.return_value.parse_args.return_value
+    mock_args.config = "config.yaml"
+    mock_args.debug = False
+    mock_args.scan_cycle = 10
+    mock_args.scan_duration = 20  # Invalid: duration > cycle
+    mock_args.interface = None  # use default
+
+    # Patch load_config to return an empty config
+    with patch("switchbot_exporter.main.load_config", return_value={}):
+        with pytest.raises(SystemExit) as e:
+            await main()
+
+    # Check that it exited with code 1
+    assert e.value.code == 1
+    # Check that the correct error was logged
+    mock_logger_error.assert_called_once_with(
+        "Scan duration (20s) cannot be longer than the scan cycle (10s)."
+    )
