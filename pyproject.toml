@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switchbot-actions"
-version = "1.0.0"
+version = "1.0.1"
 authors = [
     {name = "Yoshio HANAWA", email = "y@hnw.jp"},
 ]
 description = "A YAML-based automation engine for SwitchBot BLE devices with a Prometheus exporter."
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.11"
+requires-python = ">=3.9.2"
 license = { text = "MIT" }
 keywords = ["switchbot", "automation", "prometheus", "ble", "home-automation"]
 classifiers = [
@@ -18,6 +18,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
