@@ -1,7 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "switchbot-actions"
-version = "0.1.0"
+version = "0.1.1"
+authors = [
+    {name = "Yoshio HANAWA", email = "y@hnw.jp"},
+]
+description = "A YAML-based automation engine for SwitchBot BLE devices with a Prometheus exporter."
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["switchbot", "automation", "prometheus", "ble", "home-automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Home Automation",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pyswitchbot",
+    "blinker",
+    "prometheus-client",
+    "PyYAML",
+    "requests",
+    "pytimeparse2",
+    "toml",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "pre-commit",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/hnw/switchbot-actions"
+"Repository" = "https://github.com/hnw/switchbot-actions"
+"Bug Tracker" = "https://github.com/hnw/switchbot-actions/issues"
+
+[project.scripts]
+switchbot-actions = "switchbot_actions.main:cli_main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -21,6 +70,3 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.format]
 quote-style = "double"
-
-[project.scripts]
-switchbot-actions = "switchbot_actions.main:cli_main"
