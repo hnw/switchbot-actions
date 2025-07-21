@@ -36,6 +36,10 @@ jobs:
           ruff check .
           ruff format --check .
 
+      - name: Run Pyright static type checker
+        run: |
+          pyright
+
       - name: Run tests and generate coverage data
         run: |
           pytest --cov-report=html

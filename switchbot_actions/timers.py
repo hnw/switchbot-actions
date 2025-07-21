@@ -62,7 +62,7 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
             task.cancel()
 
     async def _run_timer(
-        self, timer_config: dict, device_address: str, duration_str: str
+        self, timer_config: dict, device_address: str, duration_str: str | None
     ):
         """
         Waits for the duration, then triggers the action if not muted.
@@ -71,18 +71,27 @@ class TimerHandler(RuleHandlerBase, MuteMixin):
             logger.error(f"Timer '{timer_config.get('name')}' has no duration set.")
             return
 
-        duration_sec = parse(duration_str)
-        if duration_sec is None:
+        duration = parse(duration_str)
+        if duration is None:
             logger.error(
                 f"Invalid duration '{duration_str}' for timer "
                 f"'{timer_config.get('name')}'."
             )
             return
 
+        if isinstance(duration, (int, float)):
+            duration_sec = float(duration)
+        else:
+            duration_sec = duration.total_seconds()
+
         timer_name = timer_config.get("name")
+        if not timer_name:
+            logger.error("Timer has no name.")
+            return
+
         timer_key = (timer_name, device_address)
         try:
-            await asyncio.sleep(duration_sec)
+            await asyncio.sleep(float(duration_sec))
 
             current_data = self._store.get_state(device_address)
             if not current_data or not triggers.check_conditions(

@@ -35,7 +35,7 @@ def mock_store():
 @pytest.fixture
 def scanner(mock_scanner, mock_store):
     """Provides a DeviceScanner with mock dependencies."""
-    return DeviceScanner(scanner=mock_scanner, store=mock_store, cycle=1, duration=0.5)
+    return DeviceScanner(scanner=mock_scanner, store=mock_store, cycle=1, duration=1)
 
 
 @pytest.mark.asyncio
@@ -51,7 +51,7 @@ async def test_scanner_start_scan(scanner, mock_scanner, mock_store):
     with pytest.raises(asyncio.CancelledError):
         await scanner.start_scan()
 
-    mock_scanner.discover.assert_called_with(scan_timeout=0.5)
+    mock_scanner.discover.assert_called_with(scan_timeout=1)
     mock_store.get_state.assert_called_with("DE:AD:BE:EF:44:44")
 
     assert len(received_signal) == 1

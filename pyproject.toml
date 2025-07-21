@@ -43,6 +43,8 @@ dev = [
     "pytest-cov",
     "ruff",
     "pre-commit",
+    "pyright",
+    "types-requests",
 ]
 
 [project.urls]
@@ -71,3 +73,10 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pyright]
+pythonVersion = "3.10"
+reportMissingImports = true
+reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"

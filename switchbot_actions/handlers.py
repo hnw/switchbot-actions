@@ -40,9 +40,11 @@ class RuleHandlerBase(ABC):
         Receives device data, checks conditions, and triggers actions
         on state changes.
         """
-        new_data: SwitchBotAdvertisement = kwargs.get("new_data")
-        if not new_data:
+        new_data_untyped = kwargs.get("new_data")
+        if not new_data_untyped:
             return
+
+        new_data: SwitchBotAdvertisement = new_data_untyped
 
         for rule in self._rules:
             rule_name = rule.get("name", "Unnamed Rule")

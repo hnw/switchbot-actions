@@ -3,13 +3,14 @@ import logging
 
 from prometheus_client import REGISTRY, start_http_server
 from prometheus_client.core import GaugeMetricFamily
+from prometheus_client.registry import Collector
 
 from .store import DeviceStateStore
 
 logger = logging.getLogger(__name__)
 
 
-class PrometheusExporter:
+class PrometheusExporter(Collector):
     """
     Exposes device states from the DeviceStateStore as Prometheus metrics.
     """

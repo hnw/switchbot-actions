@@ -22,9 +22,10 @@ class DeviceStateStore:
 
     def handle_advertisement(self, sender, **kwargs):
         """Receives device data from the signal and updates the store."""
-        new_data: SwitchBotAdvertisement = kwargs.get("new_data")
-        if not new_data or not hasattr(new_data, "address"):
+        new_data_untyped = kwargs.get("new_data")
+        if not new_data_untyped or not hasattr(new_data_untyped, "address"):
             return
+        new_data: SwitchBotAdvertisement = new_data_untyped
 
         address = new_data.address
         with self._lock:
