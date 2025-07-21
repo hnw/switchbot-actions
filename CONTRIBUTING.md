@@ -1,6 +1,6 @@
 # Contributing to switchbot-actions
 
-First off, thank you for considering contributing to this project\! We welcome all contributions, from bug reports to new features.
+First off, thank you for considering contributing to this project! We welcome all contributions, from bug reports to new features.
 
 To ensure a smooth process for everyone, please take a moment to review these guidelines.
 
@@ -10,7 +10,7 @@ To ensure a smooth process for everyone, please take a moment to review these gu
 
 To get started with development, please follow these steps to set up your local environment.
 
-### 1\. Clone the Repository
+### 1. Clone the Repository
 
 Clone the project to your local machine.
 
@@ -19,7 +19,7 @@ git clone https://github.com/hnw/switchbot-actions.git
 cd switchbot-actions
 ```
 
-### 2\. Create and Activate a Virtual Environment
+### 2. Create and Activate a Virtual Environment
 
 It is strongly recommended to use a virtual environment to avoid conflicts with other projects or your system's Python installation.
 
@@ -37,7 +37,7 @@ source .venv/bin/activate
 
 Once activated, you will see the name of the virtual environment (e.g., `(.venv)`) at the beginning of your shell prompt.
 
-### 3\. Install Dependencies
+### 3. Install Dependencies
 
 Now, install the package in "editable" mode along with all development dependencies into the activated virtual environment.
 
@@ -45,13 +45,17 @@ Now, install the package in "editable" mode along with all development dependenc
 pip install -e '.[dev]'
 ```
 
-### 4\. Set Up pre-commit Hooks
+### 4. Set Up pre-commit Hooks
 
-Finally, install the pre-commit hooks, which will run checks automatically before each commit.
+This project uses `pre-commit` to automatically run code quality checks before each commit. These checks include linting with `ruff` and static type checking with `pyright`.
+
+To set up the hooks, run:
 
 ```bash
 pre-commit install
 ```
+
+Now, whenever you run `git commit`, the defined hooks will be executed on your staged files. If any of the checks fail, the commit will be aborted, allowing you to fix the issues before committing again.
 
 You are now all set up for development. Your environment is isolated, and any packages you install will not affect your global Python installation.
 
@@ -83,4 +87,4 @@ When you are ready to submit your changes, please follow these steps:
       * In the description, explain the problem you are solving and the changes you have made.
       * If your PR addresses an existing issue, please link to it in the description (e.g., `Fixes #123`).
 
-We will review your pull request as soon as possible. Thank you for your contribution\!
+We will review your pull request as soon as possible. Thank you for your contribution!

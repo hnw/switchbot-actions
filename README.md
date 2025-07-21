@@ -55,14 +55,89 @@ For command-line applications like this, we strongly recommend installing with `
 
     Then, edit `config.yaml` to suit your needs.
 
-### Alternative Installation (using pip)
+### Running as a Systemd Service
 
-If you prefer to manage your environments manually, you can use `pip`. It is recommended to do this within a virtual environment (`venv`).
+For continuous, 24/7 monitoring on a server, it is best to run this application as a background service managed by `systemd`.
+
+#### Step 1: Create a Dedicated Virtual Environment
+
+First, we will create a self-contained environment for the application in a system-wide location, such as `/opt`.
 
 ```bash
-# This command installs the package.
-# To avoid polluting your global packages, consider running this in a venv.
-pip install switchbot-actions
+# Create a directory for the virtual environment
+sudo mkdir -p /opt/switchbot-actions
+
+# Create the venv
+sudo python3 -m venv /opt/switchbot-actions
+```
+
+#### Step 2: Install the Application into the venv
+
+Next, use the `pip` from within the newly created environment to install the application.
+
+```bash
+sudo /opt/switchbot-actions/bin/pip install switchbot-actions
+```
+
+The executable will now be available at `/opt/switchbot-actions/bin/switchbot-actions`.
+
+#### Step 3: Place the Configuration File
+
+System services should use a centralized configuration file. A standard location is `/etc`.
+
+```bash
+# Create a directory for the config file
+sudo mkdir -p /etc/switchbot-actions
+
+# Copy the example config to the new location
+sudo cp config.yaml.example /etc/switchbot-actions/config.yaml
+
+# Edit the configuration for your needs
+sudo nano /etc/switchbot-actions/config.yaml
+```
+
+#### Step 4: Create the systemd Service File
+
+Create a service definition file for `systemd`.
+
+Create a new file with `sudo nano /etc/systemd/system/switchbot-actions.service` and paste the following content.
+
+```ini
+[Unit]
+Description=SwitchBot Actions Daemon
+After=network.target bluetooth.service
+
+[Service]
+# It is recommended to run the service as a non-root user.
+User=nobody
+Group=nobody
+
+# Use the absolute path to the executable inside the venv
+ExecStart=/opt/switchbot-actions/bin/switchbot-actions -c /etc/switchbot-actions/config.yaml
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### Step 5: Enable and Start the Service
+
+Finally, reload the `systemd` daemon, enable the service to start on boot, and start it now.
+
+```bash
+# Reload systemd to recognize the new service file
+sudo systemctl daemon-reload
+
+# Enable the service to start automatically on boot
+sudo systemctl enable switchbot-actions.service
+
+# Start the service immediately
+sudo systemctl start switchbot-actions.service
+
+# Check the status to see if it's running correctly
+sudo systemctl status switchbot-actions.service
 ```
 
 ## Usage
@@ -129,7 +204,7 @@ scanner:
   # Must be less than or equal to `cycle`.
   duration: 3
   # Bluetooth interface to use.
-  interface: "hci0"
+  interface: "0"
 ```
 
 ### Event-Driven Actions (`actions`)
