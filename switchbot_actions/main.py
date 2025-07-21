@@ -94,7 +94,9 @@ async def main():
         "--scan-duration", type=int, help="Time in seconds to scan for BLE devices"
     )
     parser.add_argument(
-        "--interface", type=str, help="Bluetooth interface to use (e.g., hci0)"
+        "--interface",
+        type=str,
+        help="Bluetooth adapter number to use (e.g., 0 for hci0, 1 for hci1)",
     )
     args = parser.parse_args()
 
@@ -105,7 +107,7 @@ async def main():
     scanner_config = config.get("scanner", {})
     scan_cycle = args.scan_cycle or scanner_config.get("cycle", 10)
     scan_duration = args.scan_duration or scanner_config.get("duration", 3)
-    interface = args.interface or scanner_config.get("interface", "hci0")
+    interface = args.interface or scanner_config.get("interface", "0")
 
     # Validate settings
     if scan_duration > scan_cycle:

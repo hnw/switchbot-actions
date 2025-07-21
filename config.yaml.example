@@ -11,9 +11,9 @@ scanner:
   # Default: 3
   duration: 3
 
-  # Bluetooth interface to use (e.g., hci0, hci1).
-  # Default: "hci0"
-  interface: "hci0"
+  # Bluetooth adapter number to use (e.g., 0 for hci0).
+  # Default: "0"
+  interface: "0"
 
 # ----------------------------------------------------
 # Actions (Event-Driven)

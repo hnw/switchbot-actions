@@ -100,21 +100,21 @@ def test_load_config_yaml_error(mock_file):
     [
         # Priority 1: Command-line arguments
         (
-            {"scan_cycle": 10, "scan_duration": 2, "interface": "hci1"},
-            {"scanner": {"cycle": 99, "duration": 9, "interface": "hci9"}},
-            {"cycle": 10, "duration": 2, "interface": "hci1"},
+            {"scan_cycle": 10, "scan_duration": 2, "interface": "1"},
+            {"scanner": {"cycle": 99, "duration": 9, "interface": "9"}},
+            {"cycle": 10, "duration": 2, "interface": "1"},
         ),
         # Priority 2: Config file
         (
             {"scan_cycle": None, "scan_duration": None, "interface": None},
-            {"scanner": {"cycle": 20, "duration": 8, "interface": "hci2"}},
-            {"cycle": 20, "duration": 8, "interface": "hci2"},
+            {"scanner": {"cycle": 20, "duration": 8, "interface": "2"}},
+            {"cycle": 20, "duration": 8, "interface": "2"},
         ),
         # Priority 3: Default values
         (
             {"scan_cycle": None, "scan_duration": None, "interface": None},
             {},
-            {"cycle": 10, "duration": 3, "interface": "hci0"},
+            {"cycle": 10, "duration": 3, "interface": "0"},
         ),
     ],
 )
