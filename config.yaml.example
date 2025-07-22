@@ -16,36 +16,39 @@ scanner:
   interface: "0"
 
 # ----------------------------------------------------
-# Actions (Event-Driven)
-# Reacts immediately when a device event occurs.
+# Automations
 # ----------------------------------------------------
-actions:
+automations:
   - name: "Turn on Fan when Temperature Rises"
-    # Optional: Mutes this action for 10 minutes after it triggers to prevent spam.
+    # Optional: Mutes this automation for 10 minutes after it triggers.
     cooldown: "10m"
-    conditions:
-      # Defines which device(s) this rule applies to.
+    # "if" block: Defines the trigger and conditions.
+    if:
+      # Source of the event. "switchbot" for real-time state changes.
+      source: "switchbot"
+      # Conditions to identify the target device(s).
       device:
         modelName: "Meter"
-      # Defines the state conditions that trigger the action.
+      # Conditions based on the device's state.
       state:
         # Triggers when the temperature is greater than 28.
         temperature: "> 28.0"
-    trigger:
+    # "then" block: Defines the action to be executed.
+    then:
       type: "shell_command"
       command: "echo 'High temperature detected ({temperature}°C), turning on fan...'"
 
   - name: "Button Press Notification"
     # Mute for 2 seconds to prevent bouncing/chattering effects.
     cooldown: "2s"
-    conditions:
+    if:
+      source: "switchbot"
       device:
         modelName: "Bot"
         address: "XX:XX:XX:XX:XX:AA"
       state:
-        # This action now triggers when the bot is turned on.
         isOn: True
-    trigger:
+    then:
       type: "webhook"
       url: "https://example.com/notify"
       payload:
@@ -55,35 +58,31 @@ actions:
         Content-Type: "application/json"
         Authorization: "Bearer YOUR_SECRET_TOKEN"
 
-# ----------------------------------------------------
-# Timers (Time-Driven)
-# Reacts when a device has been in a specific state for a continuous duration.
-# ----------------------------------------------------
-timers:
   - name: "Turn off Lights if No Motion for 5 Minutes"
-    conditions:
+    if:
+      # "switchbot_timer" triggers when a state is sustained for a duration.
+      source: "switchbot_timer"
+      # The duration the state must be continuously met.
+      duration: "5m"
       device:
         modelName: "WoPresence"
         address: "YY:YY:YY:YY:YY:BB"
-      # The state that must be true for the whole duration.
       state:
         motion_detected: False
-      # The duration the state must be sustained for the trigger to fire.
-      duration: "5m"
-    trigger:
+    then:
       type: "shell_command"
       command: "echo 'No motion for 5 minutes, turning off lights.'"
 
   - name: "Alert if Door is Open for 10 Minutes"
-    # Mute for 1 hour after triggering to avoid repeated alerts for the same event.
     cooldown: "1h"
-    conditions:
+    if:
+      source: "switchbot_timer"
+      duration: "10m"
       device:
         modelName: "WoContact"
       state:
         contact_open: True
-      duration: "10m"
-    trigger:
+    then:
       type: "webhook"
       url: "https://example.com/alert"
       payload:
@@ -135,5 +134,5 @@ logging:
     bleak: "WARNING"
     # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
     # bleak: "DEBUG"
-    # Example: Enable trigger execution logs for debugging actions/timers
+    # Example: Enable trigger execution logs for debugging automations
     # switchbot_actions.triggers: "DEBUG"

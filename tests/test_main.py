@@ -148,8 +148,7 @@ async def test_main_scanner_config_priority(
 
     # Mock other components
     mock_load_config.return_value.setdefault("prometheus_exporter", {})
-    mock_load_config.return_value.setdefault("actions", [])
-    mock_load_config.return_value.setdefault("timers", [])
+    mock_load_config.return_value.setdefault("automations", [])
 
     await main()
 

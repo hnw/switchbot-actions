@@ -44,13 +44,13 @@ def evaluate_condition(condition: str, new_value) -> bool:
         return False  # Could not compare
 
 
-def check_conditions(conditions: dict, new_data: SwitchBotAdvertisement) -> bool:
+def check_conditions(
+    device_cond: dict, state_cond: dict, new_data: SwitchBotAdvertisement
+) -> bool:
     """Checks if the device data meets all specified conditions."""
-    device_conditions = conditions.get("device", {})
-    state_conditions = conditions.get("state", {})
 
     # Check device conditions
-    for key, expected_value in device_conditions.items():
+    for key, expected_value in device_cond.items():
         if key == "address":
             actual_value = new_data.address
         else:
@@ -59,7 +59,7 @@ def check_conditions(conditions: dict, new_data: SwitchBotAdvertisement) -> bool
             return False
 
     # Check state conditions
-    for key, condition in state_conditions.items():
+    for key, condition in state_cond.items():
         if key == "rssi":
             # Special handling for RSSI, which is not in the 'data' dict
             new_value = getattr(new_data, "rssi", None)
@@ -84,20 +84,20 @@ def format_string(template_string: str, device_data: SwitchBotAdvertisement) -> 
     return template_string.format(**flat_data)
 
 
-def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
+def trigger_action(action: dict, device_data: SwitchBotAdvertisement):
     """Executes the specified action (e.g., shell command, webhook)."""
-    trigger_type = trigger.get("type")
+    action_type = action.get("type")
 
-    if trigger_type == "shell_command":
-        command = format_string(trigger["command"], device_data)
+    if action_type == "shell_command":
+        command = format_string(action["command"], device_data)
         logger.debug(f"Executing shell command: {command}")
         subprocess.run(command, shell=True, check=False)
 
-    elif trigger_type == "webhook":
-        url = format_string(trigger["url"], device_data)
-        method = trigger.get("method", "POST").upper()
-        payload = trigger.get("payload", {})
-        headers = trigger.get("headers", {})
+    elif action_type == "webhook":
+        url = format_string(action["url"], device_data)
+        method = action.get("method", "POST").upper()
+        payload = action.get("payload", {})
+        headers = action.get("headers", {})
 
         # Format payload
         if isinstance(payload, dict):
@@ -129,4 +129,4 @@ def trigger_action(trigger: dict, device_data: SwitchBotAdvertisement):
             logger.error(f"Webhook failed: {e}")
 
     else:
-        logger.warning(f"Unknown trigger type: {trigger_type}")
+        logger.warning(f"Unknown trigger type: {action_type}")

@@ -24,29 +24,32 @@ def mock_advertisement():
 
 
 @pytest.fixture
-def timer_config():
-    """Provides a sample timer configuration."""
+def automations_config():
+    """Provides a sample automations configuration for timer-based rules."""
     return [
         {
-            "name": "One-Shot Timer",
-            "conditions": {"state": {"dummy": True}},
-            "duration": "0.01s",
+            "name": "Test Timer-Driven Automation",
             "cooldown": "1s",
-            "trigger": {"type": "shell_command"},
+            "if": {
+                "source": "switchbot_timer",
+                "duration": "0.01s",
+                "state": {"dummy": True},
+            },
+            "then": {"type": "shell_command"},
         }
     ]
 
 
 @pytest.mark.asyncio
 async def test_timer_starts_on_false_to_true_transition(
-    timer_config, mock_store, mock_advertisement
+    automations_config, mock_store, mock_advertisement
 ):
     """
     Test that a timer task is created only on the False -> True transition
     and that it gets cleaned up properly.
     """
-    handler = TimerHandler(timers_config=timer_config, store=mock_store)
-    timer_name = timer_config[0].get("name")
+    handler = TimerHandler(configs=automations_config, store=mock_store)
+    timer_name = automations_config[0].get("name")
     device_address = mock_advertisement.address
     key = (timer_name, device_address)
 
@@ -81,25 +84,28 @@ async def test_timer_starts_on_false_to_true_transition(
 @pytest.mark.asyncio
 @patch("switchbot_actions.triggers.trigger_action")
 async def test_timer_completes_and_triggers_action(
-    mock_trigger_action, timer_config, mock_store, mock_advertisement
+    mock_trigger_action, automations_config, mock_store, mock_advertisement
 ):
     """Test that a timer that runs to completion triggers its action."""
     mock_store.get_state.return_value = mock_advertisement
-    handler = TimerHandler(timers_config=timer_config, store=mock_store)
+    handler = TimerHandler(configs=automations_config, store=mock_store)
+    config = handler._configs[0]
 
     with patch("switchbot_actions.triggers.check_conditions", return_value=True):
         # Directly call _run_timer to simulate completion
-        await handler._run_timer(timer_config[0], mock_advertisement.address, "0.01s")
-        mock_trigger_action.assert_called_once()
+        await handler._run_timer(
+            config, mock_advertisement.address, config["if"]["duration"]
+        )
+        mock_trigger_action.assert_called_once_with(config["then"], mock_advertisement)
 
 
 def test_timer_cancels_on_true_to_false_transition(
-    timer_config, mock_store, mock_advertisement
+    automations_config, mock_store, mock_advertisement
 ):
     """Test that a running timer is cancelled if the state becomes False."""
-    handler = TimerHandler(timers_config=timer_config, store=mock_store)
+    handler = TimerHandler(configs=automations_config, store=mock_store)
     mock_task = MagicMock()
-    key = (timer_config[0]["name"], mock_advertisement.address)
+    key = (automations_config[0]["name"], mock_advertisement.address)
     handler._active_timers[key] = mock_task
     handler._last_condition_results[key] = True  # Pretend last state was True
 

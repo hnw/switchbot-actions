@@ -15,14 +15,17 @@ def mock_advertisement():
 
 
 @pytest.fixture
-def actions_config():
-    """Provides a sample actions configuration."""
+def automations_config():
+    """Provides a sample automations configuration for event-driven rules."""
     return [
         {
-            "name": "Test Edge-Trigger Action",
+            "name": "Test Event-Driven Automation",
             "cooldown": "1s",
-            "conditions": {"state": {"dummy": True}},
-            "trigger": {"type": "any"},
+            "if": {
+                "source": "switchbot",
+                "state": {"dummy": True},
+            },
+            "then": {"type": "any"},
         }
     ]
 
@@ -30,12 +33,12 @@ def actions_config():
 @patch("switchbot_actions.triggers.trigger_action")
 @patch("time.time")
 def test_dispatcher_edge_trigger_behavior(
-    mock_time, mock_trigger_action, mock_advertisement, actions_config
+    mock_time, mock_trigger_action, mock_advertisement, automations_config
 ):
     """
     Test that EventDispatcher fires only on the False -> True transition.
     """
-    dispatcher = EventDispatcher(actions_config=actions_config)
+    dispatcher = EventDispatcher(configs=automations_config)
 
     with patch("switchbot_actions.triggers.check_conditions") as mock_check_conditions:
         # 1. First event: condition is False -> should not trigger
@@ -72,10 +75,10 @@ def test_dispatcher_edge_trigger_behavior(
 @patch("switchbot_actions.triggers.trigger_action")
 @patch("time.time")
 def test_dispatcher_cooldown(
-    mock_time, mock_trigger_action, mock_advertisement, actions_config
+    mock_time, mock_trigger_action, mock_advertisement, automations_config
 ):
     """Test that cooldown prevents an action from firing."""
-    dispatcher = EventDispatcher(actions_config=actions_config)
+    dispatcher = EventDispatcher(configs=automations_config)
 
     with patch("switchbot_actions.triggers.check_conditions") as mock_check_conditions:
         # --- First Trigger ---

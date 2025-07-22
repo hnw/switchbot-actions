@@ -139,11 +139,25 @@ async def main():
         )
         exporter.start_server()
 
-    if "actions" in config and config["actions"]:
-        _dispatcher = EventDispatcher(actions_config=config["actions"])
+    if "automations" in config and config["automations"]:
+        automations = config["automations"]
+        logger.info(f"Found {len(automations)} automation(s) in config.")
 
-    if "timers" in config and config["timers"]:
-        _timer_handler = TimerHandler(timers_config=config["timers"], store=store)
+        # Separate automations based on their source
+        event_automations = [
+            a for a in automations if a.get("if", {}).get("source") == "switchbot"
+        ]
+        timer_automations = [
+            a for a in automations if a.get("if", {}).get("source") == "switchbot_timer"
+        ]
+
+        if event_automations:
+            logger.info(f"Registering {len(event_automations)} event automations.")
+            _dispatcher = EventDispatcher(configs=event_automations)
+
+        if timer_automations:
+            logger.info(f"Registering {len(timer_automations)} timer automations.")
+            _timer_handler = TimerHandler(configs=timer_automations, store=store)
 
     # Start the main scanning loop
     logger.info("Starting SwitchBot BLE scanner...")

@@ -15,7 +15,7 @@ Inspired by services like GitHub Actions, all behavior is controlled through a s
 
 -   **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
 -   **Prometheus Integration**: Exposes metrics at a configurable `/metrics` endpoint.
--   **Powerful Automation**: Define rules to trigger actions based on state changes (`actions`) or sustained states (`timers`).
+-   **Powerful Automation**: Define rules to trigger actions based on a unified `if/then` structure.
 -   **Flexible Conditions**: Build rules based on device model, address, sensor values, and even signal strength (`rssi`).
 -   **Highly Configurable**: Filter devices, select metrics, and define complex rules from a single configuration file.
 -   **Extensible Architecture**: Built on a clean, decoupled architecture, making it easy to extend.
@@ -207,79 +207,68 @@ scanner:
   interface: "0"
 ```
 
-### Event-Driven Actions (`actions`)
+### Automations (`automations`)
 
-Trigger an action **the moment** a device's state changes to meet the specified conditions (edge-triggered). The action will only fire once and will not fire again until the conditions have first become false and then true again.
+All automation rules are defined under the `automations` key. Each rule follows a symmetric `if/then` structure.
+
+#### `if` Block (Trigger & Conditions)
+
+The `if` block defines what will trigger the automation.
+
+-   **`source`**: The core of the trigger. Use `switchbot` for immediate events or `switchbot_timer` for sustained states.
+-   **`duration`**: Required only for `switchbot_timer`. Defines how long the state must be true.
+-   **`device` & `state`**: Define the conditions to be met.
 
 In the `state` conditions, you can use the following operators for comparison: `>` (greater than), `<` (less than), `>=` (greater/equal), `<=` (less/equal), `==` (equal), and `!=` (not equal).
 
-```yaml
-actions:
-  - name: "High Temperature Alert"
-    # Cooldown for 10 minutes to prevent repeated alerts
-    cooldown: "10m" # Supports formats like "5s", "10m", "1.5h"
-    conditions:
-      device:
-        modelName: "Meter"
-      state:
-        # Triggers the moment temperature becomes greater than 28.0
-        temperature: "> 28.0"
-    trigger:
-      type: "webhook"
-      url: "https://example.com/alert"
-      payload:
-        message: "High temperature detected: {temperature}°C"
-      # Optional: Add custom headers for APIs that require them
-      headers:
-        Authorization: "Bearer YOUR_API_KEY"
-        X-Custom-Header: "Value for {address}"
+#### `then` Block (Action)
 
-  - name: "Weak Signal Notification"
-    conditions:
-      device:
-        address: "XX:XX:XX:XX:XX:AA"
-      state:
-        # Triggers if the signal strength is weaker (more negative) than -80 dBm
-        rssi: "< -80"
-    trigger:
-      type: "shell_command"
-      command: "echo 'Device {address} has a weak signal (RSSI: {rssi})'"
-```
+The `then` block defines what action to execute when the `if` conditions are met.
+
+-   **`type`**: The type of action, such as `shell_command` or `webhook`.
+-   **Parameters**: Additional fields like `command`, `url`, `payload`, and `headers`.
 
 > [!NOTE]
 > You can use placeholders in `command`, `url`, `payload`, and `headers`. Available placeholders include `{address}`, `{modelName}`, `{rssi}`, and any sensor value found in the device's data (e.g., `{temperature}`, `{humidity}`, `{isOn}`).
 
-### Time-Driven Timers (`timers`)
+#### Example 1: Event-Driven Automation
 
-Trigger an action when a device has been in a specific state for a **continuous duration** (one-shot). Once the timer fires, it will not restart until the conditions have first become false and then true again.
+This rule triggers **immediately** when a Meter's temperature rises above 28.0.
 
 ```yaml
-timers:
-  - name: "Turn off Lights if No Motion"
-    conditions:
+automations:
+  - name: "High Temperature Alert"
+    cooldown: "10m" # Optional: Mute for 10 minutes after triggering
+    if:
+      source: "switchbot"
       device:
-        modelName: "WoPresence"
+        modelName: "Meter"
       state:
-        # The state that must be true for the whole duration
-        motion_detected: False
-      # The duration the state must be sustained
-      duration: "5m"
-    trigger:
-      type: "shell_command"
-      command: "echo 'No motion for 5 minutes, turning off lights.'"
-
-  - name: "Alert if Door is Left Open"
-    conditions:
-      device:
-        modelName: "WoContact"
-      state:
-        contact_open: True
-      duration: "10m"
-    trigger:
+        temperature: "> 28.0"
+    then:
       type: "webhook"
       url: "https://example.com/alert"
       payload:
-        message: "Warning: Door {address} has been open for 10 minutes!"
+        message: "High temperature detected: {temperature}°C"
+```
+
+#### Example 2: Time-Driven Automation
+
+This rule triggers when a presence sensor has detected **no motion for 5 continuous minutes**.
+
+```yaml
+automations:
+  - name: "Turn off Lights if No Motion"
+    if:
+      source: "switchbot_timer"
+      duration: "5m"
+      device:
+        modelName: "WoPresence"
+      state:
+        motion_detected: False
+    then:
+      type: "shell_command"
+      command: "echo 'No motion for 5 minutes, turning off lights.'"
 ```
 
 ### Prometheus Exporter (`prometheus_exporter`)
@@ -337,8 +326,8 @@ logging:
         bleak: "DEBUG" # Enable detailed output only for bleak
     ```
 
--   **Troubleshooting Actions and Timers:**
-    By default, the execution of `actions` and `timers` is not logged to `INFO` to avoid excessive noise. If you need to verify that your triggers are running, enable `DEBUG` logging for the triggers module in `config.yaml`:
+-   **Troubleshooting Automations:**
+    By default, the execution of `automations` is not logged to `INFO` to avoid excessive noise. If you need to verify that your triggers are running, enable `DEBUG` logging for the triggers module in `config.yaml`:
     ```yaml
     logging:
       level: "INFO"
