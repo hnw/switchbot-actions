@@ -5,18 +5,18 @@ from prometheus_client import REGISTRY, start_http_server
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 
-from .store import DeviceStateStore
+from .store import StateStorage
 
 logger = logging.getLogger(__name__)
 
 
 class PrometheusExporter(Collector):
     """
-    Exposes device states from the DeviceStateStore as Prometheus metrics.
+    Exposes device states from the StateStorage as Prometheus metrics.
     """
 
-    def __init__(self, state_store: DeviceStateStore, port: int, target_config: dict):
-        self.store = state_store
+    def __init__(self, state_storage: StateStorage, port: int, target_config: dict):
+        self.store = state_storage
         self.port = port
         self.target_config = target_config
 

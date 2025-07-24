@@ -53,7 +53,7 @@ dev = [
 "Bug Tracker" = "https://github.com/hnw/switchbot-actions/issues"
 
 [project.scripts]
-switchbot-actions = "switchbot_actions.main:cli_main"
+switchbot-actions = "switchbot_actions.cli:cli_main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

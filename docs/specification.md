@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-This document outlines the design for `switchbot-actions`, a Python application designed to monitor SwitchBot Bluetooth Low Energy (BLE) devices. The project has two primary goals:
+This document outlines the design for `switchbot-actions`, a Python application designed to monitor SwitchBot Bluetooth Low Energy (BLE) devices and other event sources. The project has two primary goals:
 
 1.  **Prometheus Exporter**: To expose sensor and state data from SwitchBot devices as metrics that can be scraped by a Prometheus server.
 2.  **Automation Engine**: To provide a unified mechanism for executing custom actions based on a flexible `if/then` rule structure defined in a single `automations` section.
@@ -11,59 +11,67 @@ The application is designed to be a long-running service, managed entirely throu
 
 ## 2. Architecture
 
-The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it emits a single, rich `advertisement_received` signal.
+The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it emits a `state_changed` signal.
 
-This signal is consumed by several independent components. A main controller reads the `automations` from the configuration and, based on the `if.source` field of each rule, registers it with the appropriate handler:
--   `EventDispatcher`: For real-time state changes (`source: "switchbot"`).
--   `TimerHandler`: For sustained state conditions (`source: "switchbot_timer"`).
+This signal is consumed by the `AutomationHandler`. The `AutomationHandler` acts as a central dispatcher. Upon initialization, it reads the `automations` from the configuration and, based on the `source` field of each rule, instantiates the appropriate `ActionRunner` subclass (e.g., `EventActionRunner` for `source: "switchbot"`, `TimerActionRunner` for `source: "switchbot_timer"`).
 
-To handle stateful rule processing, `EventDispatcher` and `TimerHandler` inherit from a common `AutomationHandlerBase`. This base class contains the core logic for detecting state transitions (e.g., a condition changing from `False` to `True`), while the subclasses implement the specific actions to take upon those transitions. This design ensures that components are loosely coupled and that state-change detection logic is centralized and reusable.
+Each `ActionRunner` instance encapsulates the specific logic for its `source` type, including condition evaluation, cooldown management, and triggering action execution. `ActionRunnerBase` provides common interfaces and shared logic for all runners.
+
+When an `ActionRunner` determines that actions should be executed, it delegates this responsibility to the `action_executor` module, which handles the actual execution of shell commands, webhooks, etc.
+
+The core of the condition evaluation logic is encapsulated in the `evaluator` module. This module is responsible for interpreting the structure of state objects and evaluating conditions, making the system extensible to new types of event sources in the future.
 
 ### Mermaid Class Diagram
 ```mermaid
 classDiagram
     direction LR
-    class AutomationHandlerBase {
-        <<Abstract>>
-        #_rules
-        #_last_condition_results
+    class AutomationHandler {
         +handle_signal(payload)
-        +on_conditions_met(rule, data)*
-        +on_conditions_no_longer_met(rule, data)*
     }
-    class EventDispatcher {
-        +on_conditions_met(rule, data)
-        +on_conditions_no_longer_met(rule, data)
+    class ActionRunnerBase {
+        <<Abstract>>
+        +run(state)
+        #_execute_actions(state)
     }
-    class TimerHandler {
-        #_active_timers
-        +on_conditions_met(rule, data)
-        +on_conditions_no_longer_met(rule, data)
-    }
+    class EventActionRunner
+    class TimerActionRunner
     class DeviceScanner {
         +start_scan()
     }
-    class DeviceStateStore {
-        +get_state(mac)
-        +handle_signal(payload)
+    class StateStorage {
+        +get_state(key)
+        +handle_state_change(payload)
     }
     class PrometheusExporter{
         +start_server()
     }
-    class MuteMixin {
-        + _is_muted()
-        + _mute_action()
+    class evaluator {
+        <<Module>>
+        +get_state_key(state)
+        +check_conditions(if_config, state)
     }
-    AutomationHandlerBase <|-- EventDispatcher
-    MuteMixin <|.. EventDispatcher
-    AutomationHandlerBase <|-- TimerHandler
-    MuteMixin <|.. TimerHandler
+    class action_executor {
+        <<Module>>
+        +format_string(template, state)
+        +execute_action(action, state)
+    }
+    class Timer {
+        +start()
+        +stop()
+    }
 
-    DeviceScanner --> DeviceStateStore : reads previous state
-    PrometheusExporter --> DeviceStateStore : reads current state
+    AutomationHandler "1" --* "N" ActionRunnerBase : creates and holds
+    ActionRunnerBase <|-- EventActionRunner
+    ActionRunnerBase <|-- TimerActionRunner
 
-    DeviceScanner ..> AutomationHandlerBase : notifies via signal
-    DeviceScanner ..> DeviceStateStore : notifies via signal
+    PrometheusExporter --> StateStorage : reads current state
+
+    DeviceScanner ..> StateStorage : notifies via signal
+    DeviceScanner ..> AutomationHandler : notifies via signal
+
+    ActionRunnerBase --> evaluator : uses
+    ActionRunnerBase --> action_executor : uses
+    TimerActionRunner --> Timer : uses
 ```
 
 ## 3. Components
@@ -71,34 +79,56 @@ classDiagram
 ### 3.1. `DeviceScanner`
 
   - **Responsibility**: Continuously scans for SwitchBot BLE advertisements and serves as the central publisher of device events.
-  - **Functionality**: Emits an `advertisement_received` signal with the new advertisement data as its payload.
+  - **Functionality**: Emits a `state_changed` signal with the new state object as its payload.
 
-### 3.2. `DeviceStateStore`
+### 3.2. `StateStorage`
 
-  - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed device. It is the single source of truth for the current state of devices.
-  - **Functionality**: Connects to the `advertisement_received` signal. Upon receiving a signal, it **immediately** updates its internal state for the relevant device.
+  - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed entity. It is the single source of truth for the current state.
+  - **Functionality**: Connects to the `state_changed` signal. Upon receiving a signal, it **immediately** updates its internal state for the relevant entity.
 
 ### 3.3. `PrometheusExporter`
 
   - **Responsibility**: Exposes device states as Prometheus metrics.
-  - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all devices from the `DeviceStateStore` and formats it into Prometheus metrics.
+  - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all entities from the `StateStorage` and formats it into Prometheus metrics.
 
-### 3.4. `AutomationHandlerBase` (Abstract)
+### 3.4. `evaluator` (Module)
 
-  - **Responsibility**: Provides the core state-transition detection logic for all rule-based handlers.
-  - **Functionality**: Connects to the `advertisement_received` signal. For each rule and each device, it stores the result of the last condition evaluation. It compares the current result with the last known result to detect a change. When a change occurs, it calls one of its abstract methods (`on_conditions_met` or `on_conditions_no_longer_met`), which must be implemented by subclasses.
+  - **Responsibility**: Centralizes the logic for interpreting state objects and evaluating conditions.
+  - **Functionality**:
+    - `get_state_key(state)`: Extracts a unique key (e.g., MAC address) from a state object.
+    - `check_conditions(if_config, state)`: Determines if a state object meets the conditions defined in a rule's `if` block.
 
-### 3.5. `EventDispatcher`
+### 3.5. `action_executor` (Module)
 
-  - **Responsibility**: Handles automations where `if.source` is `switchbot`.
-  - **Functionality**: Inherits from `AutomationHandlerBase`. It implements `on_conditions_met` to trigger an action immediately when a condition state transitions from `False` to `True` (an edge trigger). This prevents actions from firing repeatedly if a state remains true.
+  - **Responsibility**: Executes the actual actions (e.g., shell commands, webhooks) defined in the `then` block of an automation rule.
+  - **Functionality**:
+    - `format_string(template_string, state)`: Replaces placeholders in a string with actual state data.
+    - `execute_action(action, state)`: Executes a single action based on its type (e.g., `shell_command`, `webhook`).
 
-### 3.6. `TimerHandler`
+### 3.6. `AutomationHandler`
 
-  - **Responsibility**: Handles automations where `if.source` is `switchbot_timer`.
-  - **Functionality**: Inherits from `AutomationHandlerBase`.
-  - **Timer Start**: Implements `on_conditions_met` to create and start a new asynchronous timer task when a device's state transitions from `False` to `True`.
-  - **Timer Cancellation**: Implements `on_conditions_no_longer_met` to cancel the running timer task if the conditions transition back from `True` to `False`.
+  - **Responsibility**: Acts as the central dispatcher for automation rules. It receives `state_changed` signals and delegates processing to the appropriate `ActionRunner`.
+  - **Functionality**: Initializes `ActionRunner` instances based on the `source` defined in automation configurations and calls their `run` method when a signal is received.
+
+### 3.7. `ActionRunnerBase` (Abstract Class)
+
+  - **Responsibility**: Defines the common interface and implements shared logic for all concrete `ActionRunner` implementations.
+  - **Functionality**: Manages the automation rule's configuration, including cooldowns, and provides a common method (`_execute_actions`) for running the defined actions via `action_executor`.
+
+### 3.8. `EventActionRunner`
+
+  - **Responsibility**: Handles automation rules with `source: "switchbot"` (event-driven triggers).
+  - **Functionality**: Implements the `run` method to detect edge triggers (conditions becoming true) and executes actions accordingly.
+
+### 3.9. `TimerActionRunner`
+
+  - **Responsibility**: Handles automation rules with `source: "switchbot_timer"` (time-driven triggers).
+  - **Functionality**: Implements the `run` method to manage internal timers and execute actions when conditions have been continuously met for a specified duration.
+
+### 3.10. `Timer`
+
+  - **Responsibility**: Manages a single timed automation.
+  - **Functionality**: When started, it waits for a specified duration and then calls the `check_and_trigger` method on its associated handler.
 
 ## 4. Configuration (`config.yaml`)
 
@@ -196,13 +226,14 @@ Configures the application's logging behavior.
 │   ├── main.py             # Application entry point
 │   ├── signals.py          # Blinker signals
 │   ├── scanner.py          # DeviceScanner
-│   ├── store.py            # DeviceStateStore
+│   ├── store.py            # StateStorage
 │   ├── exporter.py         # PrometheusExporter
-│   ├── handlers.py         # AutomationHandlerBase
-│   ├── dispatcher.py       # EventDispatcher (handles 'switchbot' source automations)
-│   ├── timers.py           # TimerHandler (handles 'switchbot_timer' source automations)
-│   ├── triggers.py         # Condition evaluation and action execution
-│   └── mixins.py           # Muting/cooldown functionality
+│   ├── handlers.py         # AutomationHandler
+│   ├── action_runner.py    # ActionRunnerBase and concrete implementations
+│   ├── action_executor.py  # Action execution logic
+│   ├── timers.py           # Timer class and timer-related handlers
+│   ├── evaluator.py        # Condition evaluation logic
+│   └── __init__.py
 ├── tests/
 ├── config.yaml.example
 └── README.md

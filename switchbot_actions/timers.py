@@ -1,126 +1,44 @@
-# switchbot_actions/timers.py
 import asyncio
 import logging
-
-from pytimeparse2 import parse
-from switchbot import SwitchBotAdvertisement
-
-from . import triggers
-from .handlers import AutomationHandlerBase
-from .mixins import MuteMixin
-from .store import DeviceStateStore
+from typing import Callable
 
 logger = logging.getLogger(__name__)
 
 
-class TimerHandler(AutomationHandlerBase, MuteMixin):
-    """
-    Handles time-driven automation by starting and stopping timers
-    based on state changes.
-    """
+class Timer:
+    """A timer that runs a callback after a specified duration."""
 
-    def __init__(self, configs: list, store: DeviceStateStore):
-        AutomationHandlerBase.__init__(self, configs)
-        MuteMixin.__init__(self)
-        self._store = store
-        self._active_timers = {}  # Stores {key: asyncio.Task}
+    def __init__(
+        self, duration_sec: float, callback: Callable, name: str = ""
+    ):  # Added name for logging
+        self._duration_sec = duration_sec
+        self._callback = callback
+        self._name = name
+        self._task: asyncio.Task | None = None
 
-    def on_conditions_met(self, config: dict, new_data: SwitchBotAdvertisement):
-        """
-        Starts a timer when its conditions transition from False to True.
-        """
-        timer_name = config.get("name", "Unnamed Timer")
-        device_address = new_data.address
-        key = (timer_name, device_address)
-
-        if key not in self._active_timers:
-            logger.debug(
-                f"Conditions met for timer '{timer_name}' on device "
-                f"{device_address}. Starting timer."
-            )
-            duration_str = config.get("if", {}).get("duration")
-            task = asyncio.create_task(
-                self._run_timer(config, device_address, duration_str)
-            )
-            self._active_timers[key] = task
-
-    def on_conditions_no_longer_met(
-        self, config: dict, new_data: SwitchBotAdvertisement
-    ):
-        """
-        Cancels an active timer when its conditions transition from
-        True to False.
-        """
-        timer_name = config.get("name", "Unnamed Timer")
-        device_address = new_data.address
-        key = (timer_name, device_address)
-
-        if key in self._active_timers:
-            logger.debug(
-                f"Conditions no longer met for timer '{timer_name}' on "
-                f"device {device_address}. Cancelling."
-            )
-            task = self._active_timers.pop(key)
-            task.cancel()
-
-    async def _run_timer(
-        self, config: dict, device_address: str, duration_str: str | None
-    ):
-        """
-        Waits for the duration, then triggers the action if not muted.
-        """
-        if duration_str is None:
-            logger.error(f"Timer '{config.get('name')}' has no duration set.")
+    def start(self):
+        """Starts the timer."""
+        if self._task and not self._task.done():
+            logger.debug(f"Timer '{self._name}' is already running.")
             return
 
-        duration = parse(duration_str)
-        if duration is None:
-            logger.error(
-                f"Invalid duration '{duration_str}' for timer '{config.get('name')}'."
-            )
-            return
+        self._task = asyncio.create_task(self._run())
+        logger.debug(f"Timer '{self._name}' started for {self._duration_sec} seconds.")
 
-        if isinstance(duration, (int, float)):
-            duration_sec = float(duration)
-        else:
-            duration_sec = duration.total_seconds()
+    def stop(self):
+        """Stops the timer."""
+        if self._task and not self._task.done():
+            self._task.cancel()
+            logger.debug(f"Timer '{self._name}' stopped.")
 
-        timer_name = config.get("name", "Unnamed Automation")
-        timer_key = (timer_name, device_address)
+    async def _run(self):
+        """
+        The timer's main logic.
+        Waits for the duration, then calls the callback.
+        """
         try:
-            await asyncio.sleep(float(duration_sec))
-
-            current_data = self._store.get_state(device_address)
-            if not current_data:
-                logger.debug(
-                    f"Timer '{timer_name}' for device {device_address} expired, but "
-                    f"device state is no longer available. Not triggering."
-                )
-                return
-
-            conditions_met = self._check_conditions_from_config(config, current_data)
-            if not conditions_met:
-                logger.debug(
-                    f"Timer '{timer_name}' for device {device_address} expired, but "
-                    f"conditions are no longer met. Not triggering."
-                )
-                return
-
-            if self._is_muted(timer_name, device_address):
-                logger.debug(f"Timer '{timer_name}' expired but is currently muted.")
-                return
-
-            logger.debug(
-                f"Timer '{timer_name}' for device {device_address} expired. "
-                "Triggering action."
-            )
-            triggers.trigger_action(config.get("then", {}), current_data)
-            self._mute_action(timer_name, device_address, config.get("cooldown"))
-
+            await asyncio.sleep(self._duration_sec)
+            logger.debug(f"Timer '{self._name}' finished. Executing callback.")
+            self._callback()
         except asyncio.CancelledError:
-            logger.debug(
-                f"Timer '{timer_name}' for device {device_address} was cancelled."
-            )
-
-        finally:
-            self._active_timers.pop(timer_key, None)
+            logger.debug(f"Timer '{self._name}' was cancelled.")

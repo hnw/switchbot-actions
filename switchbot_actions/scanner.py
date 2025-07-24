@@ -7,8 +7,9 @@ from switchbot import (
     SwitchBotAdvertisement,
 )
 
-from .signals import advertisement_received
-from .store import DeviceStateStore
+from .evaluator import StateObject
+from .signals import state_changed
+from .store import StateStorage
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class DeviceScanner:
     def __init__(
         self,
         scanner: GetSwitchbotDevices,
-        store: DeviceStateStore,
+        store: StateStorage,
         cycle: int = 10,
         duration: int = 3,
     ):
@@ -90,14 +91,15 @@ class DeviceScanner:
 
     def _process_advertisement(self, new_data: SwitchBotAdvertisement):
         """
-        Retrieves the last known state and emits an advertisement_received
-        signal with both the new and old data.
+        Processes a new advertisement and emits a state_changed signal.
         """
         if not new_data.data:
             return
 
-        address = new_data.address
-        old_data = self._store.get_state(address)
+        # For now, the state object is the advertisement itself.
+        new_state: StateObject = new_data
 
-        logger.debug(f"Received advertisement from {address}: {new_data.data}")
-        advertisement_received.send(self, new_data=new_data, old_data=old_data)
+        logger.debug(
+            f"Received advertisement from {new_state.address}: {new_state.data}"
+        )
+        state_changed.send(self, new_state=new_state)

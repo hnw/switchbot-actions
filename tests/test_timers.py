@@ -1,115 +1,92 @@
-# tests/test_timers.py
-
 import asyncio
-from unittest.mock import MagicMock, patch
+import logging
+from unittest.mock import MagicMock
 
 import pytest
 
-from switchbot_actions.store import DeviceStateStore
-from switchbot_actions.timers import TimerHandler
+from switchbot_actions.timers import Timer
 
 
-@pytest.fixture
-def mock_store():
-    """Provides a mock DeviceStateStore."""
-    return MagicMock(spec=DeviceStateStore)
+class TestTimer:
+    @pytest.mark.asyncio
+    async def test_timer_starts_and_calls_callback_after_duration(self):
+        mock_callback = MagicMock()
+        duration = 0.1
+        timer = Timer(duration, mock_callback, name="test_timer")
 
+        timer.start()
+        await asyncio.sleep(duration + 0.05)  # Wait a bit longer than duration
 
-@pytest.fixture
-def mock_advertisement():
-    """Creates a mock SwitchBotAdvertisement."""
-    adv = MagicMock()
-    adv.address = "DE:AD:BE:EF:AA:BB"
-    return adv
+        mock_callback.assert_called_once()  # Ensure callback was called
+        assert timer._task is not None
+        assert timer._task.done()  # Ensure task is done
+        assert not timer._task.cancelled()  # Ensure task was not cancelled
 
+    @pytest.mark.asyncio
+    async def test_timer_can_be_stopped(self):
+        mock_callback = MagicMock()
+        duration = 10  # Long duration to ensure it's stopped before completion
+        timer = Timer(duration, mock_callback, name="test_timer_stop")
 
-@pytest.fixture
-def automations_config():
-    """Provides a sample automations configuration for timer-based rules."""
-    return [
-        {
-            "name": "Test Timer-Driven Automation",
-            "cooldown": "1s",
-            "if": {
-                "source": "switchbot_timer",
-                "duration": "0.01s",
-                "state": {"dummy": True},
-            },
-            "then": {"type": "shell_command"},
-        }
-    ]
+        timer.start()
+        await asyncio.sleep(0.01)  # Let the task start
+        timer.stop()
 
+        await asyncio.sleep(0.05)  # Give time for cancellation to propagate
 
-@pytest.mark.asyncio
-async def test_timer_starts_on_false_to_true_transition(
-    automations_config, mock_store, mock_advertisement
-):
-    """
-    Test that a timer task is created only on the False -> True transition
-    and that it gets cleaned up properly.
-    """
-    handler = TimerHandler(configs=automations_config, store=mock_store)
-    timer_name = automations_config[0].get("name")
-    device_address = mock_advertisement.address
-    key = (timer_name, device_address)
+        mock_callback.assert_not_called()
+        assert timer._task is not None
+        assert timer._task.done()
 
-    with patch("switchbot_actions.triggers.check_conditions") as mock_check:
-        # 1. State is False -> no task
-        mock_check.return_value = False
-        handler.handle_signal(None, new_data=mock_advertisement)
-        assert not handler._active_timers
+    @pytest.mark.asyncio
+    async def test_start_does_nothing_if_timer_already_running(self, caplog):
+        mock_callback = MagicMock()
+        duration = 10
+        timer = Timer(duration, mock_callback, name="test_timer_running")
 
-        # 2. State becomes True -> task created
-        mock_check.return_value = True
-        handler.handle_signal(None, new_data=mock_advertisement)
-        assert key in handler._active_timers
-        assert isinstance(handler._active_timers[key], asyncio.Task)
-        initial_task = handler._active_timers[key]
+        timer.start()
+        with caplog.at_level(logging.DEBUG):
+            timer.start()  # Call start again
+            assert "Timer 'test_timer_running' is already running." in caplog.text
 
-        # 3. State stays True -> no new task is created
-        handler.handle_signal(None, new_data=mock_advertisement)
-        assert len(handler._active_timers) == 1
-        assert handler._active_timers[key] is initial_task
+        # Ensure only one task was created
+        assert timer._task is not None
+        assert not timer._task.done()
+        assert not timer._task.cancelled()
 
-        # --- Cleanup ---
-        # Explicitly cancel the created task to prevent RuntimeWarning
-        task = handler._active_timers.pop(key)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass  # This is the expected outcome of cancellation.
+        timer.stop()  # Clean up the running task
 
+    @pytest.mark.asyncio
+    async def test_stop_does_nothing_if_timer_not_running(self, caplog):
+        mock_callback = MagicMock()
+        duration = 0.1
+        timer = Timer(duration, mock_callback, name="test_timer_not_running")
 
-@pytest.mark.asyncio
-@patch("switchbot_actions.triggers.trigger_action")
-async def test_timer_completes_and_triggers_action(
-    mock_trigger_action, automations_config, mock_store, mock_advertisement
-):
-    """Test that a timer that runs to completion triggers its action."""
-    mock_store.get_state.return_value = mock_advertisement
-    handler = TimerHandler(configs=automations_config, store=mock_store)
-    config = handler._configs[0]
+        with caplog.at_level(logging.DEBUG):
+            timer.stop()  # Call stop on a non-running timer
+            # No log message expected for this case, as it's not an error
+            assert "Timer 'test_timer_not_running' stopped." not in caplog.text
 
-    with patch("switchbot_actions.triggers.check_conditions", return_value=True):
-        # Directly call _run_timer to simulate completion
-        await handler._run_timer(
-            config, mock_advertisement.address, config["if"]["duration"]
-        )
-        mock_trigger_action.assert_called_once_with(config["then"], mock_advertisement)
+        assert timer._task is None  # No task should have been created
+        mock_callback.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_timer_handles_cancelled_error_gracefully(self, caplog):
+        mock_callback = MagicMock()
+        duration = 10
+        timer = Timer(duration, mock_callback, name="test_timer_cancel_error")
 
-def test_timer_cancels_on_true_to_false_transition(
-    automations_config, mock_store, mock_advertisement
-):
-    """Test that a running timer is cancelled if the state becomes False."""
-    handler = TimerHandler(configs=automations_config, store=mock_store)
-    mock_task = MagicMock()
-    key = (automations_config[0]["name"], mock_advertisement.address)
-    handler._active_timers[key] = mock_task
-    handler._last_condition_results[key] = True  # Pretend last state was True
+        timer.start()
+        await asyncio.sleep(0.01)  # Let the task start
 
-    with patch("switchbot_actions.triggers.check_conditions", return_value=False):
-        handler.handle_signal(None, new_data=mock_advertisement)
-        mock_task.cancel.assert_called_once()
-        assert not handler._active_timers  # Task should be removed
+        # Manually cancel the task to simulate external cancellation
+        if timer._task:
+            timer._task.cancel()
+
+        with caplog.at_level(logging.DEBUG):
+            await asyncio.sleep(0.05)  # Give time for cancellation to propagate
+            assert "Timer 'test_timer_cancel_error' was cancelled." in caplog.text
+
+        mock_callback.assert_not_called()
+        assert timer._task is not None
+        assert timer._task.done()

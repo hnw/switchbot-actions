@@ -4,15 +4,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from switchbot_actions.exporter import PrometheusExporter
-from switchbot_actions.store import DeviceStateStore
+from switchbot_actions.store import StateStorage
 
 
 @pytest.fixture
-def mock_advertisement_1():
-    adv = MagicMock()
-    adv.address = "DE:AD:BE:EF:33:33"
-    adv.rssi = -55
-    adv.data = {
+def mock_state_1():
+    state = MagicMock()
+    state.address = "DE:AD:BE:EF:33:33"
+    state.rssi = -55
+    state.data = {
         "modelName": "WoSensorTH",
         "data": {
             "temperature": 22.5,
@@ -21,24 +21,24 @@ def mock_advertisement_1():
             "some_non_numeric": "value",
         },
     }
-    return adv
+    return state
 
 
 @pytest.fixture
-def mock_advertisement_2():
-    adv = MagicMock()
-    adv.address = "DE:AD:BE:EF:44:44"
-    adv.rssi = -65
-    adv.data = {"modelName": "WoHand", "data": {"battery": 95, "isOn": True}}
-    return adv
+def mock_state_2():
+    state = MagicMock()
+    state.address = "DE:AD:BE:EF:44:44"
+    state.rssi = -65
+    state.data = {"modelName": "WoHand", "data": {"battery": 95, "isOn": True}}
+    return state
 
 
-def test_exporter_collect_metrics(mock_advertisement_1):
+def test_exporter_collect_metrics(mock_state_1):
     """Test that the exporter correctly generates metrics from the store."""
-    store = DeviceStateStore()
-    store._states[mock_advertisement_1.address] = mock_advertisement_1
+    storage = StateStorage()
+    storage._states[mock_state_1.address] = mock_state_1
 
-    exporter = PrometheusExporter(state_store=store, port=8001, target_config={})
+    exporter = PrometheusExporter(state_storage=storage, port=8001, target_config={})
     metrics = list(exporter.collect())
 
     assert len(metrics) == 4  # temperature, humidity, battery, rssi
@@ -53,12 +53,12 @@ def test_exporter_collect_metrics(mock_advertisement_1):
     assert rssi_metric.samples[0].labels["address"] == "DE:AD:BE:EF:33:33"
 
 
-def test_metric_filtering(mock_advertisement_1):
+def test_metric_filtering(mock_state_1):
     """Test that metrics are filtered based on the target config."""
-    store = DeviceStateStore()
-    store._states[mock_advertisement_1.address] = mock_advertisement_1
+    storage = StateStorage()
+    storage._states[mock_state_1.address] = mock_state_1
     exporter = PrometheusExporter(
-        state_store=store,
+        state_storage=storage,
         port=8002,
         target_config={"metrics": ["temperature", "battery"]},
     )
@@ -68,26 +68,28 @@ def test_metric_filtering(mock_advertisement_1):
     assert metric_names == {"switchbot_temperature", "switchbot_battery"}
 
 
-def test_rssi_metric_filtering(mock_advertisement_1):
+def test_rssi_metric_filtering(mock_state_1):
     """Test that the rssi metric can be filtered."""
-    store = DeviceStateStore()
-    store._states[mock_advertisement_1.address] = mock_advertisement_1
+    storage = StateStorage()
+    storage._states[mock_state_1.address] = mock_state_1
     exporter = PrometheusExporter(
-        state_store=store, port=8002, target_config={"metrics": ["rssi"]}
+        state_storage=storage, port=8002, target_config={"metrics": ["rssi"]}
     )
     metrics = list(exporter.collect())
     assert len(metrics) == 1
     assert metrics[0].name == "switchbot_rssi"
 
 
-def test_address_filtering(mock_advertisement_1, mock_advertisement_2):
+def test_address_filtering(mock_state_1, mock_state_2):
     """Test that devices are filtered based on the target addresses."""
-    store = DeviceStateStore()
-    store._states[mock_advertisement_1.address] = mock_advertisement_1
-    store._states[mock_advertisement_2.address] = mock_advertisement_2
+    storage = StateStorage()
+    storage._states[mock_state_1.address] = mock_state_1
+    storage._states[mock_state_2.address] = mock_state_2
 
     exporter = PrometheusExporter(
-        state_store=store, port=8003, target_config={"addresses": ["DE:AD:BE:EF:44:44"]}
+        state_storage=storage,
+        port=8003,
+        target_config={"addresses": ["DE:AD:BE:EF:44:44"]},
     )
     metrics = list(exporter.collect())
     # Should only be metrics from the Bot device

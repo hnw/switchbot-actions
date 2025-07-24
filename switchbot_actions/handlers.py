@@ -1,99 +1,44 @@
-# switchbot_actions/handlers.py
+import asyncio
 import logging
-from abc import ABC, abstractmethod
 
-from switchbot import SwitchBotAdvertisement
-
-from . import triggers
-from .signals import advertisement_received
+from .action_runner import ActionRunnerBase, EventActionRunner, TimerActionRunner
+from .evaluator import StateObject
+from .signals import state_changed
 
 logger = logging.getLogger(__name__)
 
 
-class AutomationHandlerBase(ABC):
+class AutomationHandler:
     """
-    Abstract base class for handling rules based on device state changes.
-
-    This class provides the core logic for detecting state transitions
-    (e.g., from False to True) based on a set of conditions. Subclasses
-    must implement the specific actions to be taken when these transitions
-    occur.
+    Handles automation rules by dispatching signals to appropriate
+    ActionRunner instances.
     """
 
     def __init__(self, configs: list):
-        """
-        Initializes the handler.
-
-        Args:
-            configs: A list of rule configurations. Each rule must
-                     have a 'name' and 'conditions'.
-        """
-        self._configs = configs
-        self._last_condition_results = {}  # Stores {key: bool}
-        advertisement_received.connect(self.handle_signal)
+        self._action_runners: list[ActionRunnerBase] = []
+        for config in configs:
+            source = config.get("if", {}).get("source")
+            if source == "switchbot":
+                self._action_runners.append(EventActionRunner(config))
+            elif source == "switchbot_timer":
+                self._action_runners.append(TimerActionRunner(config))
+            else:
+                logger.warning(f"Unknown source '{source}' for config: {config}")
+        state_changed.connect(self.handle_signal)
         logger.info(
-            f"{self.__class__.__name__} initialized with {len(self._configs)} rule(s)."
+            f"AutomationHandler initialized with {len(self._action_runners)} "
+            "action runner(s)."
         )
 
     def handle_signal(self, sender, **kwargs):
-        """
-        Receives device data, checks conditions, and triggers actions
-        on state changes.
-        """
-        new_data_untyped = kwargs.get("new_data")
-        if not new_data_untyped:
+        """Receives state and dispatches it to all registered ActionRunners."""
+        new_state: StateObject | None = kwargs.get("new_state")
+        if not new_state:
             return
+        asyncio.create_task(self._run_all_runners(new_state))
 
-        new_data: SwitchBotAdvertisement = new_data_untyped
-
-        for config in self._configs:
-            config_name = config.get("name", "Unnamed Automation")
-            device_address = new_data.address
-            key = (config_name, device_address)
-
-            try:
-                current_result = self._check_conditions_from_config(config, new_data)
-                last_result = self._last_condition_results.get(key, False)
-
-                # State changed: False -> True
-                if current_result and not last_result:
-                    self.on_conditions_met(config, new_data)
-
-                # State changed: True -> False
-                elif not current_result and last_result:
-                    self.on_conditions_no_longer_met(config, new_data)
-
-                self._last_condition_results[key] = current_result
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing config '{config_name}' in "
-                    f"{self.__class__.__name__}: {e}",
-                    exc_info=True,
-                )
-
-    @abstractmethod
-    def on_conditions_met(self, config: dict, new_data: SwitchBotAdvertisement):
-        """
-        Callback executed when conditions transition from False to True.
-        """
-        pass
-
-    def _check_conditions_from_config(
-        self, config: dict, new_data: SwitchBotAdvertisement
-    ) -> bool:
-        """
-        Helper method to check conditions from a given config and new_data.
-        """
-        device_cond = config.get("if", {}).get("device", {})
-        state_cond = config.get("if", {}).get("state", {})
-        return triggers.check_conditions(device_cond, state_cond, new_data)
-
-    @abstractmethod
-    def on_conditions_no_longer_met(
-        self, config: dict, new_data: SwitchBotAdvertisement
-    ):
-        """
-        Callback executed when conditions transition from True to False.
-        """
-        pass
+    async def _run_all_runners(self, new_state: StateObject):
+        # Run all action runners concurrently
+        await asyncio.gather(
+            *[runner.run(new_state) for runner in self._action_runners]
+        )

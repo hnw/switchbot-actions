@@ -1,0 +1,46 @@
+import argparse
+import asyncio
+import logging
+import sys
+
+from .app import run_app
+from .config import AppSettings
+from .logging import setup_logging
+
+logger = logging.getLogger(__name__)
+
+
+def cli_main():
+    """Synchronous entry point for the command-line interface."""
+    parser = argparse.ArgumentParser(description="SwitchBot Prometheus Exporter")
+    parser.add_argument(
+        "-c",
+        "--config",
+        default="config.yaml",
+        help="Path to the configuration file (default: config.yaml)",
+    )
+    parser.add_argument(
+        "-d", "--debug", action="store_true", help="Enable debug logging"
+    )
+    parser.add_argument(
+        "--scan-cycle", type=int, help="Time in seconds between BLE scan cycles"
+    )
+    parser.add_argument(
+        "--scan-duration", type=int, help="Time in seconds to scan for BLE devices"
+    )
+    parser.add_argument(
+        "--interface",
+        type=int,
+        help="Bluetooth adapter number to use (e.g., 0 for hci0, 1 for hci1)",
+    )
+    args = parser.parse_args()
+
+    settings = AppSettings.from_args(args)
+
+    setup_logging(settings)
+
+    try:
+        asyncio.run(run_app(settings))
+    except KeyboardInterrupt:
+        logger.info("Application terminated by user.")
+        sys.exit(0)

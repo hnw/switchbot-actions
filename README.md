@@ -332,5 +332,5 @@ logging:
     logging:
       level: "INFO"
       loggers:
-        switchbot_actions.triggers: "DEBUG"
+        switchbot_actions.action_runner: "DEBUG"
     ```
