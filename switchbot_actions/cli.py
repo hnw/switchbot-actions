@@ -33,6 +33,22 @@ def cli_main():
         type=int,
         help="Bluetooth adapter number to use (e.g., 0 for hci0, 1 for hci1)",
     )
+    parser.add_argument(
+        "--prometheus-exporter-enabled", type=bool, help="Enable Prometheus exporter"
+    )
+    parser.add_argument(
+        "--prometheus-exporter-port", type=int, help="Prometheus exporter port"
+    )
+    parser.add_argument("--mqtt-host", type=str, help="MQTT broker host")
+    parser.add_argument("--mqtt-port", type=int, help="MQTT broker port")
+    parser.add_argument("--mqtt-username", type=str, help="MQTT broker username")
+    parser.add_argument("--mqtt-password", type=str, help="MQTT broker password")
+    parser.add_argument(
+        "--mqtt-reconnect-interval", type=int, help="MQTT broker reconnect interval"
+    )
+    parser.add_argument(
+        "--log-level", type=str, help="Set the logging level (e.g., INFO, DEBUG)"
+    )
     args = parser.parse_args()
 
     settings = AppSettings.from_args(args)
@@ -40,7 +56,7 @@ def cli_main():
     setup_logging(settings)
 
     try:
-        asyncio.run(run_app(settings))
+        asyncio.run(run_app(settings, args))
     except KeyboardInterrupt:
         logger.info("Application terminated by user.")
         sys.exit(0)

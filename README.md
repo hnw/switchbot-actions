@@ -140,6 +140,16 @@ sudo systemctl start switchbot-actions.service
 
 # Check the status to see if it's running correctly
 sudo systemctl status switchbot-actions.service
+
+> [!NOTE]
+> **Reloading Configuration with SIGHUP**
+>
+> After modifying `/etc/switchbot-actions/config.yaml`, you can reload the configuration without restarting the entire service by sending a `SIGHUP` signal to the `switchbot-actions` process.
+>
+> ```bash
+> sudo kill -HUP $(systemctl show --value --property MainPID switchbot-actions.service)
+> ```
+> This allows for dynamic updates to your automations and settings without service interruption.
 ```
 
 ## Usage
@@ -193,6 +203,14 @@ The application is controlled by `config.yaml`. See `config.yaml.example` for a 
 -   `--scan-cycle <seconds>`: Overrides the scan cycle time.
 -   `--scan-duration <seconds>`: Overrides the scan duration time.
 -   `--interface <device>`: Overrides the Bluetooth interface (e.g., `hci1`).
+-   `--prometheus-exporter-enabled`: Enable Prometheus exporter (overrides `config.yaml`).
+-   `--prometheus-exporter-port <port>`: Prometheus exporter port (overrides `config.yaml`).
+-   `--mqtt-host <host>`: MQTT broker host (overrides `config.yaml`).
+-   `--mqtt-port <port>`: MQTT broker port (overrides `config.yaml`).
+-   `--mqtt-username <username>`: MQTT broker username (overrides `config.yaml`).
+-   `--mqtt-password <password>`: MQTT broker password (overrides `config.yaml`).
+-   `--mqtt-reconnect-interval <seconds>`: MQTT broker reconnect interval (overrides `config.yaml`).
+-   `--log-level <level>`: Set the logging level (e.g., `INFO`, `DEBUG`) (overrides `config.yaml`).
 
 ### MQTT Client (`mqtt`)
 
@@ -315,11 +333,16 @@ automations:
 
 ### Prometheus Exporter (`prometheus_exporter`)
 
-This feature exposes all collected SwitchBot device data as Prometheus metrics, allowing for powerful monitoring and visualization. Once enabled, metrics will be available at the `/metrics` endpoint (e.g., `http://localhost:8000/metrics`). You can scrape this endpoint with a Prometheus server and use tools like Grafana to create dashboards for temperature, humidity, battery levels, and more.
+This feature exposes all collected SwitchBot device data as Prometheus metrics, allowing for powerful monitoring and visualization.
+
+> [!IMPORTANT]
+> The Prometheus Exporter is **disabled by default**. To enable it, you must explicitly set `enabled: true` in your `config.yaml` or use the `--prometheus-exporter-enabled` command-line argument.
+
+Once enabled, metrics will be available at the `/metrics` endpoint (e.g., `http://localhost:8000/metrics`). You can scrape this endpoint with a Prometheus server and use tools like Grafana to create dashboards for temperature, humidity, battery levels, and more.
 
 ```yaml
 prometheus_exporter:
-  enabled: true
+  enabled: false # Default: disabled
   port: 8000
   target:
     # Optional: Only export metrics for these MAC addresses

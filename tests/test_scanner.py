@@ -10,18 +10,20 @@ from switchbot_actions.store import StateStorage
 
 
 @pytest.fixture
-def mock_ble_scanner():
+def mock_ble_scanner(mock_switchbot_advertisement):
     """Provides a mock BLE scanner from the switchbot library."""
     scanner = AsyncMock()
+
+    advertisement = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:44:44",
+        data={"modelName": "WoHand", "data": {"isOn": True}},
+    )
+
     scanner.discover.side_effect = [
-        {
-            "DE:AD:BE:EF:44:44": MagicMock(
-                address="DE:AD:BE:EF:44:44",
-                data={"modelName": "WoHand", "data": {"isOn": True}},
-            )
-        },
+        {"DE:AD:BE:EF:44:44": advertisement},
         asyncio.CancelledError,  # To stop the loop after one iteration
     ]
+
     return scanner
 
 

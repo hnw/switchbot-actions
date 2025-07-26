@@ -1,7 +1,5 @@
 from unittest.mock import mock_open, patch
 
-import pytest
-
 from switchbot_actions.config import AppSettings
 
 
@@ -13,6 +11,7 @@ from switchbot_actions.config import AppSettings
 def test_load_config(mock_file):
     """Test loading a simple config."""
     config = AppSettings.load_from_yaml("dummy_path.yaml")
+    assert config is not None
     assert config["prometheus_exporter"]["port"] == 8888
 
 
@@ -26,6 +25,6 @@ def test_load_config_file_not_found(mock_file):
 
 @patch("builtins.open", new_callable=mock_open, read_data="invalid_yaml: [{")
 def test_load_config_yaml_error(mock_file):
-    """Test that the application exits on YAML parsing error."""
-    with pytest.raises(SystemExit):
-        AppSettings.load_from_yaml("invalid.yaml")
+    """Test that the application returns None on YAML parsing error."""
+    config = AppSettings.load_from_yaml("invalid.yaml")
+    assert config is None

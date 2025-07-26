@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiomqtt import MqttError
@@ -27,12 +27,12 @@ def test_mqtt_client_initialization(mock_aiomqtt_client, mqtt_settings):
 
 @patch("switchbot_actions.mqtt.aiomqtt.Client")
 @pytest.mark.asyncio
-async def test_message_reception_and_signal(mock_aiomqtt_client, mqtt_settings):
+async def test_message_reception_and_signal(
+    mock_aiomqtt_client, mqtt_settings, mqtt_message_plain
+):
     client = MqttClient(settings=mqtt_settings)
 
-    mock_message = MagicMock()
-    mock_message.topic = "test/topic"
-    mock_message.payload = b"test_payload"
+    mock_message = mqtt_message_plain
 
     async def mock_message_generator():
         yield mock_message
@@ -52,8 +52,8 @@ async def test_message_reception_and_signal(mock_aiomqtt_client, mqtt_settings):
         mqtt_message_received.send(client, message=message)
 
     assert len(received_signals) == 1
-    assert received_signals[0].topic == "test/topic"
-    assert received_signals[0].payload == b"test_payload"
+    assert received_signals[0].topic.value == "test/topic"
+    assert received_signals[0].payload == b"ON"
 
     mqtt_message_received.disconnect(on_message_received)
 

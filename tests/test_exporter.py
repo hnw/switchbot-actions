@@ -1,5 +1,4 @@
 # tests/test_exporter.py
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -8,29 +7,29 @@ from switchbot_actions.store import StateStorage
 
 
 @pytest.fixture
-def mock_state_1():
-    state = MagicMock()
-    state.address = "DE:AD:BE:EF:33:33"
-    state.rssi = -55
-    state.data = {
-        "modelName": "WoSensorTH",
-        "data": {
-            "temperature": 22.5,
-            "humidity": 45,
-            "battery": 88,
-            "some_non_numeric": "value",
+def mock_state_1(mock_switchbot_advertisement):
+    return mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:33:33",
+        rssi=-55,
+        data={
+            "modelName": "WoSensorTH",
+            "data": {
+                "temperature": 22.5,
+                "humidity": 45,
+                "battery": 88,
+                "some_non_numeric": "value",
+            },
         },
-    }
-    return state
+    )
 
 
 @pytest.fixture
-def mock_state_2():
-    state = MagicMock()
-    state.address = "DE:AD:BE:EF:44:44"
-    state.rssi = -65
-    state.data = {"modelName": "WoHand", "data": {"battery": 95, "isOn": True}}
-    return state
+def mock_state_2(mock_switchbot_advertisement):
+    return mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:44:44",
+        rssi=-65,
+        data={"modelName": "WoHand", "data": {"battery": 95, "isOn": True}},
+    )
 
 
 def test_exporter_collect_metrics(mock_state_1):

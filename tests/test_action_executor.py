@@ -241,12 +241,14 @@ async def test_execute_action_webhook_get_failure_500(
 
 @pytest.mark.asyncio
 @patch("httpx.AsyncClient")
-async def test_execute_action_webhook_unsupported_method(mock_async_client, caplog):
+async def test_execute_action_webhook_unsupported_method(
+    mock_async_client, caplog, mock_switchbot_advertisement
+):
     caplog.set_level(logging.ERROR)
     mock_client = AsyncMock()
     mock_async_client.return_value.__aenter__.return_value = mock_client
 
-    state_object = MagicMock()
+    state_object = mock_switchbot_advertisement()
     action_config = {
         "type": "webhook",
         "url": "http://example.com/hook",
@@ -260,9 +262,9 @@ async def test_execute_action_webhook_unsupported_method(mock_async_client, capl
 
 
 @pytest.mark.asyncio
-async def test_execute_action_unknown_type(caplog):
+async def test_execute_action_unknown_type(caplog, mock_switchbot_advertisement):
     caplog.set_level(logging.WARNING)
-    state_object = MagicMock()
+    state_object = mock_switchbot_advertisement()
     action_config = {"type": "unknown_action"}
     await action_executor.execute_action(action_config, state_object)
     assert "Unknown trigger type: unknown_action" in caplog.text

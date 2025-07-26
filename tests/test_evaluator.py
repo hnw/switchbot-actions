@@ -99,13 +99,13 @@ def test_check_conditions_no_data(sample_state):
 
 def test_check_conditions_mqtt_payload_pass(mqtt_message_plain):
     """Test that MQTT payload conditions pass for plain text."""
-    if_config = {"source": "mqtt", "state": {"payload": "ON"}}
+    if_config = {"source": "mqtt", "topic": "test/topic", "state": {"payload": "ON"}}
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is True
 
 
 def test_check_conditions_mqtt_payload_fail(mqtt_message_plain):
     """Test that MQTT payload conditions fail for plain text."""
-    if_config = {"source": "mqtt", "state": {"payload": "OFF"}}
+    if_config = {"source": "mqtt", "topic": "test/topic", "state": {"payload": "OFF"}}
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is False
 
 
@@ -113,6 +113,7 @@ def test_check_conditions_mqtt_json_pass(mqtt_message_json):
     """Test that MQTT payload conditions pass for JSON."""
     if_config = {
         "source": "mqtt",
+        "topic": "home/sensor1",
         "state": {"temperature": "> 25.0", "humidity": "== 55"},
     }
     assert evaluator.check_conditions(if_config, mqtt_message_json) is True
@@ -120,13 +121,21 @@ def test_check_conditions_mqtt_json_pass(mqtt_message_json):
 
 def test_check_conditions_mqtt_json_fail(mqtt_message_json):
     """Test that MQTT payload conditions fail for JSON."""
-    if_config = {"source": "mqtt", "state": {"temperature": "< 25.0"}}
+    if_config = {
+        "source": "mqtt",
+        "topic": "home/sensor1",
+        "state": {"temperature": "< 25.0"},
+    }
     assert evaluator.check_conditions(if_config, mqtt_message_json) is False
 
 
 def test_check_conditions_mqtt_json_no_key(mqtt_message_json):
     """Test MQTT conditions when a key is not in the JSON payload."""
-    if_config = {"source": "mqtt", "state": {"non_existent_key": "some_value"}}
+    if_config = {
+        "source": "mqtt",
+        "topic": "home/sensor1",
+        "state": {"non_existent_key": "some_value"},
+    }
     assert evaluator.check_conditions(if_config, mqtt_message_json) is None
 
 

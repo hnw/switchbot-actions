@@ -157,8 +157,9 @@ mqtt:
 # ----------------------------------------------------
 prometheus_exporter:
   # Enable/disable the exporter feature.
-  # Default: true
-  enabled: true
+  # Default: false (disabled)
+  # Set to `true` to enable the Prometheus exporter.
+  enabled: false
 
   # Port for the exporter to listen on.
   # Default: 8000
