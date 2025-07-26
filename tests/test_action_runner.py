@@ -9,18 +9,17 @@ from switchbot_actions.action_runner import (
     EventActionRunner,
     TimerActionRunner,
 )
-from switchbot_actions.evaluator import StateObject
 from switchbot_actions.timers import Timer
 
 
 class TestActionRunnerBase:
     @pytest.mark.asyncio
     @patch("switchbot_actions.action_runner.execute_action")
-    async def test_execute_actions_with_cooldown_per_device(self, mock_execute_action):
-        state_object_1 = MagicMock(spec=StateObject)
-        state_object_1.address = "device_1"
-        state_object_2 = MagicMock(spec=StateObject)
-        state_object_2.address = "device_2"
+    async def test_execute_actions_with_cooldown_per_device(
+        self, mock_execute_action, mock_switchbot_advertisement
+    ):
+        state_object_1 = mock_switchbot_advertisement(address="device_1")
+        state_object_2 = mock_switchbot_advertisement(address="device_2")
         config = {
             "name": "Cooldown Test",
             "cooldown": "10s",
@@ -55,11 +54,10 @@ class TestEventActionRunner:
     @patch.object(ActionRunnerBase, "_execute_actions", new_callable=AsyncMock)
     @patch("switchbot_actions.action_runner.check_conditions")
     async def test_run_executes_actions_on_edge_trigger(
-        self, mock_check_conditions, mock_execute_actions
+        self, mock_check_conditions, mock_execute_actions, mock_switchbot_advertisement
     ):
         config = {"name": "Test Rule", "if": {}, "then": []}
-        state_object = MagicMock(spec=StateObject)
-        state_object.address = "test_device"
+        state_object = mock_switchbot_advertisement(address="test_device")
         runner = EventActionRunner(config)
 
         # Simulate: False -> True -> True -> None -> False
@@ -97,15 +95,18 @@ class TestTimerActionRunner:
     @patch("switchbot_actions.action_runner.Timer")
     @patch("switchbot_actions.action_runner.check_conditions")
     async def test_timer_logic_per_device(
-        self, mock_check_conditions: MagicMock, MockTimer: MagicMock
+        self,
+        mock_check_conditions: MagicMock,
+        MockTimer: MagicMock,
+        mock_switchbot_advertisement,
     ):
         config = {"name": "Timer Test", "if": {"duration": "5s"}, "then": []}
         runner = TimerActionRunner(config)
         # Each call to Timer should return a new mock instance
         MockTimer.side_effect = [MagicMock(spec=Timer), MagicMock(spec=Timer)]
 
-        state_1 = MagicMock(spec=StateObject, address="device_1")
-        state_2 = MagicMock(spec=StateObject, address="device_2")
+        state_1 = mock_switchbot_advertisement(address="device_1")
+        state_2 = mock_switchbot_advertisement(address="device_2")
 
         # Device 1: conditions become true -> start timer
         mock_check_conditions.return_value = True
@@ -134,11 +135,11 @@ class TestTimerActionRunner:
     @pytest.mark.asyncio
     @patch("switchbot_actions.action_runner.check_conditions")
     async def test_run_handles_none_from_check_conditions(
-        self, mock_check_conditions, caplog
+        self, mock_check_conditions, caplog, mock_switchbot_advertisement
     ):
         config = {"name": "Timer Test", "if": {"duration": "5s"}, "then": []}
         runner = TimerActionRunner(config)
-        state = MagicMock(spec=StateObject, address="test_device")
+        state = mock_switchbot_advertisement(address="test_device")
 
         # Set initial state to True
         runner._rule_conditions_met["test_device"] = True
@@ -156,11 +157,11 @@ class TestTimerActionRunner:
     @pytest.mark.asyncio
     @patch.object(TimerActionRunner, "_execute_actions", new_callable=AsyncMock)
     async def test_timer_callback_executes_actions_and_clears_timer(
-        self, mock_execute_actions
+        self, mock_execute_actions, mock_switchbot_advertisement
     ):
         config = {"name": "Callback Test", "if": {"duration": "1s"}, "then": []}
         runner = TimerActionRunner(config)
-        state = MagicMock(spec=StateObject, address="test_device")
+        state = mock_switchbot_advertisement(address="test_device")
         runner._active_timers["test_device"] = MagicMock(spec=Timer)
 
         await runner._timer_callback(state)

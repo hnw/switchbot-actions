@@ -19,10 +19,10 @@ class ActionRunnerBase(ABC):
         self._rule_conditions_met: dict[str, bool] = {}
 
     @abstractmethod
-    async def run(self, state: StateObject):
+    async def run(self, state: StateObject) -> None:
         pass
 
-    async def _execute_actions(self, state: StateObject):
+    async def _execute_actions(self, state: StateObject) -> None:
         name = self.config.get("name", "Unnamed Trigger")
         state_key = get_state_key(state)
         logger.debug(f"Trigger '{name}' actions started for state key {state_key}")
@@ -51,7 +51,7 @@ class ActionRunnerBase(ABC):
 
 
 class EventActionRunner(ActionRunnerBase):
-    async def run(self, state: StateObject):
+    async def run(self, state: StateObject) -> None:
         if_config = self.config.get("if", {})
         conditions_now_met = check_conditions(if_config, state)
         state_key = get_state_key(state)
@@ -76,7 +76,7 @@ class TimerActionRunner(ActionRunnerBase):
         super().__init__(config)
         self._active_timers: dict[str, Timer] = {}
 
-    async def run(self, state: StateObject):
+    async def run(self, state: StateObject) -> None:
         if_config = self.config.get("if", {})
         conditions_now_met = check_conditions(if_config, state)
         state_key = get_state_key(state)
@@ -133,7 +133,7 @@ class TimerActionRunner(ActionRunnerBase):
                     f"{self.config.get('name', id(self.config))} on device {state_key}."
                 )
 
-    async def _timer_callback(self, state: StateObject):
+    async def _timer_callback(self, state: StateObject) -> None:
         """Called when the timer completes."""
         state_key = get_state_key(state)
         await self._execute_actions(state)

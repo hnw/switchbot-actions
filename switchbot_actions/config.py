@@ -7,6 +7,15 @@ import yaml
 
 
 @dataclass
+class MqttSettings:
+    host: str
+    port: int = 1883
+    username: str | None = None
+    password: str | None = None
+    reconnect_interval: int = 10
+
+
+@dataclass
 class PrometheusExporterSettings:
     enabled: bool = True
     port: int = 8000
@@ -37,6 +46,7 @@ class AppSettings:
     )
     automations: List[Dict[str, Any]] = field(default_factory=list)
     logging: LoggingSettings = field(default_factory=LoggingSettings)
+    mqtt: MqttSettings | None = None
 
     @classmethod
     def load_from_yaml(cls, path: str) -> Dict[str, Any]:
@@ -87,6 +97,8 @@ class AppSettings:
             )
         if "logging" in config_data:
             settings.logging = LoggingSettings(**config_data["logging"])
+        if "mqtt" in config_data:
+            settings.mqtt = MqttSettings(**config_data["mqtt"])
 
         if "automations" in config_data:
             settings.automations = config_data["automations"]

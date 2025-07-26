@@ -1,5 +1,8 @@
-# switchbot_actions/signals.py
 from blinker import signal
 
-# Signal sent when a new state object is processed.
-state_changed = signal("state-changed")
+# External event notification
+state_changed = signal("switchbot-advertisement-received")
+mqtt_message_received = signal("mqtt-message-received")
+
+# Internal action request
+publish_mqtt_message_request = signal("publish-mqtt-message-request")

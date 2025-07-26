@@ -88,6 +88,70 @@ automations:
       payload:
         message: "Warning: Device {address} has been open for 10 minutes!"
 
+  - name: "Control Light via MQTT"
+    if:
+      source: "mqtt"
+      topic: "home/living/light/set"
+      state:
+        # Evaluates the entire payload of the MQTT message.
+        payload: "ON"
+    then:
+      type: "shell_command"
+      command: "echo 'Turning light ON via MQTT'"
+
+  - name: "React to JSON payload from MQTT"
+    if:
+      source: "mqtt"
+      topic: "home/sensors/thermostat"
+      state:
+        # Evaluates a key within a JSON payload.
+        temperature: "> 22.0"
+    then:
+      type: "mqtt_publish"
+      topic: "home/living/ac/set"
+      payload:
+        # The payload can be a dictionary.
+        # Placeholders like {temperature} will be replaced with the actual values.
+        action: "set_temperature"
+        value: "{temperature}"
+      # Optional QoS and retain flags
+      qos: 1
+      retain: true
+
+  - name: "Notify if MQTT sensor is offline for 5 minutes"
+    if:
+      source: "mqtt_timer"
+      duration: "5m"
+      topic: "home/sensors/+/status"
+      state:
+        payload: "offline"
+    then:
+      type: "webhook"
+      url: "https://example.com/alert"
+      payload:
+        message: "Sensor at topic {topic} is offline!"
+
+# ----------------------------------------------------
+# MQTT Client Settings
+# ----------------------------------------------------
+mqtt:
+  # Hostname or IP address of the MQTT broker.
+  host: "localhost"
+
+  # Port number for the MQTT broker.
+  # Default: 1883
+  port: 1883
+
+  # Optional: Username for authentication.
+  # username: "your_username"
+
+  # Optional: Password for authentication.
+  # password: "your_password"
+
+  # Interval in seconds to wait before attempting to reconnect.
+  # Default: 10
+  reconnect_interval: 10
+
 # ----------------------------------------------------
 # Prometheus Exporter Settings
 # ----------------------------------------------------

@@ -1,14 +1,16 @@
 import asyncio
+import json
 import logging
 
 import httpx
 
 from .evaluator import StateObject, format_string
+from .signals import publish_mqtt_message_request
 
 logger = logging.getLogger(__name__)
 
 
-async def execute_action(action: dict, state: StateObject):
+async def execute_action(action: dict, state: StateObject) -> None:
     """Executes the specified action (e.g., shell command, webhook)."""
     action_type = action.get("type")
 
@@ -16,6 +18,8 @@ async def execute_action(action: dict, state: StateObject):
         await _execute_shell_command(action, state)
     elif action_type == "webhook":
         await _execute_webhook(action, state)
+    elif action_type == "mqtt_publish":
+        await _execute_mqtt_publish(action, state)
     else:
         logger.warning(f"Unknown trigger type: {action_type}")
 
@@ -84,3 +88,26 @@ async def _execute_webhook(action: dict, state: StateObject) -> None:
                 )
     except httpx.RequestError as e:
         logger.error(f"Webhook failed: {e}")
+
+
+async def _execute_mqtt_publish(action: dict, state: StateObject) -> None:
+    topic = format_string(action["topic"], state)
+    payload_config = action.get("payload", "")
+    qos = action.get("qos", 0)
+    retain = action.get("retain", False)
+
+    if isinstance(payload_config, dict):
+        formatted_payload = {
+            k: format_string(str(v), state) for k, v in payload_config.items()
+        }
+        payload = json.dumps(formatted_payload)
+    else:
+        payload = format_string(str(payload_config), state)
+
+    logger.debug(
+        f"Publishing MQTT message to topic '{topic}' with payload '{payload}' "
+        f"(qos={qos}, retain={retain})"
+    )
+    publish_mqtt_message_request.send(
+        None, topic=topic, payload=payload, qos=qos, retain=retain
+    )

@@ -2,8 +2,9 @@
 import logging
 from threading import Lock
 
+from switchbot import SwitchBotAdvertisement
+
 from . import evaluator
-from .evaluator import StateObject
 from .signals import state_changed
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class StateStorage:
     """
 
     def __init__(self):
-        self._states: dict[str, StateObject] = {}
+        self._states: dict[str, SwitchBotAdvertisement] = {}
         self._lock = Lock()
         # Connect to the signal to receive updates
         state_changed.connect(self.handle_state_change)
@@ -31,7 +32,7 @@ class StateStorage:
             self._states[key] = new_state
         logger.debug(f"State updated for key {key}")
 
-    def get_state(self, key: str) -> StateObject | None:
+    def get_state(self, key: str) -> SwitchBotAdvertisement | None:
         """
         Retrieves the latest state for a specific key.
         Returns None if no state is associated with the key.
@@ -39,7 +40,7 @@ class StateStorage:
         with self._lock:
             return self._states.get(key)
 
-    def get_all_states(self) -> dict[str, StateObject]:
+    def get_all_states(self) -> dict[str, SwitchBotAdvertisement]:
         """
         Retrieves a copy of the states of all entities.
         """

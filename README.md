@@ -6,6 +6,7 @@ This application continuously scans for SwitchBot Bluetooth Low Energy (BLE) dev
 
 -   **React to Events**: Trigger custom actions (like shell commands or webhooks) the moment a device's state changes.
 -   **Monitor Sustained States**: Trigger actions when a device remains in a specific state for a continuous duration.
+-   **Integrate with MQTT**: Trigger automations from MQTT messages and publish messages to MQTT topics as an action.
 
 It also includes an optional **Prometheus Exporter** to expose sensor data (temperature, humidity, etc.) and device state as Prometheus metrics.
 
@@ -14,6 +15,7 @@ Inspired by services like GitHub Actions, all behavior is controlled through a s
 ## Features
 
 -   **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
+-   **MQTT Integration**: Connect to an MQTT broker to send and receive messages, enabling seamless integration with other smart home platforms (e.g., Home Assistant).
 -   **Prometheus Integration**: Exposes metrics at a configurable `/metrics` endpoint.
 -   **Powerful Automation**: Define rules to trigger actions based on a unified `if/then` structure.
 -   **Flexible Conditions**: Build rules based on device model, address, sensor values, and even signal strength (`rssi`).
@@ -192,6 +194,19 @@ The application is controlled by `config.yaml`. See `config.yaml.example` for a 
 -   `--scan-duration <seconds>`: Overrides the scan duration time.
 -   `--interface <device>`: Overrides the Bluetooth interface (e.g., `hci1`).
 
+### MQTT Client (`mqtt`)
+
+Configure the connection to your MQTT broker.
+
+```yaml
+mqtt:
+  host: "localhost"
+  port: 1883
+  username: "your_username"
+  password: "your_password"
+  reconnect_interval: 10 # Seconds
+```
+
 ### Scanner (`scanner`)
 
 Configure the behavior of the Bluetooth (BLE) scanner.
@@ -215,8 +230,8 @@ All automation rules are defined under the `automations` key. Each rule follows 
 
 The `if` block defines what will trigger the automation.
 
--   **`source`**: The core of the trigger. Use `switchbot` for immediate events or `switchbot_timer` for sustained states.
--   **`duration`**: Required only for `switchbot_timer`. Defines how long the state must be true.
+-   **`source`**: The core of the trigger. Use `switchbot` for immediate events, `switchbot_timer` for sustained states, `mqtt` for MQTT messages, and `mqtt_timer` for sustained MQTT message values.
+-   **`duration`**: Required only for `switchbot_timer` and `mqtt_timer`. Defines how long the state must be true.
 -   **`device` & `state`**: Define the conditions to be met.
 
 In the `state` conditions, you can use the following operators for comparison: `>` (greater than), `<` (less than), `>=` (greater/equal), `<=` (less/equal), `==` (equal), and `!=` (not equal).
@@ -225,11 +240,12 @@ In the `state` conditions, you can use the following operators for comparison: `
 
 The `then` block defines what action to execute when the `if` conditions are met.
 
--   **`type`**: The type of action, such as `shell_command` or `webhook`.
+-   **`type`**: The type of action, such as `shell_command`, `webhook`, or `mqtt_publish`.
 -   **Parameters**: Additional fields like `command`, `url`, `payload`, and `headers`.
 
 > [!NOTE]
-> You can use placeholders in `command`, `url`, `payload`, and `headers`. Available placeholders include `{address}`, `{modelName}`, `{rssi}`, and any sensor value found in the device's data (e.g., `{temperature}`, `{humidity}`, `{isOn}`).
+> You can use placeholders in `command`, `url`, `payload`, and `headers`. Available placeholders include `{address}`, `{modelName}`, `{rssi}`, and any sensor value found in the device's data (e.g., `{temperature}`, `{humidity}`, `{isOn}`). For MQTT triggers, you can use `{topic}` and `{payload}`.
+> For `mqtt_publish` actions, the payload also supports a dictionary format, in which case placeholders can be used in each value.
 
 #### Example 1: Event-Driven Automation
 
@@ -269,6 +285,32 @@ automations:
     then:
       type: "shell_command"
       command: "echo 'No motion for 5 minutes, turning off lights.'"
+```
+
+#### Example 3: MQTT-Driven Automation
+
+This rule triggers when an MQTT message is received on the topic `home/living/light/set` with the payload `ON`. It then publishes a new MQTT message.
+
+```yaml
+automations:
+  - name: "React to JSON payload from MQTT"
+    if:
+      source: "mqtt"
+      topic: "home/sensors/thermostat"
+      state:
+        # Evaluates a key within a JSON payload.
+        temperature: "> 22.0"
+    then:
+      type: "mqtt_publish"
+      topic: "home/living/ac/set"
+      payload:
+        # The payload can be a dictionary.
+        # Placeholders like {temperature} will be replaced with the actual values.
+        action: "set_temperature"
+        value: "{temperature}"
+      # Optional QoS and retain flags
+      qos: 1
+      retain: true
 ```
 
 ### Prometheus Exporter (`prometheus_exporter`)

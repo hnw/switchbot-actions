@@ -7,7 +7,6 @@ from switchbot import (
     SwitchBotAdvertisement,
 )
 
-from .evaluator import StateObject
 from .signals import state_changed
 from .store import StateStorage
 
@@ -89,15 +88,12 @@ class DeviceScanner:
         """Stops the scanning loop."""
         self._running = False
 
-    def _process_advertisement(self, new_data: SwitchBotAdvertisement):
+    def _process_advertisement(self, new_state: SwitchBotAdvertisement):
         """
         Processes a new advertisement and emits a state_changed signal.
         """
-        if not new_data.data:
+        if not new_state.data:
             return
-
-        # For now, the state object is the advertisement itself.
-        new_state: StateObject = new_data
 
         logger.debug(
             f"Received advertisement from {new_state.address}: {new_state.data}"

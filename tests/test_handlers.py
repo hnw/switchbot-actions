@@ -1,11 +1,27 @@
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import aiomqtt
 import pytest
 
 from switchbot_actions.handlers import AutomationHandler
+from switchbot_actions.mqtt import mqtt_message_received
 from switchbot_actions.signals import state_changed
+
+
+@pytest.fixture
+def mock_mqtt_message() -> aiomqtt.Message:
+    """A sample aiomqtt.Message object for testing."""
+    message = aiomqtt.Message(
+        topic=aiomqtt.Topic("test/topic"),
+        payload=b"ON",
+        qos=1,
+        retain=False,
+        mid=1,
+        properties=None,
+    )
+    return message
 
 
 class TestAutomationHandler:
@@ -42,12 +58,13 @@ class TestAutomationHandler:
         "switchbot_actions.handlers.AutomationHandler._run_all_runners",
         new_callable=AsyncMock,
     )
-    async def test_handle_signal_schedules_runner_task(self, mock_run_all_runners):
+    async def test_handle_state_change_schedules_runner_task(
+        self, mock_run_all_runners, mock_switchbot_advertisement
+    ):
         configs = [{"if": {"source": "switchbot"}, "name": "config1"}]
         _ = AutomationHandler(configs)
 
-        new_state = MagicMock()
-        new_state.address = "DE:AD:BE:EF:00:01"
+        new_state = mock_switchbot_advertisement(address="DE:AD:BE:EF:00:01")
 
         state_changed.send(None, new_state=new_state)
         await asyncio.sleep(0)
@@ -55,7 +72,7 @@ class TestAutomationHandler:
         mock_run_all_runners.assert_awaited_once_with(new_state)
 
     @pytest.mark.asyncio
-    async def test_handle_signal_does_nothing_if_no_new_state(self):
+    async def test_handle_state_change_does_nothing_if_no_new_state(self):
         configs = [{"if": {"source": "switchbot"}, "name": "config1"}]
         handler = AutomationHandler(configs)
 
@@ -63,7 +80,60 @@ class TestAutomationHandler:
         runner_instance = handler._action_runners[0]
         runner_instance.run = AsyncMock()
 
-        handler.handle_signal(sender=None)
-        handler.handle_signal(sender=None, new_state=None)
+        handler.handle_state_change(sender=None)
+        handler.handle_state_change(sender=None, new_state=None)
         await asyncio.sleep(0)
         runner_instance.run.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch(
+        "switchbot_actions.handlers.AutomationHandler._run_all_runners",
+        new_callable=AsyncMock,
+    )
+    async def test_handle_mqtt_message_schedules_runner_task(
+        self, mock_run_all_runners, mock_mqtt_message
+    ):
+        """Test that mqtt_message_received signal triggers the action runner."""
+        configs = [{"if": {"source": "mqtt"}, "name": "mqtt_config"}]
+        _ = AutomationHandler(configs)
+
+        mqtt_message_received.send(None, message=mock_mqtt_message)
+        await asyncio.sleep(0)  # Allow the event loop to run the task
+
+        mock_run_all_runners.assert_awaited_once_with(mock_mqtt_message)
+
+    @pytest.mark.asyncio
+    async def test_handle_mqtt_message_does_nothing_if_no_message(self):
+        """Test that handle_mqtt_message does nothing if no message is provided."""
+        configs = [{"if": {"source": "mqtt"}, "name": "config1"}]
+        handler = AutomationHandler(configs)
+
+        runner_instance = handler._action_runners[0]
+        runner_instance.run = AsyncMock()
+
+        handler.handle_mqtt_message(sender=None)
+        handler.handle_mqtt_message(sender=None, message=None)
+        await asyncio.sleep(0)
+
+        runner_instance.run.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_all_runners_concurrently(mock_switchbot_advertisement):
+    configs = [
+        {"if": {"source": "switchbot"}, "name": "config1"},
+        {"if": {"source": "switchbot"}, "name": "config2"},
+    ]
+    handler = AutomationHandler(configs)
+
+    # Mock the run method of each runner
+    mock_run_1 = AsyncMock()
+    mock_run_2 = AsyncMock()
+    handler._action_runners[0].run = mock_run_1
+    handler._action_runners[1].run = mock_run_2
+
+    new_state = mock_switchbot_advertisement(address="DE:AD:BE:EF:00:03")
+    await handler._run_all_runners(new_state)
+
+    mock_run_1.assert_awaited_once_with(new_state)
+    mock_run_2.assert_awaited_once_with(new_state)

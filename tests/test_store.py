@@ -1,5 +1,5 @@
 # tests/test_store.py
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -14,14 +14,15 @@ def storage():
 
 
 @pytest.fixture
-def mock_state():
-    """Creates a mock state object."""
-    state = MagicMock()
-    state.address = "DE:AD:BE:EF:00:01"
-    state.data = {
-        "modelName": "WoSensorTH",
-        "data": {"temperature": 25.5, "humidity": 50, "battery": 99},
-    }
+def mock_state(mock_switchbot_advertisement):
+    """Creates a mock state object that behaves like a SwitchBotAdvertisement."""
+    state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:00:01",
+        data={
+            "modelName": "WoSensorTH",
+            "data": {"temperature": 25.5, "humidity": 50, "battery": 99},
+        },
+    )
     return state
 
 
@@ -64,23 +65,24 @@ def test_get_all_states(storage, mock_state):
     assert storage.get_all_states() == {"DE:AD:BE:EF:00:01": mock_state}
 
 
-def test_state_overwrite(storage, mock_state):
+def test_state_overwrite(storage, mock_state, mock_switchbot_advertisement):
     """Test that a new state for the same key overwrites the old state."""
     with patch(
         "switchbot_actions.signals.state_changed.connect"
     ):  # Prevent AutomationHandler from connecting
         state_changed.send(None, new_state=mock_state)
 
-        updated_state = MagicMock()
-        updated_state.address = "DE:AD:BE:EF:00:01"
-        updated_state.data = {
-            "modelName": "WoSensorTH",
-            "data": {
-                "temperature": 26.0,  # Updated temperature
-                "humidity": 51,
-                "battery": 98,
+        updated_state = mock_switchbot_advertisement(
+            address="DE:AD:BE:EF:00:01",
+            data={
+                "modelName": "WoSensorTH",
+                "data": {
+                    "temperature": 26.0,  # Updated temperature
+                    "humidity": 51,
+                    "battery": 98,
+                },
             },
-        }
+        )
 
         state_changed.send(None, new_state=updated_state)
 
