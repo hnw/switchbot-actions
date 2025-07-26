@@ -1,56 +1,86 @@
+import asyncio
 import logging
-import subprocess
 
-import requests
+import httpx
 
 from .evaluator import StateObject, format_string
 
 logger = logging.getLogger(__name__)
 
 
-def execute_action(action: dict, state: StateObject):
+async def execute_action(action: dict, state: StateObject):
     """Executes the specified action (e.g., shell command, webhook)."""
     action_type = action.get("type")
 
     if action_type == "shell_command":
-        command = format_string(action["command"], state)
-        logger.debug(f"Executing shell command: {command}")
-        subprocess.run(command, shell=True, check=False)
-
+        await _execute_shell_command(action, state)
     elif action_type == "webhook":
-        url = format_string(action["url"], state)
-        method = action.get("method", "POST").upper()
-        payload = action.get("payload", {})
-        headers = action.get("headers", {})
+        await _execute_webhook(action, state)
+    else:
+        logger.warning(f"Unknown trigger type: {action_type}")
 
-        # Format payload
-        if isinstance(payload, dict):
-            formatted_payload = {
-                k: format_string(str(v), state) for k, v in payload.items()
-            }
-        else:
-            formatted_payload = format_string(str(payload), state)
 
-        # Format headers
-        formatted_headers = {
-            k: format_string(str(v), state) for k, v in headers.items()
+async def _execute_shell_command(action: dict, state: StateObject) -> None:
+    command = format_string(action["command"], state)
+    logger.debug(f"Executing shell command: {command}")
+    process = await asyncio.create_subprocess_shell(
+        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    if stdout:
+        logger.debug(f"Shell command stdout: {stdout.decode().strip()}")
+    if stderr:
+        logger.error(f"Shell command stderr: {stderr.decode().strip()}")
+    if process.returncode != 0:
+        logger.error(f"Shell command failed with exit code {process.returncode}")
+
+
+async def _execute_webhook(action: dict, state: StateObject) -> None:
+    url = format_string(action["url"], state)
+    method = action.get("method", "POST").upper()
+    payload = action.get("payload", {})
+    headers = action.get("headers", {})
+
+    # Format payload
+    if isinstance(payload, dict):
+        formatted_payload = {
+            k: format_string(str(v), state) for k, v in payload.items()
         }
+    else:
+        formatted_payload = format_string(str(payload), state)
 
-        logger.debug(
-            f"Sending webhook: {method} {url} with payload {formatted_payload} "
-            f"and headers {formatted_headers}"
-        )
-        try:
+    # Format headers
+    formatted_headers = {k: format_string(str(v), state) for k, v in headers.items()}
+
+    logger.debug(
+        f"Sending webhook: {method} {url} with payload {formatted_payload} "
+        f"and headers {formatted_headers}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
             if method == "POST":
-                requests.post(
+                response = await client.post(
                     url, json=formatted_payload, headers=formatted_headers, timeout=10
                 )
             elif method == "GET":
-                requests.get(
+                response = await client.get(
                     url, params=formatted_payload, headers=formatted_headers, timeout=10
                 )
-        except requests.RequestException as e:
-            logger.error(f"Webhook failed: {e}")
+            else:
+                logger.error(f"Unsupported HTTP method for webhook: {method}")
+                return
 
-    else:
-        logger.warning(f"Unknown trigger type: {action_type}")
+            if 200 <= response.status_code < 300:
+                logger.debug(
+                    f"Webhook to {url} successful with status {response.status_code}"
+                )
+            else:
+                response_body_preview = (
+                    response.text[:200] if response.text else "(empty)"
+                )
+                logger.error(
+                    f"Webhook to {url} failed with status {response.status_code}. "
+                    f"Response: {response_body_preview}"
+                )
+    except httpx.RequestError as e:
+        logger.error(f"Webhook failed: {e}")

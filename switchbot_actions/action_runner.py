@@ -45,7 +45,7 @@ class ActionRunnerBase(ABC):
                     return
 
         for action in self.config.get("then", []):
-            execute_action(action, state)
+            await execute_action(action, state)
 
         self._last_run_timestamp[state_key] = time.time()
 
