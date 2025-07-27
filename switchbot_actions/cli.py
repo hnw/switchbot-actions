@@ -81,6 +81,7 @@ def cli_main():
         sys.exit(1)
 
     try:
+        config_data["config_path"] = args.config
         settings = AppSettings.model_validate(config_data)
     except ValidationError as e:
         print(f"Configuration validation error: {e}", file=sys.stderr)
