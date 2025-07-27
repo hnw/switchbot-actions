@@ -12,8 +12,8 @@ scanner:
   duration: 3
 
   # Bluetooth adapter number to use (e.g., 0 for hci0).
-  # Default: "0"
-  interface: "0"
+  # Default: 0
+  interface: 0
 
 # ----------------------------------------------------
 # Automations
@@ -28,7 +28,7 @@ automations:
       source: "switchbot"
       # Conditions to identify the target device(s).
       device:
-        modelName: "Meter"
+        modelName: "WoSensorTH"
       # Conditions based on the device's state.
       state:
         # Triggers when the temperature is greater than 28.
@@ -44,7 +44,7 @@ automations:
     if:
       source: "switchbot"
       device:
-        modelName: "Bot"
+        modelName: "WoHand"
         address: "XX:XX:XX:XX:XX:AA"
       state:
         isOn: True
