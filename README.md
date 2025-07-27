@@ -2,21 +2,7 @@
 
 A powerful, configurable automation engine for SwitchBot BLE devices, with an optional Prometheus exporter.
 
-### The Problem
-
-Smart home automation often requires complex setups, custom scripts, or reliance on cloud services that might not offer the flexibility or privacy you need. Integrating SwitchBot devices, especially for advanced, local-only automations, can be particularly challenging.
-
-### Our Solution
-
-`switchbot-actions` provides a robust, locally-run automation engine controlled by a single, easy-to-understand `config.yaml` file. This gives you full control over your devices without relying on external services.
-
-Inspired by services like GitHub Actions, you can define powerful automation workflows to:
-
-  - **React to Events**: Trigger actions the moment a device's state changes.
-  - **Monitor Sustained States**: Act when a device remains in a specific state for a continuous duration.
-  - **Integrate with Your Ecosystem**: Connect with platforms like Home Assistant via native MQTT support.
-
-It also includes an optional **Prometheus Exporter**, allowing you to monitor and visualize your device data over time.
+`switchbot-actions` is a lightweight, standalone automation engine for your SwitchBot BLE devices. It turns a single `config.yaml` file into a powerful local controller, allowing you to react to device states, create time-based triggers, and integrate with MQTT and Prometheus. Its efficiency makes it a great fit for resource-constrained hardware, running comfortably on a Raspberry Pi 3 and even on a Raspberry Pi Zero. It's ideal for those who prefer a simple, configuration-driven approach to home automation without needing a large, all-in-one platform.
 
 ## Key Features
 
@@ -179,7 +165,10 @@ automations:
         temperature: "> 28.0"
     then:
       type: "shell_command"
-      command: "echo 'High temperature detected: {temperature}℃'"
+      # We redirect to stderr (>&2) so the application logs the output
+      # as an ERROR, making it visible by default without needing to
+      # enable DEBUG level logging.
+      command: "echo 'High temperature detected: {temperature}℃' >&2"
 ```
 
 ### Detailed Reference & More Examples

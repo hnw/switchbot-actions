@@ -36,7 +36,11 @@ automations:
     # "then" block: Defines the action to be executed.
     then:
       type: "shell_command"
-      command: "echo 'High temperature detected ({temperature}°C), turning on fan...'"
+      # For quick testing, you can redirect to stderr (>&2) to see output
+      # in the default log. However, for production use, this can clutter
+      # your error logs. It's better to use actions like 'webhook' or
+      # 'mqtt_publish' to send notifications to a proper system.
+      command: "echo 'High temperature detected ({temperature}℃), turning on fan...' >&2"
 
   - name: "Button Press Notification"
     # Mute for 2 seconds to prevent bouncing/chattering effects.
