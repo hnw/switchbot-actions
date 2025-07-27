@@ -6,7 +6,7 @@ from .action_runner import ActionRunnerBase, EventActionRunner, TimerActionRunne
 from .config import AutomationRule
 from .evaluator import StateObject
 from .mqtt import mqtt_message_received
-from .signals import state_changed
+from .signals import switchbot_advertisement_received
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class AutomationHandler:
             else:
                 logger.warning(f"Unknown source '{source}' for config: {config}")
 
-        state_changed.connect(self.handle_state_change)
+        switchbot_advertisement_received.connect(self.handle_state_change)
         mqtt_message_received.connect(self.handle_mqtt_message)
 
         logger.info(

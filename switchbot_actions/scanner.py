@@ -7,13 +7,13 @@ from switchbot import (
     SwitchBotAdvertisement,
 )
 
-from .signals import state_changed
-from .store import StateStorage
+from .signals import switchbot_advertisement_received
+from .store import StateStore
 
 logger = logging.getLogger(__name__)
 
 
-class DeviceScanner:
+class SwitchbotClient:
     """
     Continuously scans for SwitchBot BLE advertisements and serves as the
     central publisher of device events.
@@ -22,7 +22,7 @@ class DeviceScanner:
     def __init__(
         self,
         scanner: GetSwitchbotDevices,
-        store: StateStorage,
+        store: StateStore,
         cycle: int = 10,
         duration: int = 3,
     ):
@@ -90,7 +90,8 @@ class DeviceScanner:
 
     def _process_advertisement(self, new_state: SwitchBotAdvertisement):
         """
-        Processes a new advertisement and emits a state_changed signal.
+        Processes a new advertisement and
+        emits a switchbot_advertisement_received signal.
         """
         if not new_state.data:
             return
@@ -98,4 +99,4 @@ class DeviceScanner:
         logger.debug(
             f"Received advertisement from {new_state.address}: {new_state.data}"
         )
-        state_changed.send(self, new_state=new_state)
+        switchbot_advertisement_received.send(self, new_state=new_state)

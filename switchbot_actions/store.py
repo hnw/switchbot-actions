@@ -5,12 +5,12 @@ from threading import Lock
 from switchbot import SwitchBotAdvertisement
 
 from . import evaluator
-from .signals import state_changed
+from .signals import switchbot_advertisement_received
 
 logger = logging.getLogger(__name__)
 
 
-class StateStorage:
+class StateStore:
     """
     An in-memory, thread-safe store for the latest state of each entity.
     """
@@ -19,7 +19,7 @@ class StateStorage:
         self._states: dict[str, SwitchBotAdvertisement] = {}
         self._lock = Lock()
         # Connect to the signal to receive updates
-        state_changed.connect(self.handle_state_change)
+        switchbot_advertisement_received.connect(self.handle_state_change)
 
     def handle_state_change(self, sender, **kwargs):
         """Receives state object from the signal and updates the store."""

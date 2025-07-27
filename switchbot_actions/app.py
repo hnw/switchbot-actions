@@ -10,9 +10,9 @@ from .config import AppSettings
 from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
 from .mqtt import MqttClient
-from .scanner import DeviceScanner
+from .scanner import SwitchbotClient
 from .signals import publish_mqtt_message_request
-from .store import StateStorage
+from .store import StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +24,11 @@ class Application:
         self.stopping = False
 
         # Initialize core components
-        self.storage = StateStorage()
+        self.storage = StateStore()
         self.ble_scanner = GetSwitchbotDevices(
             interface=self.settings.scanner.interface
         )
-        self.scanner = DeviceScanner(
+        self.scanner = SwitchbotClient(
             scanner=self.ble_scanner,
             store=self.storage,
             cycle=self.settings.scanner.cycle,

@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from switchbot_actions.scanner import DeviceScanner
-from switchbot_actions.signals import state_changed
-from switchbot_actions.store import StateStorage
+from switchbot_actions.scanner import SwitchbotClient
+from switchbot_actions.signals import switchbot_advertisement_received
+from switchbot_actions.store import StateStore
 
 
 @pytest.fixture
@@ -29,14 +29,14 @@ def mock_ble_scanner(mock_switchbot_advertisement):
 
 @pytest.fixture
 def mock_storage():
-    """Provides a mock StateStorage."""
-    return MagicMock(spec=StateStorage)
+    """Provides a mock StateStore."""
+    return MagicMock(spec=StateStore)
 
 
 @pytest.fixture
 def scanner(mock_ble_scanner, mock_storage):
-    """Provides a DeviceScanner with mock dependencies."""
-    return DeviceScanner(
+    """Provides a SwitchbotClient with mock dependencies."""
+    return SwitchbotClient(
         scanner=mock_ble_scanner, store=mock_storage, cycle=1, duration=1
     )
 
@@ -46,10 +46,10 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
     """Test that the scanner starts, processes an advertisement, and sends a signal."""
     received_signal = []
 
-    def on_state_changed(sender, **kwargs):
+    def on_switchbot_advertisement_received(sender, **kwargs):
         received_signal.append(kwargs)
 
-    state_changed.connect(on_state_changed)
+    switchbot_advertisement_received.connect(on_switchbot_advertisement_received)
 
     with pytest.raises(asyncio.CancelledError):
         await scanner.start_scan()
@@ -64,7 +64,7 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
     assert new_state.address == "DE:AD:BE:EF:44:44"
     assert new_state.data["data"]["isOn"] is True
 
-    state_changed.disconnect(on_state_changed)
+    switchbot_advertisement_received.disconnect(on_switchbot_advertisement_received)
 
 
 @pytest.mark.asyncio

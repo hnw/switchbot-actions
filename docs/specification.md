@@ -9,7 +9,7 @@ This document outlines the design for `switchbot-actions`, a Python application 
 
 ## 2. Architecture
 
-The application employs a decoupled, signal-based architecture. The `DeviceScanner` component is responsible for scanning advertisements. For each new advertisement, it emits a `state_changed` signal. The `MqttClient` component connects to an MQTT broker and listens for messages, emitting an `mqtt_message_received` signal for each message.
+The application employs a decoupled, signal-based architecture. The `SwitchbotClient` component is responsible for scanning advertisements. For each new advertisement, it emits a `switchbot_advertisement_received` signal. The `MqttClient` component connects to an MQTT broker and listens for messages, emitting an `mqtt_message_received` signal for each message.
 
 These signals are consumed by the `AutomationHandler`, which acts as a central dispatcher. Upon initialization, it reads the automation rules from the configuration and, based on the `source` field of each rule, instantiates the appropriate `ActionRunner` subclass (e.g., `EventActionRunner` or `TimerActionRunner`).
 
@@ -35,14 +35,14 @@ classDiagram
     class TimerActionRunner {
       #_timer_callback(state: StateObject)
     }
-    class DeviceScanner {
+    class SwitchbotClient {
         +start_scan()
     }
     class MqttClient {
         +run()
         +publish()
     }
-    class StateStorage {
+    class StateStore {
         +get_state(key: str)
         +handle_state_change(sender, **kwargs)
     }
@@ -68,12 +68,12 @@ classDiagram
     ActionRunnerBase <|-- EventActionRunner
     ActionRunnerBase <|-- TimerActionRunner
 
-    DeviceScanner ..> StateStorage : notifies via signal
-    DeviceScanner ..> AutomationHandler : notifies via signal
+    SwitchbotClient ..> StateStore : notifies via signal
+    SwitchbotClient ..> AutomationHandler : notifies via signal
     MqttClient ..> AutomationHandler : notifies via signal
     action_executor ..> MqttClient : publish request via signal
 
-    PrometheusExporter --> StateStorage : reads current state
+    PrometheusExporter --> StateStore : reads current state
 
     ActionRunnerBase ..> evaluator : uses for conditions
     ActionRunnerBase ..> action_executor : uses for execution
@@ -83,24 +83,24 @@ classDiagram
 
 ## 3. Components
 
-### 3.1. `DeviceScanner`
+### 3.1. `SwitchbotClient`
 
   - **Responsibility**: Continuously scans for SwitchBot BLE advertisements and serves as the central publisher of device events.
-  - **Functionality**: Emits a `state_changed` signal with the new state object as its payload.
+  - **Functionality**: Emits a `switchbot_advertisement_received` signal with the new state object as its payload.
 
 ### 3.2. `MqttClient`
 
   - **Responsibility**: Manages the connection to the MQTT broker, including automatic reconnection, and handles message publishing and subscribing.
   - **Functionality**: Emits an `mqtt_message_received` signal for incoming messages and provides a `publish` method for actions.
 
-### 3.3. `StateStorage`
+### 3.3. `StateStore`
 
   - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed entity. It is the single source of truth for the current state.
-  - **Functionality**: Subscribes to the `state_changed` signal and immediately updates its internal state upon receiving a new advertisement.
+  - **Functionality**: Subscribes to the `switchbot_advertisement_received` signal and immediately updates its internal state upon receiving a new advertisement.
 
 ### 3.4. `PrometheusExporter`
 
-  - **Responsibility**: Exposes device states from `StateStorage` as Prometheus metrics.
+  - **Responsibility**: Exposes device states from `StateStore` as Prometheus metrics.
   - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all entities and formats it into Prometheus metrics.
 
 ### 3.5. `evaluator` (Module)
@@ -257,7 +257,7 @@ The application uses the following signals for internal communication between co
 
 | `blinker` Signal Name          | Emitter Component   | Role & Description                                           |
 | ------------------------------ | ------------------- | ------------------------------------------------------------ |
-| `state-changed`                | `DeviceScanner`     | Notifies that a new SwitchBot BLE advertisement was received.  |
+| `state-changed`                | `SwitchbotClient`     | Notifies that a new SwitchBot BLE advertisement was received.  |
 | `mqtt-message-received`        | `MqttClient`        | Notifies that a new MQTT message was received.               |
 | `publish-mqtt-message-request` | `action_executor`   | Requests the `MqttClient` to publish a message.              |
 
@@ -296,9 +296,9 @@ To add a new source (e.g., a webhook listener):
 │   ├── handlers.py         # AutomationHandler
 │   ├── logging.py          # Logging setup
 │   ├── mqtt.py             # MqttClient
-│   ├── scanner.py          # DeviceScanner
+│   ├── scanner.py          # SwitchbotClient
 │   ├── signals.py          # Blinker signals
-│   ├── store.py            # StateStorage
+│   ├── store.py            # StateStore
 │   └── timers.py           # Timer class
 ├── tests/
 ├── config.yaml.example

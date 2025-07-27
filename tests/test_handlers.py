@@ -8,7 +8,7 @@ import pytest
 from switchbot_actions.config import AutomationRule
 from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.mqtt import mqtt_message_received
-from switchbot_actions.signals import state_changed
+from switchbot_actions.signals import switchbot_advertisement_received
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ class TestAutomationHandler:
 
         new_state = mock_switchbot_advertisement(address="DE:AD:BE:EF:00:01")
 
-        state_changed.send(None, new_state=new_state)
+        switchbot_advertisement_received.send(None, new_state=new_state)
         await asyncio.sleep(0)
 
         mock_run_all_runners.assert_awaited_once_with(new_state)

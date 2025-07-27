@@ -3,7 +3,7 @@
 import pytest
 
 from switchbot_actions.exporter import PrometheusExporter
-from switchbot_actions.store import StateStorage
+from switchbot_actions.store import StateStore
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def mock_state_2(mock_switchbot_advertisement):
 
 def test_exporter_collect_metrics(mock_state_1):
     """Test that the exporter correctly generates metrics from the store."""
-    storage = StateStorage()
+    storage = StateStore()
     storage._states[mock_state_1.address] = mock_state_1
 
     exporter = PrometheusExporter(state_storage=storage, port=8001, target_config={})
@@ -54,7 +54,7 @@ def test_exporter_collect_metrics(mock_state_1):
 
 def test_metric_filtering(mock_state_1):
     """Test that metrics are filtered based on the target config."""
-    storage = StateStorage()
+    storage = StateStore()
     storage._states[mock_state_1.address] = mock_state_1
     exporter = PrometheusExporter(
         state_storage=storage,
@@ -69,7 +69,7 @@ def test_metric_filtering(mock_state_1):
 
 def test_rssi_metric_filtering(mock_state_1):
     """Test that the rssi metric can be filtered."""
-    storage = StateStorage()
+    storage = StateStore()
     storage._states[mock_state_1.address] = mock_state_1
     exporter = PrometheusExporter(
         state_storage=storage, port=8002, target_config={"metrics": ["rssi"]}
@@ -81,7 +81,7 @@ def test_rssi_metric_filtering(mock_state_1):
 
 def test_address_filtering(mock_state_1, mock_state_2):
     """Test that devices are filtered based on the target addresses."""
-    storage = StateStorage()
+    storage = StateStore()
     storage._states[mock_state_1.address] = mock_state_1
     storage._states[mock_state_2.address] = mock_state_2
 
