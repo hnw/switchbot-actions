@@ -25,7 +25,7 @@ class TestActionRunnerBase:
             {
                 "name": "Cooldown Test",
                 "cooldown": "10s",
-                "if": {"source": "test"},
+                "if": {"source": "switchbot"},
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
@@ -67,7 +67,7 @@ class TestEventActionRunner:
         config = AutomationRule.model_validate(
             {
                 "name": "Test Rule",
-                "if": {"source": "test"},
+                "if": {"source": "mqtt", "topic": "#"},
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
@@ -117,7 +117,7 @@ class TestTimerActionRunner:
         config = AutomationRule.model_validate(
             {
                 "name": "Timer Test",
-                "if": {"source": "timer", "duration": "5s"},
+                "if": {"source": "mqtt_timer", "duration": "5s", "topic": "#"},
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
@@ -160,7 +160,7 @@ class TestTimerActionRunner:
         config = AutomationRule.model_validate(
             {
                 "name": "Timer Test",
-                "if": {"source": "timer", "duration": "5s"},
+                "if": {"source": "switchbot_timer", "duration": "5s"},
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
@@ -188,7 +188,7 @@ class TestTimerActionRunner:
         config = AutomationRule.model_validate(
             {
                 "name": "Callback Test",
-                "if": {"source": "timer", "duration": "1s"},
+                "if": {"source": "mqtt_timer", "duration": "1s", "topic": "#"},
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )

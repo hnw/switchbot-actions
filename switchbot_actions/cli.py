@@ -2,15 +2,15 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
-import yaml
 from pydantic import ValidationError
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
 
 from .app import run_app
-from .config import (
-    AppSettings,
-    MqttSettings,
-)
+from .config import AppSettings, MqttSettings
+from .error import format_validation_error
 from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -60,20 +60,23 @@ def cli_main():
     args = parser.parse_args()
 
     config_data = {}
+    yaml = YAML(typ="rt")
+    config_path = Path(args.config)
     try:
-        with open(args.config, "r") as f:
-            config_data = yaml.safe_load(f) or {}
+        with open(config_path, "r") as f:
+            config_data = yaml.load(f) or {}
     except FileNotFoundError:
         print(
-            f"Configuration file not found at {args.config}, using defaults.",
+            f"Configuration file not found at {config_path}, using defaults.",
             file=sys.stderr,
         )
-    except yaml.YAMLError as e:
-        mark = getattr(e, "mark", None)
+        config_data = {}
+    except YAMLError as e:
+        mark = getattr(e, "problem_mark", None)
         if mark:
             print(
                 f"Error parsing YAML file: {e}\n"
-                f"  Line: {mark.line + 1}, Column: {mark.column + 1}",
+                f"  in {config_path}, line: {mark.line + 1}, column: {mark.column + 1}",
                 file=sys.stderr,
             )
         else:
@@ -84,7 +87,8 @@ def cli_main():
         config_data["config_path"] = args.config
         settings = AppSettings.model_validate(config_data)
     except ValidationError as e:
-        print(f"Configuration validation error: {e}", file=sys.stderr)
+        error_message = format_validation_error(e, config_path, config_data)
+        print(error_message, file=sys.stderr)
         sys.exit(1)
 
     # Apply CLI arguments, overriding config file settings
@@ -102,7 +106,7 @@ def cli_main():
         settings.prometheus_exporter.port = args.prometheus_exporter_port
     if args.mqtt_host is not None:
         if settings.mqtt is None:
-            settings.mqtt = MqttSettings(host=args.mqtt_host)
+            settings.mqtt = MqttSettings(host=args.mqtt_host)  # type: ignore[call-arg]
         else:
             settings.mqtt.host = args.mqtt_host
     if args.mqtt_port is not None:
@@ -112,19 +116,19 @@ def cli_main():
             settings.mqtt.port = args.mqtt_port
     if args.mqtt_username is not None:
         if settings.mqtt is None:
-            settings.mqtt = MqttSettings(username=args.mqtt_username, host="localhost")
+            settings.mqtt = MqttSettings(username=args.mqtt_username, host="localhost")  # type: ignore[call-arg]
         else:
             settings.mqtt.username = args.mqtt_username
     if args.mqtt_password is not None:
         if settings.mqtt is None:
-            settings.mqtt = MqttSettings(password=args.mqtt_password, host="localhost")
+            settings.mqtt = MqttSettings(password=args.mqtt_password, host="localhost")  # type: ignore[call-arg]
         else:
             settings.mqtt.password = args.mqtt_password
     if args.mqtt_reconnect_interval is not None:
         if settings.mqtt is None:
             settings.mqtt = MqttSettings(
                 reconnect_interval=args.mqtt_reconnect_interval, host="localhost"
-            )
+            )  # type: ignore[call-arg]
         else:
             settings.mqtt.reconnect_interval = args.mqtt_reconnect_interval
     if args.log_level is not None:

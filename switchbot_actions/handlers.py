@@ -26,6 +26,7 @@ class AutomationHandler:
             elif source in ["switchbot_timer", "mqtt_timer"]:
                 self._action_runners.append(TimerActionRunner(config))
             else:
+                # never pass
                 logger.warning(f"Unknown source '{source}' for config: {config}")
 
         switchbot_advertisement_received.connect(self.handle_state_change)

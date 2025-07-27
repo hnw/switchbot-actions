@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from unittest.mock import AsyncMock, patch
 
 import aiomqtt
@@ -57,22 +56,6 @@ class TestAutomationHandler:
             assert len(handler._action_runners) == 2
             mock_event_action_runner.assert_called_once_with(configs[0])
             mock_timer_action_runner.assert_called_once_with(configs[1])
-
-    @pytest.mark.asyncio
-    async def test_init_logs_warning_for_unknown_source(self, caplog):
-        configs = [
-            AutomationRule.model_validate(
-                {
-                    "name": "config3",
-                    "if": {"source": "unknown"},
-                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
-                }
-            )
-        ]
-        with caplog.at_level(logging.WARNING):
-            AutomationHandler(configs)
-            assert "Unknown source 'unknown' for config" in caplog.text
-        assert len(caplog.records) == 1  # Only the warning, no info log for 0 runners
 
     @pytest.mark.asyncio
     @patch(
@@ -135,7 +118,7 @@ class TestAutomationHandler:
             AutomationRule.model_validate(
                 {
                     "name": "mqtt_config",
-                    "if": {"source": "mqtt"},
+                    "if": {"source": "mqtt", "topic": "#"},
                     "then": [{"type": "shell_command", "command": "echo 'test'"}],
                 }
             )
@@ -154,7 +137,7 @@ class TestAutomationHandler:
             AutomationRule.model_validate(
                 {
                     "name": "config1",
-                    "if": {"source": "mqtt"},
+                    "if": {"source": "mqtt", "topic": "#"},
                     "then": [{"type": "shell_command", "command": "echo 'test'"}],
                 }
             )

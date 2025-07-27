@@ -6,6 +6,7 @@ from switchbot_actions.config import (
     AutomationIf,
     AutomationRule,
     LoggingSettings,
+    MqttPublishAction,
     MqttSettings,
     PrometheusExporterSettings,
     ScannerSettings,
@@ -15,7 +16,7 @@ from switchbot_actions.config import (
 
 
 def test_mqtt_settings_defaults():
-    settings = MqttSettings(host="localhost")
+    settings = MqttSettings(host="localhost")  # type: ignore[call-arg]
     assert settings.host == "localhost"
     assert settings.port == 1883
     assert settings.username is None
@@ -23,11 +24,23 @@ def test_mqtt_settings_defaults():
     assert settings.reconnect_interval == 10
 
 
+@pytest.mark.parametrize("port", [0, 65536])
+def test_mqtt_settings_invalid_port(port):
+    with pytest.raises(ValidationError):
+        MqttSettings(host="localhost", port=port)
+
+
 def test_prometheus_exporter_settings_defaults():
-    settings = PrometheusExporterSettings()
+    settings = PrometheusExporterSettings()  # type: ignore[call-arg]
     assert settings.enabled is False
     assert settings.port == 8000
     assert settings.target == {}
+
+
+@pytest.mark.parametrize("port", [0, 65536])
+def test_prometheus_exporter_settings_invalid_port(port):
+    with pytest.raises(ValidationError):
+        PrometheusExporterSettings(port=port)
 
 
 def test_scanner_settings_defaults():
@@ -68,8 +81,8 @@ def test_logging_settings_invalid_level():
 def test_automation_if_timer_source_requires_duration():
     # Valid case
     AutomationIf(source="switchbot_timer", duration=10)
-    AutomationIf(source="mqtt_timer", duration=5)
-    AutomationIf(source="some_other_source")  # No duration required
+    AutomationIf(source="mqtt_timer", duration=5, topic="a/b")
+    AutomationIf(source="switchbot")  # No duration required
 
     # Invalid cases
     with pytest.raises(
@@ -79,13 +92,50 @@ def test_automation_if_timer_source_requires_duration():
     with pytest.raises(
         ValidationError, match="'duration' is required for source 'mqtt_timer'"
     ):
-        AutomationIf(source="mqtt_timer")
+        AutomationIf(source="mqtt_timer", topic="a/b")
+
+
+def test_automation_if_mqtt_source_requires_topic():
+    # Valid case
+    AutomationIf(source="mqtt", topic="test/topic")
+    AutomationIf(source="mqtt_timer", topic="test/topic", duration=1)
+    AutomationIf(source="switchbot")  # No topic required
+
+    # Invalid cases
+    with pytest.raises(ValidationError, match="'topic' is required for source 'mqtt'"):
+        AutomationIf(source="mqtt")
+    with pytest.raises(
+        ValidationError, match="'topic' is required for source 'mqtt_timer'"
+    ):
+        AutomationIf(source="mqtt_timer", duration=1)
+
+
+@pytest.mark.parametrize("method_in, method_out", [("post", "POST"), ("get", "GET")])
+def test_webhook_action_method_case_insensitivity(method_in, method_out):
+    action = WebhookAction(type="webhook", url="http://example.com", method=method_in)
+    assert action.method == method_out
+
+
+def test_webhook_action_invalid_method():
+    with pytest.raises(ValidationError, match="method must be POST or GET"):
+        WebhookAction(type="webhook", url="http://example.com", method="PUT")
+
+
+@pytest.mark.parametrize("qos", [0, 1, 2])
+def test_mqtt_publish_action_valid_qos(qos):
+    action = MqttPublishAction(type="mqtt_publish", topic="a/b", qos=qos)
+    assert action.qos == qos
+
+
+def test_mqtt_publish_action_invalid_qos():
+    with pytest.raises(ValidationError):
+        MqttPublishAction(type="mqtt_publish", topic="a/b", qos=3)  # type: ignore[arg-type]
 
 
 def test_automation_rule_then_block_single_dict_to_list():
     rule = AutomationRule.model_validate(
         {
-            "if": {"source": "test"},
+            "if": {"source": "switchbot"},
             "then": {"type": "shell_command", "command": "echo hello"},
         }
     )
@@ -98,7 +148,7 @@ def test_automation_rule_then_block_single_dict_to_list():
 def test_automation_rule_then_block_already_list():
     rule = AutomationRule.model_validate(
         {
-            "if": {"source": "test"},
+            "if": {"source": "switchbot"},
             "then": [
                 {"type": "shell_command", "command": "echo hello"},
                 {"type": "webhook", "url": "http://example.com"},
@@ -147,7 +197,9 @@ def test_app_settings_from_dict():
     assert settings.automations[0].if_block.source == "switchbot_timer"
     assert settings.automations[0].if_block.duration == 60
     assert isinstance(settings.automations[0].then_block[0], WebhookAction)
-    assert settings.automations[0].then_block[0].url == "http://example.com/turn_on"
+    assert (
+        str(settings.automations[0].then_block[0].url) == "http://example.com/turn_on"
+    )
 
 
 def test_app_settings_invalid_config_data():
@@ -185,3 +237,30 @@ def test_app_settings_invalid_config_data():
     }
     with pytest.raises(ValidationError):
         AppSettings.model_validate(invalid_config_data)
+
+
+def test_app_settings_with_multiple_automations():
+    config_data = {
+        "automations": [
+            {
+                "if": {"source": "switchbot_timer", "duration": 60},
+                "then": [{"type": "webhook", "url": "http://example.com/turn_on"}],
+            },
+            {
+                "if": {"source": "mqtt", "topic": "home/light/status"},
+                "then": [
+                    {"type": "shell_command", "command": "echo 'Light status changed'"}
+                ],
+            },
+        ]
+    }
+    settings = AppSettings.model_validate(config_data)
+    assert len(settings.automations) == 2
+    assert settings.automations[0].if_block.source == "switchbot_timer"
+    assert settings.automations[1].if_block.source == "mqtt"
+    assert settings.automations[1].if_block.topic == "home/light/status"
+    assert isinstance(settings.automations[0].then_block[0], WebhookAction)
+    assert isinstance(settings.automations[1].then_block[0], ShellCommandAction)
+    assert (
+        settings.automations[1].then_block[0].command == "echo 'Light status changed'"
+    )

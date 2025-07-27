@@ -152,7 +152,7 @@ def _format_switchbot_string(
         "modelName": state.data.get("modelName"),
         "rssi": getattr(state, "rssi", None),
     }
-    return template_string.format(**flat_data)
+    return str(template_string).format(**flat_data)
 
 
 class MqttFormatter(string.Formatter):
