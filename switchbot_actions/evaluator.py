@@ -7,6 +7,8 @@ from typing import Any, TypeAlias, Union
 import aiomqtt
 from switchbot import SwitchBotAdvertisement
 
+from .config import AutomationIf
+
 StateObject: TypeAlias = Union[SwitchBotAdvertisement, aiomqtt.Message]
 
 logger = logging.getLogger(__name__)
@@ -54,9 +56,9 @@ def evaluate_condition(condition: str, new_value: Any) -> bool:
         return False
 
 
-def check_conditions(if_config: dict, state: StateObject) -> bool | None:
+def check_conditions(if_config: AutomationIf, state: StateObject) -> bool | None:
     """Checks if the state object meets all specified conditions."""
-    source = if_config.get("source")
+    source = if_config.source
     if source in ["switchbot", "switchbot_timer"] and isinstance(
         state, SwitchBotAdvertisement
     ):
@@ -67,10 +69,10 @@ def check_conditions(if_config: dict, state: StateObject) -> bool | None:
 
 
 def _check_switchbot_conditions(
-    if_config: dict, state: SwitchBotAdvertisement
+    if_config: AutomationIf, state: SwitchBotAdvertisement
 ) -> bool | None:
-    device_cond = if_config.get("device", {})
-    state_cond = if_config.get("state", {})
+    device_cond = if_config.device
+    state_cond = if_config.state
 
     for key, expected_value in device_cond.items():
         if key == "address":
@@ -96,15 +98,17 @@ def _check_switchbot_conditions(
     return True
 
 
-def _check_mqtt_conditions(if_config: dict, state: aiomqtt.Message) -> bool | None:
-    mqtt_topic = if_config.get("topic")
+def _check_mqtt_conditions(
+    if_config: AutomationIf, state: aiomqtt.Message
+) -> bool | None:
+    mqtt_topic = if_config.topic
     if not mqtt_topic:
         return None
 
     if not aiomqtt.Topic(mqtt_topic).matches(state.topic):
         return None
 
-    state_cond = if_config.get("state", {})
+    state_cond = if_config.state
     if isinstance(state.payload, bytes):
         payload_decoded = state.payload.decode()
     else:

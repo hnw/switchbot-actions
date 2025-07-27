@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import aiomqtt
 import pytest
 
+from switchbot_actions.config import AutomationRule
 from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.mqtt import mqtt_message_received
 from switchbot_actions.signals import state_changed
@@ -36,8 +37,20 @@ class TestAutomationHandler:
             ) as mock_timer_action_runner,
         ):
             configs = [
-                {"if": {"source": "switchbot"}, "name": "config1"},
-                {"if": {"source": "switchbot_timer"}, "name": "config2"},
+                AutomationRule.model_validate(
+                    {
+                        "name": "config1",
+                        "if": {"source": "switchbot"},
+                        "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                    }
+                ),
+                AutomationRule.model_validate(
+                    {
+                        "name": "config2",
+                        "if": {"source": "switchbot_timer", "duration": "3m"},
+                        "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                    }
+                ),
             ]
             handler = AutomationHandler(configs)
 
@@ -47,7 +60,15 @@ class TestAutomationHandler:
 
     @pytest.mark.asyncio
     async def test_init_logs_warning_for_unknown_source(self, caplog):
-        configs = [{"if": {"source": "unknown"}, "name": "config3"}]
+        configs = [
+            AutomationRule.model_validate(
+                {
+                    "name": "config3",
+                    "if": {"source": "unknown"},
+                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                }
+            )
+        ]
         with caplog.at_level(logging.WARNING):
             AutomationHandler(configs)
             assert "Unknown source 'unknown' for config" in caplog.text
@@ -61,7 +82,15 @@ class TestAutomationHandler:
     async def test_handle_state_change_schedules_runner_task(
         self, mock_run_all_runners, mock_switchbot_advertisement
     ):
-        configs = [{"if": {"source": "switchbot"}, "name": "config1"}]
+        configs = [
+            AutomationRule.model_validate(
+                {
+                    "name": "config1",
+                    "if": {"source": "switchbot"},
+                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                }
+            ),
+        ]
         _ = AutomationHandler(configs)
 
         new_state = mock_switchbot_advertisement(address="DE:AD:BE:EF:00:01")
@@ -73,7 +102,15 @@ class TestAutomationHandler:
 
     @pytest.mark.asyncio
     async def test_handle_state_change_does_nothing_if_no_new_state(self):
-        configs = [{"if": {"source": "switchbot"}, "name": "config1"}]
+        configs = [
+            AutomationRule.model_validate(
+                {
+                    "name": "config1",
+                    "if": {"source": "switchbot"},
+                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                }
+            ),
+        ]
         handler = AutomationHandler(configs)
 
         # Mock the run method of the internal runner to ensure it's not called
@@ -94,7 +131,15 @@ class TestAutomationHandler:
         self, mock_run_all_runners, mock_mqtt_message
     ):
         """Test that mqtt_message_received signal triggers the action runner."""
-        configs = [{"if": {"source": "mqtt"}, "name": "mqtt_config"}]
+        configs = [
+            AutomationRule.model_validate(
+                {
+                    "name": "mqtt_config",
+                    "if": {"source": "mqtt"},
+                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                }
+            )
+        ]
         _ = AutomationHandler(configs)
 
         mqtt_message_received.send(None, message=mock_mqtt_message)
@@ -105,7 +150,15 @@ class TestAutomationHandler:
     @pytest.mark.asyncio
     async def test_handle_mqtt_message_does_nothing_if_no_message(self):
         """Test that handle_mqtt_message does nothing if no message is provided."""
-        configs = [{"if": {"source": "mqtt"}, "name": "config1"}]
+        configs = [
+            AutomationRule.model_validate(
+                {
+                    "name": "config1",
+                    "if": {"source": "mqtt"},
+                    "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                }
+            )
+        ]
         handler = AutomationHandler(configs)
 
         runner_instance = handler._action_runners[0]
@@ -121,8 +174,20 @@ class TestAutomationHandler:
 @pytest.mark.asyncio
 async def test_run_all_runners_concurrently(mock_switchbot_advertisement):
     configs = [
-        {"if": {"source": "switchbot"}, "name": "config1"},
-        {"if": {"source": "switchbot"}, "name": "config2"},
+        AutomationRule.model_validate(
+            {
+                "name": "config1",
+                "if": {"source": "switchbot"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        ),
+        AutomationRule.model_validate(
+            {
+                "name": "config2",
+                "if": {"source": "switchbot"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        ),
     ]
     handler = AutomationHandler(configs)
 

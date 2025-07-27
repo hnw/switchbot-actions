@@ -5,6 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from switchbot_actions import action_executor
+from switchbot_actions.config import (
+    MqttPublishAction,
+    ShellCommandAction,
+    WebhookAction,
+)
 
 
 # --- Tests for format_string ---
@@ -41,13 +46,13 @@ async def test_execute_action_shell(
             "data": {"isOn": True, "battery": 95},
         },
     )
-    action_config = {
-        "type": "shell_command",
-        "command": "echo 'Bot {address} pressed'",
-    }
+    action_config = ShellCommandAction(
+        type="shell_command",
+        command="echo 'Bot {address} pressed'",
+    )
     await action_executor.execute_action(action_config, state_object)
     mock_create_subprocess_shell.assert_called_once_with(
-        action_executor.format_string(action_config["command"], state_object),
+        action_executor.format_string(action_config.command, state_object),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -74,16 +79,16 @@ async def test_execute_action_webhook_post_success(
             "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
         },
     )
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "POST",
-        "payload": {"temp": "{temperature}", "addr": "{address}"},
-    }
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",
+        payload={"temp": "{temperature}", "addr": "{address}"},
+    )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_post.assert_called_once_with(
-        action_executor.format_string(action_config["url"], state_object),
+        action_executor.format_string(action_config.url, state_object),
         json=expected_payload,
         headers={},
         timeout=10,
@@ -112,16 +117,16 @@ async def test_execute_action_webhook_get(
             "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
         },
     )
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "GET",
-        "payload": {"temp": "{temperature}", "addr": "{address}"},
-    }
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="GET",
+        payload={"temp": "{temperature}", "addr": "{address}"},
+    )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_get.assert_called_once_with(
-        action_executor.format_string(action_config["url"], state_object),
+        action_executor.format_string(action_config.url, state_object),
         params=expected_payload,
         headers={},
         timeout=10,
@@ -148,12 +153,12 @@ async def test_execute_action_webhook_get_success(
             "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
         },
     )
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "GET",
-        "payload": {"temp": "{temperature}", "addr": "{address}"},
-    }
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="GET",
+        payload={"temp": "{temperature}", "addr": "{address}"},
+    )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_get.assert_called_once_with(
@@ -184,12 +189,12 @@ async def test_execute_action_webhook_post_failure_400(
             "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
         },
     )
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "POST",
-        "payload": {"temp": "{temperature}", "addr": "{address}"},
-    }
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",
+        payload={"temp": "{temperature}", "addr": "{address}"},
+    )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_post.assert_called_once_with(
@@ -221,12 +226,12 @@ async def test_execute_action_webhook_get_failure_500(
             "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
         },
     )
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "GET",
-        "payload": {"temp": "{temperature}", "addr": "{address}"},
-    }
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="GET",
+        payload={"temp": "{temperature}", "addr": "{address}"},
+    )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
     mock_get.assert_called_once_with(
@@ -249,13 +254,25 @@ async def test_execute_action_webhook_unsupported_method(
     mock_async_client.return_value.__aenter__.return_value = mock_client
 
     state_object = mock_switchbot_advertisement()
-    action_config = {
-        "type": "webhook",
-        "url": "http://example.com/hook",
-        "method": "PUT",  # Unsupported method
-        "payload": {},
-    }
-    await action_executor.execute_action(action_config, state_object)
+
+    # Create a dummy action config that is not a valid AutomationAction subclass
+    # to test the unsupported method logging.
+    class DummyAction:
+        type = "webhook"
+        url = "http://example.com/hook"
+        method = "PUT"
+        payload = {}
+        headers = {}
+
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="GET",  # Use a valid method for instantiation
+        payload={},
+    )
+    # Temporarily change the method to an unsupported one for testing
+    with patch.object(action_config, "method", "PUT"):
+        await action_executor.execute_action(action_config, state_object)
     mock_client.post.assert_not_called()
     mock_client.get.assert_not_called()
     assert "Unsupported HTTP method for webhook: PUT" in caplog.text
@@ -265,8 +282,12 @@ async def test_execute_action_webhook_unsupported_method(
 async def test_execute_action_unknown_type(caplog, mock_switchbot_advertisement):
     caplog.set_level(logging.WARNING)
     state_object = mock_switchbot_advertisement()
-    action_config = {"type": "unknown_action"}
-    await action_executor.execute_action(action_config, state_object)
+    # Create a mock object that is not an instance of any AutomationAction subclass
+    # to test the unknown type logging.
+    mock_action_config = MagicMock()
+    mock_action_config.type = "unknown_action"
+
+    await action_executor.execute_action(mock_action_config, state_object)
     assert "Unknown trigger type: unknown_action" in caplog.text
 
 
@@ -275,13 +296,13 @@ async def test_execute_action_unknown_type(caplog, mock_switchbot_advertisement)
 async def test_execute_action_mqtt_publish(mock_signal_send, mqtt_message_json):
     """Test that mqtt_publish action sends the correct signal."""
     state_object = mqtt_message_json
-    action_config = {
-        "type": "mqtt_publish",
-        "topic": "home/actors/actor1",
-        "payload": {"new_temp": "{temperature}"},
-        "qos": 1,
-        "retain": True,
-    }
+    action_config = MqttPublishAction(
+        type="mqtt_publish",
+        topic="home/actors/actor1",
+        payload={"new_temp": "{temperature}"},
+        qos=1,
+        retain=True,
+    )
 
     await action_executor.execute_action(action_config, state_object)
 

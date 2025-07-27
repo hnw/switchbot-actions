@@ -27,6 +27,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "pydantic",
     "pyswitchbot",
     "blinker",
     "prometheus-client",

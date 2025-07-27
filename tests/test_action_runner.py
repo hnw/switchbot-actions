@@ -9,6 +9,7 @@ from switchbot_actions.action_runner import (
     EventActionRunner,
     TimerActionRunner,
 )
+from switchbot_actions.config import AutomationRule
 from switchbot_actions.timers import Timer
 
 
@@ -20,21 +21,28 @@ class TestActionRunnerBase:
     ):
         state_object_1 = mock_switchbot_advertisement(address="device_1")
         state_object_2 = mock_switchbot_advertisement(address="device_2")
-        config = {
-            "name": "Cooldown Test",
-            "cooldown": "10s",
-            "then": [{"type": "shell"}],
-        }
+        config = AutomationRule.model_validate(
+            {
+                "name": "Cooldown Test",
+                "cooldown": "10s",
+                "if": {"source": "test"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        )
         runner = EventActionRunner(config)
 
         # Run for device 1, should execute
         await runner._execute_actions(state_object_1)
-        mock_execute_action.assert_called_once_with(config["then"][0], state_object_1)
+        mock_execute_action.assert_called_once_with(
+            config.then_block[0], state_object_1
+        )
         mock_execute_action.reset_mock()
 
         # Run for device 2, should also execute as cooldown is per-device
         await runner._execute_actions(state_object_2)
-        mock_execute_action.assert_called_once_with(config["then"][0], state_object_2)
+        mock_execute_action.assert_called_once_with(
+            config.then_block[0], state_object_2
+        )
         mock_execute_action.reset_mock()
 
         # Run for device 1 again within cooldown, should skip
@@ -45,7 +53,7 @@ class TestActionRunnerBase:
         with patch("time.time", return_value=time.time() + 15):
             await runner._execute_actions(state_object_1)
             mock_execute_action.assert_called_once_with(
-                config["then"][0], state_object_1
+                config.then_block[0], state_object_1
             )
 
 
@@ -56,7 +64,13 @@ class TestEventActionRunner:
     async def test_run_executes_actions_on_edge_trigger(
         self, mock_check_conditions, mock_execute_actions, mock_switchbot_advertisement
     ):
-        config = {"name": "Test Rule", "if": {}, "then": []}
+        config = AutomationRule.model_validate(
+            {
+                "name": "Test Rule",
+                "if": {"source": "test"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        )
         state_object = mock_switchbot_advertisement(address="test_device")
         runner = EventActionRunner(config)
 
@@ -100,7 +114,13 @@ class TestTimerActionRunner:
         MockTimer: MagicMock,
         mock_switchbot_advertisement,
     ):
-        config = {"name": "Timer Test", "if": {"duration": "5s"}, "then": []}
+        config = AutomationRule.model_validate(
+            {
+                "name": "Timer Test",
+                "if": {"source": "timer", "duration": "5s"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        )
         runner = TimerActionRunner(config)
         # Each call to Timer should return a new mock instance
         MockTimer.side_effect = [MagicMock(spec=Timer), MagicMock(spec=Timer)]
@@ -137,7 +157,13 @@ class TestTimerActionRunner:
     async def test_run_handles_none_from_check_conditions(
         self, mock_check_conditions, caplog, mock_switchbot_advertisement
     ):
-        config = {"name": "Timer Test", "if": {"duration": "5s"}, "then": []}
+        config = AutomationRule.model_validate(
+            {
+                "name": "Timer Test",
+                "if": {"source": "timer", "duration": "5s"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        )
         runner = TimerActionRunner(config)
         state = mock_switchbot_advertisement(address="test_device")
 
@@ -159,7 +185,13 @@ class TestTimerActionRunner:
     async def test_timer_callback_executes_actions_and_clears_timer(
         self, mock_execute_actions, mock_switchbot_advertisement
     ):
-        config = {"name": "Callback Test", "if": {"duration": "1s"}, "then": []}
+        config = AutomationRule.model_validate(
+            {
+                "name": "Callback Test",
+                "if": {"source": "timer", "duration": "1s"},
+                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+            }
+        )
         runner = TimerActionRunner(config)
         state = mock_switchbot_advertisement(address="test_device")
         runner._active_timers["test_device"] = MagicMock(spec=Timer)

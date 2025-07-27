@@ -4,28 +4,36 @@ import logging
 
 import httpx
 
+from .config import (
+    AutomationAction,
+    MqttPublishAction,
+    ShellCommandAction,
+    WebhookAction,
+)
 from .evaluator import StateObject, format_string
 from .signals import publish_mqtt_message_request
 
 logger = logging.getLogger(__name__)
 
 
-async def execute_action(action: dict, state: StateObject) -> None:
+async def execute_action(action: AutomationAction, state: StateObject) -> None:
     """Executes the specified action (e.g., shell command, webhook)."""
-    action_type = action.get("type")
+    action_type = action.type
 
-    if action_type == "shell_command":
+    if isinstance(action, ShellCommandAction):
         await _execute_shell_command(action, state)
-    elif action_type == "webhook":
+    elif isinstance(action, WebhookAction):
         await _execute_webhook(action, state)
-    elif action_type == "mqtt_publish":
+    elif isinstance(action, MqttPublishAction):
         await _execute_mqtt_publish(action, state)
     else:
         logger.warning(f"Unknown trigger type: {action_type}")
 
 
-async def _execute_shell_command(action: dict, state: StateObject) -> None:
-    command = format_string(action["command"], state)
+async def _execute_shell_command(
+    action: ShellCommandAction, state: StateObject
+) -> None:
+    command = format_string(action.command, state)
     logger.debug(f"Executing shell command: {command}")
     process = await asyncio.create_subprocess_shell(
         command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -39,36 +47,31 @@ async def _execute_shell_command(action: dict, state: StateObject) -> None:
         logger.error(f"Shell command failed with exit code {process.returncode}")
 
 
-async def _execute_webhook(action: dict, state: StateObject) -> None:
-    url = format_string(action["url"], state)
-    method = action.get("method", "POST").upper()
-    payload = action.get("payload", {})
-    headers = action.get("headers", {})
+async def _execute_webhook(action: WebhookAction, state: StateObject) -> None:
+    url = format_string(action.url, state)
+    method = action.method
 
     # Format payload
-    if isinstance(payload, dict):
-        formatted_payload = {
-            k: format_string(str(v), state) for k, v in payload.items()
-        }
+    if isinstance(action.payload, dict):
+        payload = {k: format_string(str(v), state) for k, v in action.payload.items()}
     else:
-        formatted_payload = format_string(str(payload), state)
+        payload = format_string(str(action.payload), state)
 
     # Format headers
-    formatted_headers = {k: format_string(str(v), state) for k, v in headers.items()}
+    headers = {k: format_string(str(v), state) for k, v in action.headers.items()}
 
     logger.debug(
-        f"Sending webhook: {method} {url} with payload {formatted_payload} "
-        f"and headers {formatted_headers}"
+        f"Sending webhook: {method} {url} with payload {payload} and headers {headers}"
     )
     try:
         async with httpx.AsyncClient() as client:
             if method == "POST":
                 response = await client.post(
-                    url, json=formatted_payload, headers=formatted_headers, timeout=10
+                    url, json=payload, headers=headers, timeout=10
                 )
             elif method == "GET":
                 response = await client.get(
-                    url, params=formatted_payload, headers=formatted_headers, timeout=10
+                    url, params=payload, headers=headers, timeout=10
                 )
             else:
                 logger.error(f"Unsupported HTTP method for webhook: {method}")
@@ -90,19 +93,18 @@ async def _execute_webhook(action: dict, state: StateObject) -> None:
         logger.error(f"Webhook failed: {e}")
 
 
-async def _execute_mqtt_publish(action: dict, state: StateObject) -> None:
-    topic = format_string(action["topic"], state)
-    payload_config = action.get("payload", "")
-    qos = action.get("qos", 0)
-    retain = action.get("retain", False)
+async def _execute_mqtt_publish(action: MqttPublishAction, state: StateObject) -> None:
+    topic = format_string(action.topic, state)
+    qos = action.qos
+    retain = action.retain
 
-    if isinstance(payload_config, dict):
+    if isinstance(action.payload, dict):
         formatted_payload = {
-            k: format_string(str(v), state) for k, v in payload_config.items()
+            k: format_string(str(v), state) for k, v in action.payload.items()
         }
         payload = json.dumps(formatted_payload)
     else:
-        payload = format_string(str(payload_config), state)
+        payload = format_string(str(action.payload), state)
 
     logger.debug(
         f"Publishing MQTT message to topic '{topic}' with payload '{payload}' "

@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from .action_runner import ActionRunnerBase, EventActionRunner, TimerActionRunner
+from .config import AutomationRule
 from .evaluator import StateObject
 from .mqtt import mqtt_message_received
 from .signals import state_changed
@@ -16,11 +17,10 @@ class AutomationHandler:
     ActionRunner instances.
     """
 
-    def __init__(self, configs: list):
+    def __init__(self, configs: list[AutomationRule]):
         self._action_runners: list[ActionRunnerBase] = []
-
         for config in configs:
-            source = config.get("if", {}).get("source")
+            source = config.if_block.source
             if source in ["switchbot", "mqtt"]:
                 self._action_runners.append(EventActionRunner(config))
             elif source in ["switchbot_timer", "mqtt_timer"]:

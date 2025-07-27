@@ -6,6 +6,7 @@ import pytest
 from switchbot import SwitchBotAdvertisement
 
 from switchbot_actions import evaluator
+from switchbot_actions.config import AutomationIf
 
 
 @pytest.fixture
@@ -52,90 +53,100 @@ def test_evaluate_condition(condition, value, expected):
 
 def test_check_conditions_device_pass(sample_state):
     """Test that device conditions pass."""
-    if_config = {
-        "source": "switchbot",
-        "device": {"address": "e1:22:33:44:55:66", "modelName": "WoSensorTH"},
-    }
+    if_config = AutomationIf(
+        source="switchbot",
+        device={
+            "address": "e1:22:33:44:55:66",
+            "modelName": "WoSensorTH",
+        },
+    )
     assert evaluator.check_conditions(if_config, sample_state) is True
 
 
 def test_check_conditions_device_fail(sample_state):
     """Test that device conditions fail."""
-    if_config = {
-        "source": "switchbot",
-        "device": {"address": "e1:22:33:44:55:66", "modelName": "WoPresence"},
-    }
+    if_config = AutomationIf(
+        source="switchbot",
+        device={
+            "address": "e1:22:33:44:55:66",
+            "modelName": "WoPresence",
+        },
+    )
     assert evaluator.check_conditions(if_config, sample_state) is False
 
 
 def test_check_conditions_state_pass(sample_state):
     """Test that state conditions pass."""
-    if_config = {
-        "source": "switchbot",
-        "state": {"temperature": "> 20", "humidity": "< 60"},
-    }
+    if_config = AutomationIf(
+        source="switchbot",
+        state={"temperature": "> 20", "humidity": "< 60"},
+    )
     assert evaluator.check_conditions(if_config, sample_state) is True
 
 
 def test_check_conditions_state_fail(sample_state):
     """Test that state conditions fail."""
-    if_config = {"source": "switchbot", "state": {"temperature": "> 30"}}
+    if_config = AutomationIf(source="switchbot", state={"temperature": "> 30"})
     assert evaluator.check_conditions(if_config, sample_state) is False
 
 
 def test_check_conditions_rssi(sample_state):
     """Test that RSSI conditions are checked correctly."""
-    if_config = {"source": "switchbot", "state": {"rssi": "> -60"}}
+    if_config = AutomationIf(source="switchbot", state={"rssi": "> -60"})
     assert evaluator.check_conditions(if_config, sample_state) is True
-    if_config = {"source": "switchbot", "state": {"rssi": "< -60"}}
+    if_config = AutomationIf(source="switchbot", state={"rssi": "< -60"})
     assert evaluator.check_conditions(if_config, sample_state) is False
 
 
 def test_check_conditions_no_data(sample_state):
     """Test conditions when a key is not in state data."""
-    if_config = {"source": "switchbot", "state": {"non_existent_key": "some_value"}}
+    if_config = AutomationIf(
+        source="switchbot", state={"non_existent_key": "some_value"}
+    )
     assert evaluator.check_conditions(if_config, sample_state) is None
 
 
 def test_check_conditions_mqtt_payload_pass(mqtt_message_plain):
     """Test that MQTT payload conditions pass for plain text."""
-    if_config = {"source": "mqtt", "topic": "test/topic", "state": {"payload": "ON"}}
+    if_config = AutomationIf(source="mqtt", topic="test/topic", state={"payload": "ON"})
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is True
 
 
 def test_check_conditions_mqtt_payload_fail(mqtt_message_plain):
     """Test that MQTT payload conditions fail for plain text."""
-    if_config = {"source": "mqtt", "topic": "test/topic", "state": {"payload": "OFF"}}
+    if_config = AutomationIf(
+        source="mqtt", topic="test/topic", state={"payload": "OFF"}
+    )
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is False
 
 
 def test_check_conditions_mqtt_json_pass(mqtt_message_json):
     """Test that MQTT payload conditions pass for JSON."""
-    if_config = {
-        "source": "mqtt",
-        "topic": "home/sensor1",
-        "state": {"temperature": "> 25.0", "humidity": "== 55"},
-    }
+    if_config = AutomationIf(
+        source="mqtt",
+        topic="home/sensor1",
+        state={"temperature": "> 25.0", "humidity": "== 55"},
+    )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is True
 
 
 def test_check_conditions_mqtt_json_fail(mqtt_message_json):
     """Test that MQTT payload conditions fail for JSON."""
-    if_config = {
-        "source": "mqtt",
-        "topic": "home/sensor1",
-        "state": {"temperature": "< 25.0"},
-    }
+    if_config = AutomationIf(
+        source="mqtt",
+        topic="home/sensor1",
+        state={"temperature": "< 25.0"},
+    )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is False
 
 
 def test_check_conditions_mqtt_json_no_key(mqtt_message_json):
     """Test MQTT conditions when a key is not in the JSON payload."""
-    if_config = {
-        "source": "mqtt",
-        "topic": "home/sensor1",
-        "state": {"non_existent_key": "some_value"},
-    }
+    if_config = AutomationIf(
+        source="mqtt",
+        topic="home/sensor1",
+        state={"non_existent_key": "some_value"},
+    )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is None
 
 

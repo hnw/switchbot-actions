@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import signal
-import sys
-from argparse import Namespace
 
+import yaml
+from pydantic import ValidationError
 from switchbot import GetSwitchbotDevices
 
 from .config import AppSettings
@@ -18,9 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class Application:
-    def __init__(self, settings: AppSettings, args: Namespace):
+    def __init__(self, settings: AppSettings):
         self.settings = settings
-        self.args = args
         self.tasks: list[asyncio.Task] = []
         self.stopping = False
 
@@ -81,16 +80,31 @@ class Application:
     def reload_settings(self):
         """Reload settings from the configuration file."""
         logger.info("SIGHUP received, reloading configuration.")
-        new_config_data = AppSettings.load_from_yaml(self.settings.config_path)
-        if new_config_data is None:
+        try:
+            with open(self.settings.config_path, "r") as f:
+                config_data = yaml.safe_load(f) or {}
+            new_settings = AppSettings.model_validate(config_data)
+        except FileNotFoundError:
+            logger.error(
+                f"Configuration file not found at {self.settings.config_path}, "
+                f"keeping the old one."
+            )
+            return
+        except yaml.YAMLError as e:
+            mark = getattr(e, "mark", None)
+            if mark:
+                logger.error(
+                    f"Error parsing YAML file: {e}\n"
+                    f"  Line: {mark.line + 1}, Column: {mark.column + 1}"
+                )
+            else:
+                logger.error(f"Error parsing YAML file: {e}")
             logger.error("Failed to parse new configuration, keeping the old one.")
             return
-
-        # Create new settings object from reloaded config
-        new_settings = AppSettings.from_config_dict(
-            new_config_data, self.settings.config_path
-        )
-        new_settings.apply_cli_args(self.args)  # Re-apply cli args
+        except ValidationError as e:
+            logger.error(f"Configuration validation error during reload: {e}")
+            logger.error("Failed to validate new configuration, keeping the old one.")
+            return
 
         self.settings = new_settings
         self._configure_components()
@@ -123,16 +137,8 @@ class Application:
         logger.info("Application stopped.")
 
 
-async def run_app(settings: AppSettings, args: Namespace):
-    # Validate settings
-    if settings.scanner.duration > settings.scanner.cycle:
-        logger.error(
-            f"Scan duration ({settings.scanner.duration}s) cannot be longer than "
-            f"the scan cycle ({settings.scanner.cycle}s)."
-        )
-        sys.exit(1)
-
-    app = Application(settings, args)
+async def run_app(settings: AppSettings):
+    app = Application(settings)
     loop = asyncio.get_running_loop()
 
     # Set up signal handlers

@@ -1,163 +1,124 @@
-import argparse
-import sys
-from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from datetime import timedelta
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-import yaml
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pytimeparse2 import parse
 
 
-@dataclass
-class MqttSettings:
+class MqttSettings(BaseModel):
     host: str
     port: int = 1883
-    username: str | None = None
-    password: str | None = None
+    username: Optional[str] = None
+    password: Optional[str] = None
     reconnect_interval: int = 10
 
 
-@dataclass
-class PrometheusExporterSettings:
+class PrometheusExporterSettings(BaseModel):
     enabled: bool = False
     port: int = 8000
-    target: Dict[str, Any] = field(default_factory=dict)
+    target: Dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass
-class ScannerSettings:
+class ScannerSettings(BaseModel):
     cycle: int = 10
     duration: int = 3
     interface: int = 0
 
+    @model_validator(mode="after")
+    def validate_duration_less_than_cycle(self):
+        if self.duration > self.cycle:
+            raise ValueError(
+                "scanner.duration must be less than or equal to scanner.cycle"
+            )
+        return self
 
-@dataclass
-class LoggingSettings:
-    level: str = "INFO"
+
+class LoggingSettings(BaseModel):
+    level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"] = "INFO"
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    loggers: Dict[str, str] = field(default_factory=dict)
+    loggers: Dict[str, str] = Field(default_factory=dict)
 
 
-@dataclass
-class AppSettings:
+class AutomationIf(BaseModel):
+    source: str
+    duration: Optional[float] = None
+    device: Dict[str, Any] = Field(default_factory=dict)
+    state: Dict[str, Any] = Field(default_factory=dict)
+    topic: Optional[str] = None
+
+    @field_validator("duration", mode="before")
+    def parse_duration_string(cls, v: Any) -> Optional[float]:
+        if isinstance(v, str):
+            parsed_duration = parse(v)
+            if parsed_duration is None:
+                raise ValueError(f"Invalid duration string: {v}")
+            if isinstance(parsed_duration, timedelta):
+                return parsed_duration.total_seconds()
+            return parsed_duration
+        return v
+
+    @model_validator(mode="after")
+    def validate_duration_for_timer_source(self):
+        if self.source in ["switchbot_timer", "mqtt_timer"] and self.duration is None:
+            raise ValueError(f"'duration' is required for source '{self.source}'")
+        return self
+
+
+class ShellCommandAction(BaseModel):
+    type: Literal["shell_command"]
+    command: str
+
+
+class WebhookAction(BaseModel):
+    type: Literal["webhook"]
+    url: str
+    method: Literal["POST", "GET"] = "POST"  # TODO：.upper()
+    payload: Union[str, Dict[str, Any]] = ""
+    headers: Dict[str, Any] = Field(default_factory=dict)
+
+
+class MqttPublishAction(BaseModel):
+    type: Literal["mqtt_publish"]
+    topic: str
+    payload: Union[str, Dict[str, Any]] = ""
+    qos: int = 0
+    retain: bool = False
+
+
+AutomationAction = Annotated[
+    Union[ShellCommandAction, WebhookAction, MqttPublishAction],
+    Field(discriminator="type"),
+]
+
+
+class AutomationRule(BaseModel):
+    name: Optional[str] = None
+    cooldown: Optional[str] = None
+
+    if_block: AutomationIf = Field(alias="if")
+    then_block: List[AutomationAction] = Field(alias="then")
+
+    @field_validator("then_block", mode="before")
+    def validate_then_block(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            return [v]  # Convert single dict to a list containing that dict
+        return v
+
+
+class AppSettings(BaseModel):
     config_path: str = "config.yaml"
     debug: bool = False
-    scanner: ScannerSettings = field(default_factory=ScannerSettings)
-    prometheus_exporter: PrometheusExporterSettings = field(
+    scanner: ScannerSettings = Field(default_factory=ScannerSettings)
+    prometheus_exporter: PrometheusExporterSettings = Field(
         default_factory=PrometheusExporterSettings
     )
-    automations: List[Dict[str, Any]] = field(default_factory=list)
-    logging: LoggingSettings = field(default_factory=LoggingSettings)
-    mqtt: MqttSettings | None = None
+    automations: List[AutomationRule] = Field(default_factory=list)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    mqtt: Optional[MqttSettings] = None
 
-    @classmethod
-    def load_from_yaml(cls, path: str) -> Dict[str, Any] | None:
-        try:
-            with open(path, "r") as f:
-                config = yaml.safe_load(f)
-                if config is None:  # Handle empty file
-                    return {}
-                return config
-        except FileNotFoundError:
-            print(
-                f"Configuration file not found at {path}, using defaults.",
-                file=sys.stderr,
-            )
-            return {}
-        except yaml.YAMLError as e:
-            mark = getattr(e, "mark", None)
-            if mark:
-                print(
-                    f"Error parsing YAML file: {e}\n"
-                    f"  Line: {mark.line + 1}, Column: {mark.column + 1}",
-                    file=sys.stderr,
-                )
-            else:
-                print(f"Error parsing YAML file: {e}", file=sys.stderr)
-            return None
-
-    def apply_cli_args(self, args: argparse.Namespace) -> None:
-        if args.debug is not None:
-            self.debug = args.debug
-        if args.config is not None:
-            self.config_path = args.config
-
-        # Apply scanner settings
-        if args.scan_cycle is not None:
-            self.scanner.cycle = args.scan_cycle
-        if args.scan_duration is not None:
-            self.scanner.duration = args.scan_duration
-        if args.interface is not None:
-            self.scanner.interface = args.interface
-
-        # Apply prometheus exporter settings
-        if args.prometheus_exporter_enabled is not None:
-            self.prometheus_exporter.enabled = args.prometheus_exporter_enabled
-        if args.prometheus_exporter_port is not None:
-            self.prometheus_exporter.port = args.prometheus_exporter_port
-
-        # Apply MQTT settings
-        if args.mqtt_host is not None:
-            if self.mqtt is None:
-                self.mqtt = MqttSettings(host=args.mqtt_host)
-            else:
-                self.mqtt.host = args.mqtt_host
-        if args.mqtt_port is not None:
-            if self.mqtt is None:
-                self.mqtt = MqttSettings(
-                    port=args.mqtt_port, host="localhost"
-                )  # Default host if only port is provided
-            else:
-                self.mqtt.port = args.mqtt_port
-        if args.mqtt_username is not None:
-            if self.mqtt is None:
-                self.mqtt = MqttSettings(username=args.mqtt_username, host="localhost")
-            else:
-                self.mqtt.username = args.mqtt_username
-        if args.mqtt_password is not None:
-            if self.mqtt is None:
-                self.mqtt = MqttSettings(password=args.mqtt_password, host="localhost")
-            else:
-                self.mqtt.password = args.mqtt_password
-        if args.mqtt_reconnect_interval is not None:
-            if self.mqtt is None:
-                self.mqtt = MqttSettings(
-                    reconnect_interval=args.mqtt_reconnect_interval, host="localhost"
-                )
-            else:
-                self.mqtt.reconnect_interval = args.mqtt_reconnect_interval
-
-        # Apply logging settings
-        if args.log_level is not None:
-            self.logging.level = args.log_level
-
-    @classmethod
-    def from_config_dict(
-        cls, config_data: Dict[str, Any], config_path: str
-    ) -> "AppSettings":
-        """Create an AppSettings instance from a dictionary."""
-        settings = cls(config_path=config_path)
-
-        if "scanner" in config_data:
-            settings.scanner = ScannerSettings(**config_data["scanner"])
-        if "prometheus_exporter" in config_data:
-            settings.prometheus_exporter = PrometheusExporterSettings(
-                **config_data["prometheus_exporter"]
-            )
-        if "logging" in config_data:
-            settings.logging = LoggingSettings(**config_data["logging"])
-        if "mqtt" in config_data:
-            settings.mqtt = MqttSettings(**config_data["mqtt"])
-        if "automations" in config_data:
-            settings.automations = config_data["automations"]
-
-        return settings
-
-    @classmethod
-    def from_args(cls, args: argparse.Namespace) -> "AppSettings":
-        config_data = cls.load_from_yaml(args.config)
-        if config_data is None:
-            sys.exit(1)
-
-        settings = cls.from_config_dict(config_data, args.config)
-        settings.apply_cli_args(args)
-
-        return settings
+    @model_validator(mode="after")
+    def set_default_automation_names(self) -> "AppSettings":
+        for i, rule in enumerate(self.automations):
+            if rule.name is None:
+                rule.name = f"Unnamed Rule #{i}"
+        return self
