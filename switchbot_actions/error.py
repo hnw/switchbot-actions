@@ -17,15 +17,17 @@ def get_error_snippet(
 
     # Ensure context_lines is non-negative
     context_lines = max(0, context_lines)
+    num_lines = len(lines)
+    if error_lc[0] >= num_lines:
+        error_lc = (num_lines - 1, 0)
 
     start_line = max(0, error_lc[0] - context_lines)
-    end_line = min(len(lines), error_lc[0] + context_lines + 1)
+    end_line = min(num_lines, error_lc[0] + context_lines + 1)
 
     snippet_lines = []
     for i in range(start_line, end_line):
-        line_num = i + 1
-        prefix = "> " if line_num == error_lc[0] + 1 else "  "
-        snippet_lines.append(f"{prefix}{line_num:^4}| {lines[i].rstrip()}")
+        prefix = "> " if i == error_lc[0] else "  "
+        snippet_lines.append(f"{prefix}{i + 1:^4}| {lines[i].rstrip()}")
 
     return "\n".join(snippet_lines)
 

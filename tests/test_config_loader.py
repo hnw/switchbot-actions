@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
+from ruamel.yaml.error import YAMLError
 
 from switchbot_actions.config_loader import load_settings_from_cli
 
@@ -142,6 +143,70 @@ logging:
     assert isinstance(args[0], ValidationError)
     assert args[1] == config_file
     assert isinstance(args[2], dict)
+
+
+def test_load_settings_from_cli_yaml_syntax_error(tmp_path):
+    """
+    Test that load_settings_from_cli handles YAML syntax errors with detailed output.
+    """
+    invalid_yaml_content = """
+automations:
+  - name: "Invalid Indent"
+    then:
+      - type: shell_command
+        command: "echo 'hello'"
+    invalid_key value # This line has an invalid indent (missing colon)
+"""
+    config_file = tmp_path / "invalid_syntax.yaml"
+    config_file.write_text(invalid_yaml_content)
+
+    mock_args = argparse.Namespace(config=str(config_file))
+
+    f = io.StringIO()
+    with redirect_stderr(f):
+        with pytest.raises(SystemExit) as e:
+            load_settings_from_cli(mock_args)
+
+    actual_output = f.getvalue()
+
+    assert e.value.code == 1
+    assert "YAML Parsing Error in " in actual_output
+    assert str(config_file) in actual_output
+    assert ">  7  |     invalid_key value" in actual_output
+    assert "Error at line 8:" in actual_output
+    assert "could not find expected ':'" in actual_output
+
+
+@patch(
+    "switchbot_actions.config_loader.YAML",
+)
+def test_load_settings_from_cli_yaml_syntax_error_no_problem_mark(
+    mock_yaml_loader, tmp_path
+):
+    """
+    Test that load_settings_from_cli handles YAML syntax errors without problem_mark.
+    """
+
+    # Create a dummy config file
+    config_file = tmp_path / "dummy_config.yaml"
+    config_file.write_text("dummy_content")
+
+    # Mock the YAML loader to raise a YAMLError without problem_mark
+    mock_yaml_instance = mock_yaml_loader.return_value
+    mock_yaml_instance.load.side_effect = YAMLError("Generic YAML Error")
+
+    mock_args = argparse.Namespace(config=str(config_file))
+
+    f = io.StringIO()
+    with redirect_stderr(f):
+        with pytest.raises(SystemExit) as e:
+            load_settings_from_cli(mock_args)
+
+    actual_output = f.getvalue()
+
+    assert e.value.code == 1
+    assert "YAML Parsing Error: Generic YAML Error" in actual_output
+    assert ">" not in actual_output  # No code snippet expected
 
 
 @patch(

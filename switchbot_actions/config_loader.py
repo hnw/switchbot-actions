@@ -9,7 +9,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 from .config import AppSettings
-from .error import format_validation_error
+from .error import format_validation_error, get_error_snippet
 
 
 def _set_nested_value(d: dict, key_path: str, value: Any):
@@ -33,14 +33,19 @@ def load_settings_from_cli(args: argparse.Namespace) -> AppSettings:
         )
     except YAMLError as e:
         mark = getattr(e, "problem_mark", None)
+        problem = getattr(e, "problem", e)
         if mark:
-            print(
-                f"Error parsing YAML file: {e}\n"
-                f"  in {config_path}, line: {mark.line + 1}, column: {mark.column + 1}",
-                file=sys.stderr,
-            )
+            error_messages = [f"YAML Parsing Error in '{config_path}':"]
+            snippet = get_error_snippet(config_path, (mark.line, mark.column))
+            if snippet:
+                error_messages.append("")
+                error_messages.append(snippet)
+
+            error_messages.append("")
+            error_messages.append(f"Error at line {mark.line + 1}: {problem}")
+            print("\n".join(error_messages), file=sys.stderr)
         else:
-            print(f"Error parsing YAML file: {e}", file=sys.stderr)
+            print(f"YAML Parsing Error: {problem}", file=sys.stderr)
         sys.exit(1)
 
     cli_to_config_map = {

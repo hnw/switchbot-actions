@@ -304,3 +304,18 @@ def test_format_validation_error_no_snippet(tmp_path):
             assert (
                 "Error at line" not in formatted_message
             )  # Ensure no line number is added
+
+
+def test_get_error_snippet_points_to_last_line_on_eof_error(tmp_path):
+    config_content = "key1: value1\nkey2: value2"
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(config_content)
+
+    error_lc = (2, 0)
+
+    snippet = get_error_snippet(config_file, error_lc, context_lines=1)
+
+    expected_snippet = "   1  | key1: value1\n>  2  | key2: value2"
+
+    assert snippet is not None
+    assert snippet.strip() == expected_snippet.strip()
