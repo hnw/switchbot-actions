@@ -31,14 +31,13 @@ def test_storage_initialization(storage):
     assert storage.get_all_states() == {}
 
 
-def test_handle_state_change(storage, mock_state):
+@pytest.mark.asyncio
+@patch("switchbot_actions.handlers.AutomationHandler")
+async def test_handle_state_change(mock_automation_handler, storage, mock_state):
     """
     Test that the store correctly handles a new switchbot_advertisement_received signal.
     """
-    with patch(
-        "switchbot_actions.signals.switchbot_advertisement_received.connect"
-    ):  # Prevent AutomationHandler from connecting
-        switchbot_advertisement_received.send(None, new_state=mock_state)
+    switchbot_advertisement_received.send(None, new_state=mock_state)
 
     assert len(storage.get_all_states()) == 1
     stored_state = storage.get_state("DE:AD:BE:EF:00:01")
@@ -47,46 +46,45 @@ def test_handle_state_change(storage, mock_state):
     assert stored_state.data["data"]["temperature"] == 25.5
 
 
-def test_get_state(storage, mock_state):
+@pytest.mark.asyncio
+@patch("switchbot_actions.handlers.AutomationHandler")
+async def test_get_state(mock_automation_handler, storage, mock_state):
     """Test retrieving a specific state by key."""
     assert storage.get_state("DE:AD:BE:EF:00:01") is None
-    with patch(
-        "switchbot_actions.signals.switchbot_advertisement_received.connect"
-    ):  # Prevent AutomationHandler from connecting
-        switchbot_advertisement_received.send(None, new_state=mock_state)
+    switchbot_advertisement_received.send(None, new_state=mock_state)
     assert storage.get_state("DE:AD:BE:EF:00:01") == mock_state
 
 
-def test_get_all_states(storage, mock_state):
+@pytest.mark.asyncio
+@patch("switchbot_actions.handlers.AutomationHandler")
+async def test_get_all_states(mock_automation_handler, storage, mock_state):
     """Test retrieving all states."""
     assert storage.get_all_states() == {}
-    with patch(
-        "switchbot_actions.signals.switchbot_advertisement_received.connect"
-    ):  # Prevent AutomationHandler from connecting
-        switchbot_advertisement_received.send(None, new_state=mock_state)
+    switchbot_advertisement_received.send(None, new_state=mock_state)
     assert storage.get_all_states() == {"DE:AD:BE:EF:00:01": mock_state}
 
 
-def test_state_overwrite(storage, mock_state, mock_switchbot_advertisement):
+@pytest.mark.asyncio
+@patch("switchbot_actions.handlers.AutomationHandler")
+async def test_state_overwrite(
+    mock_automation_handler, storage, mock_state, mock_switchbot_advertisement
+):
     """Test that a new state for the same key overwrites the old state."""
-    with patch(
-        "switchbot_actions.signals.switchbot_advertisement_received.connect"
-    ):  # Prevent AutomationHandler from connecting
-        switchbot_advertisement_received.send(None, new_state=mock_state)
+    switchbot_advertisement_received.send(None, new_state=mock_state)
 
-        updated_state = mock_switchbot_advertisement(
-            address="DE:AD:BE:EF:00:01",
-            data={
-                "modelName": "WoSensorTH",
-                "data": {
-                    "temperature": 26.0,  # Updated temperature
-                    "humidity": 51,
-                    "battery": 98,
-                },
+    updated_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:00:01",
+        data={
+            "modelName": "WoSensorTH",
+            "data": {
+                "temperature": 26.0,  # Updated temperature
+                "humidity": 51,
+                "battery": 98,
             },
-        )
+        },
+    )
 
-        switchbot_advertisement_received.send(None, new_state=updated_state)
+    switchbot_advertisement_received.send(None, new_state=updated_state)
 
     assert len(storage.get_all_states()) == 1
     new_state = storage.get_state("DE:AD:BE:EF:00:01")

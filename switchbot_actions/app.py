@@ -1,12 +1,12 @@
+import argparse
 import asyncio
 import logging
 import signal
 
-import yaml
-from pydantic import ValidationError
 from switchbot import GetSwitchbotDevices
 
 from .config import AppSettings
+from .config_loader import load_settings_from_cli
 from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
 from .mqtt import MqttClient
@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 class Application:
-    def __init__(self, settings: AppSettings):
+    def __init__(self, settings: AppSettings, cli_args: argparse.Namespace):
         self.settings = settings
+        self.cli_args = cli_args
         self.tasks: list[asyncio.Task] = []
         self.stopping = False
 
@@ -81,34 +82,13 @@ class Application:
         """Reload settings from the configuration file."""
         logger.info("SIGHUP received, reloading configuration.")
         try:
-            with open(self.settings.config_path, "r") as f:
-                config_data = yaml.safe_load(f) or {}
-            new_settings = AppSettings.model_validate(config_data)
-        except FileNotFoundError:
-            logger.error(
-                f"Configuration file not found at {self.settings.config_path}, "
-                f"keeping the old one."
-            )
-            return
-        except yaml.YAMLError as e:
-            mark = getattr(e, "mark", None)
-            if mark:
-                logger.error(
-                    f"Error parsing YAML file: {e}\n"
-                    f"  Line: {mark.line + 1}, Column: {mark.column + 1}"
-                )
-            else:
-                logger.error(f"Error parsing YAML file: {e}")
-            logger.error("Failed to parse new configuration, keeping the old one.")
-            return
-        except ValidationError as e:
-            logger.error(f"Configuration validation error during reload: {e}")
-            logger.error("Failed to validate new configuration, keeping the old one.")
-            return
-
-        self.settings = new_settings
-        self._configure_components()
-        logger.info("Configuration reloaded successfully.")
+            new_settings = load_settings_from_cli(self.cli_args)
+            self.settings = new_settings
+            self._configure_components()
+            logger.info("Configuration reloaded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to reload configuration: {e}", exc_info=True)
+            logger.error("Keeping the old configuration.")
 
     async def start(self):
         """Start the application and its background tasks."""
@@ -137,8 +117,8 @@ class Application:
         logger.info("Application stopped.")
 
 
-async def run_app(settings: AppSettings):
-    app = Application(settings)
+async def run_app(settings: AppSettings, args: argparse.Namespace):
+    app = Application(settings, args)
     loop = asyncio.get_running_loop()
 
     # Set up signal handlers
