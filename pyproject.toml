@@ -39,6 +39,7 @@ dependencies = [
 ]
 [project.optional-dependencies]
 dev = [
+    "pip-audit",
     "pytest",
     "pytest-mock",
     "pytest-asyncio",
