@@ -134,7 +134,7 @@ async def test_application_start_and_stop_with_mqtt(
     mock_mqtt_client_instance.run = AsyncMock()
     mock_switchbot_client_instance = mock_switchbot_client_class.return_value
     mock_switchbot_client_instance.start_scan = AsyncMock()
-    mock_switchbot_client_instance.stop_scan = AsyncMock()
+    mock_switchbot_client_instance.stop_scan = Mock()
 
     initial_settings = AppSettings(mqtt=MqttSettings(host="localhost", port=1883))
     dummy_args = argparse.Namespace(config="/path/to/config.yaml")

@@ -67,15 +67,30 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
     switchbot_advertisement_received.disconnect(on_switchbot_advertisement_received)
 
 
+@pytest.mark.parametrize(
+    "error_exception, expected_exc_info",
+    [
+        (Exception("Some other error"), True),  # Unknown error
+        (Exception("Bluetooth device is turned off"), False),  # Known error
+    ],
+)
 @pytest.mark.asyncio
 @patch("logging.Logger.error")
 @patch("asyncio.sleep", new_callable=AsyncMock)
 async def test_scanner_error_handling(
-    mock_sleep, mock_log_error, scanner, mock_ble_scanner
+    mock_sleep,
+    mock_log_error,
+    scanner,
+    mock_ble_scanner,
+    error_exception,
+    expected_exc_info,
 ):
-    """Test that the scanner handles BLE scan errors gracefully."""
+    """
+    Test that the scanner handles BLE scan errors gracefully
+    and logs with/without exc_info.
+    """
     mock_ble_scanner.discover.side_effect = [
-        Exception("BLE error"),
+        error_exception,
         asyncio.CancelledError,
     ]
 
@@ -83,6 +98,49 @@ async def test_scanner_error_handling(
         await scanner.start_scan()
 
     mock_log_error.assert_called_once()
-    assert "Error during BLE scan: BLE error." in mock_log_error.call_args[0][0]
+    assert str(error_exception) in mock_log_error.call_args[0][0]
+    if expected_exc_info:
+        assert mock_log_error.call_args[1]["exc_info"] is True
+    else:
+        assert "exc_info" not in mock_log_error.call_args[1]
     # In case of error, it should sleep for the full cycle time
     mock_sleep.assert_called_with(1)
+
+
+@pytest.mark.parametrize(
+    "exception, expected_message_part, expected_is_known_error",
+    [
+        (
+            Exception("Bluetooth device is turned off"),
+            "Please ensure your Bluetooth adapter is turned on.",
+            True,
+        ),
+        (
+            Exception("BLE is not authorized"),
+            "Please check your OS's privacy settings for Bluetooth.",
+            True,
+        ),
+        (
+            Exception("Permission denied"),
+            "Check if the program has Bluetooth permissions",
+            True,
+        ),
+        (Exception("No such device"), "Bluetooth device not found.", True),
+        (
+            Exception("Some other error"),
+            "This might be due to adapter issues, permissions, or other "
+            "environmental factors.",
+            False,
+        ),
+    ],
+)
+def test_format_ble_error_message(
+    exception, expected_message_part, expected_is_known_error
+):
+    """
+    Test that _format_ble_error_message generates correct messages and known error flag.
+    """
+    client = SwitchbotClient(MagicMock(), MagicMock())
+    message, is_known_error = client._format_ble_error_message(exception)
+    assert expected_message_part in message
+    assert is_known_error == expected_is_known_error

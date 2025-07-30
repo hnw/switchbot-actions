@@ -32,6 +32,30 @@ def get_state_key(state: StateObject) -> str:
     raise TypeError(f"Unsupported state object type: {type(state)}")
 
 
+def get_value_from_state(state: StateObject, key: str) -> Any:
+    """Extracts a value from the state object based on the key."""
+    if isinstance(state, SwitchBotAdvertisement):
+        if key == "rssi":
+            return getattr(state, "rssi", None)
+        return state.data.get("data", {}).get(key)
+    elif isinstance(state, aiomqtt.Message):
+        if isinstance(state.payload, bytes):
+            payload_decoded = state.payload.decode()
+        else:
+            payload_decoded = str(state.payload)
+
+        try:
+            payload_json = json.loads(payload_decoded)
+        except json.JSONDecodeError:
+            payload_json = None
+
+        if key == "payload":
+            return payload_decoded
+        if isinstance(payload_json, dict):
+            return payload_json.get(key)
+    return None
+
+
 def evaluate_condition(condition: str, new_value: Any) -> bool:
     """Evaluates a single state condition."""
     parts = str(condition).split(" ", 1)
@@ -83,14 +107,9 @@ def _check_switchbot_conditions(
             return False
 
     for key, condition in state_cond.items():
-        new_value = None
-        if key == "rssi":
-            new_value = getattr(state, "rssi", None)
-        else:
-            if "data" in state.data and key in state.data["data"]:
-                new_value = state.data["data"][key]
-            else:
-                return None
+        new_value = get_value_from_state(state, key)
+        if new_value is None:
+            return None
 
         if not evaluate_condition(condition, new_value):
             return False
@@ -109,23 +128,9 @@ def _check_mqtt_conditions(
         return None
 
     state_cond = if_config.state
-    if isinstance(state.payload, bytes):
-        payload_decoded = state.payload.decode()
-    else:
-        payload_decoded = str(state.payload)
-
-    try:
-        payload_json = json.loads(payload_decoded)
-    except json.JSONDecodeError:
-        payload_json = None
-
     for key, condition in state_cond.items():
-        new_value = None
-        if key == "payload":
-            new_value = payload_decoded
-        elif isinstance(payload_json, dict) and key in payload_json:
-            new_value = payload_json[key]
-        else:
+        new_value = get_value_from_state(state, key)
+        if new_value is None:
             return None
 
         if not evaluate_condition(condition, new_value):

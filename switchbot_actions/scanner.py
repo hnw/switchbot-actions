@@ -50,43 +50,53 @@ class SwitchbotClient:
                     await asyncio.sleep(wait_time)
 
             except Exception as e:
-                error_message = f"Error during BLE scan: {e}. "
-                err_str = str(e).lower()
-                if "bluetooth device is turned off" in err_str:
-                    error_message += (
-                        "Please ensure your Bluetooth adapter is turned on."
-                    )
-                elif "ble is not authorized" in err_str:
-                    error_message += (
-                        "Please check your OS's privacy settings for Bluetooth."
-                    )
-                elif (
-                    "permission denied" in err_str
-                    or "not permitted" in err_str
-                    or "access denied" in err_str
-                ):
-                    error_message += (
-                        "Check if the program has Bluetooth permissions "
-                        "(e.g., run with sudo or set udev rules)."
-                    )
-                elif "no such device" in err_str:
-                    error_message += (
-                        "Bluetooth device not found. "
-                        "Ensure hardware is working correctly."
-                    )
+                message, is_known_error = self._format_ble_error_message(e)
+                if is_known_error:
+                    logger.error(message)
                 else:
-                    error_message += (
-                        "This might be due to adapter issues, permissions, "
-                        "or other environmental factors."
-                    )
-                logger.error(error_message, exc_info=True)
+                    logger.error(message, exc_info=True)
                 # In case of error, wait for the full cycle time to avoid spamming
                 if self._running:
                     await asyncio.sleep(self._cycle)
 
-    async def stop_scan(self):
+    def stop_scan(self):
         """Stops the scanning loop."""
         self._running = False
+
+    def _format_ble_error_message(self, exception: Exception) -> tuple[str, bool]:
+        """Generates a user-friendly error message for BLE scan exceptions."""
+        err_str = str(exception).lower()
+        message = f"Error during BLE scan: {exception}. "
+        is_known_error = False
+
+        if "bluetooth device is turned off" in err_str:
+            message += "Please ensure your Bluetooth adapter is turned on."
+            is_known_error = True
+        elif "ble is not authorized" in err_str:
+            message += "Please check your OS's privacy settings for Bluetooth."
+            is_known_error = True
+        elif (
+            "permission denied" in err_str
+            or "not permitted" in err_str
+            or "access denied" in err_str
+        ):
+            message += (
+                "Check if the program has Bluetooth permissions "
+                "(e.g., run with sudo or set udev rules)."
+            )
+            is_known_error = True
+        elif "no such device" in err_str:
+            message += (
+                "Bluetooth device not found. Ensure hardware is working correctly."
+            )
+            is_known_error = True
+        else:
+            message += (
+                "This might be due to adapter issues, permissions, "
+                "or other environmental factors."
+            )
+            is_known_error = False
+        return message, is_known_error
 
     def _process_advertisement(self, new_state: SwitchBotAdvertisement):
         """
