@@ -1,6 +1,4 @@
 import argparse
-import io
-from contextlib import redirect_stderr
 from unittest.mock import patch
 
 import pytest
@@ -8,6 +6,7 @@ from pydantic import ValidationError
 from ruamel.yaml.error import YAMLError
 
 from switchbot_actions.config_loader import load_settings_from_cli
+from switchbot_actions.error import ConfigError
 
 
 @patch(
@@ -31,15 +30,10 @@ automations:
     # Create a mock args object
     mock_args = argparse.Namespace(config=str(config_file))
 
-    f = io.StringIO()
-    with redirect_stderr(f):
-        with pytest.raises(SystemExit) as e:
-            load_settings_from_cli(mock_args)
+    with pytest.raises(ConfigError) as e:
+        load_settings_from_cli(mock_args)
 
-    actual_output = f.getvalue()
-
-    assert e.value.code == 1
-    assert actual_output.strip() == "Mocked Validation Error Output"
+    assert str(e.value) == "Mocked Validation Error Output"
     mock_format_validation_error.assert_called_once()
     args, kwargs = mock_format_validation_error.call_args
     assert isinstance(args[0], ValidationError)  # Check if it's a
@@ -129,15 +123,10 @@ logging:
     # Create a mock args object
     mock_args = argparse.Namespace(config=str(config_file))
 
-    f = io.StringIO()
-    with redirect_stderr(f):
-        with pytest.raises(SystemExit) as e:
-            load_settings_from_cli(mock_args)
+    with pytest.raises(ConfigError) as e:
+        load_settings_from_cli(mock_args)
 
-    actual_output = f.getvalue()
-
-    assert e.value.code == 1
-    assert actual_output.strip() == "Mocked Enum Validation Error Output"
+    assert str(e.value) == "Mocked Enum Validation Error Output"
     mock_format_validation_error.assert_called_once()
     args, kwargs = mock_format_validation_error.call_args
     assert isinstance(args[0], ValidationError)
@@ -162,19 +151,14 @@ automations:
 
     mock_args = argparse.Namespace(config=str(config_file))
 
-    f = io.StringIO()
-    with redirect_stderr(f):
-        with pytest.raises(SystemExit) as e:
-            load_settings_from_cli(mock_args)
+    with pytest.raises(ConfigError) as e:
+        load_settings_from_cli(mock_args)
 
-    actual_output = f.getvalue()
-
-    assert e.value.code == 1
-    assert "YAML Parsing Error in " in actual_output
-    assert str(config_file) in actual_output
-    assert ">  7  |     invalid_key value" in actual_output
-    assert "Error at line 8:" in actual_output
-    assert "could not find expected ':'" in actual_output
+    assert "YAML Parsing Error in " in str(e.value)
+    assert str(config_file) in str(e.value)
+    assert ">  7  |     invalid_key value" in str(e.value)
+    assert "Error at line 8:" in str(e.value)
+    assert "could not find expected ':'" in str(e.value)
 
 
 @patch(
@@ -197,16 +181,11 @@ def test_load_settings_from_cli_yaml_syntax_error_no_problem_mark(
 
     mock_args = argparse.Namespace(config=str(config_file))
 
-    f = io.StringIO()
-    with redirect_stderr(f):
-        with pytest.raises(SystemExit) as e:
-            load_settings_from_cli(mock_args)
+    with pytest.raises(ConfigError) as e:
+        load_settings_from_cli(mock_args)
 
-    actual_output = f.getvalue()
-
-    assert e.value.code == 1
-    assert "YAML Parsing Error: Generic YAML Error" in actual_output
-    assert ">" not in actual_output  # No code snippet expected
+    assert "YAML Parsing Error: Generic YAML Error" in str(e.value)
+    assert ">" not in str(e.value)  # No code snippet expected
 
 
 @patch(
@@ -233,15 +212,10 @@ automations:
     # Create a mock args object
     mock_args = argparse.Namespace(config=str(config_file))
 
-    f = io.StringIO()
-    with redirect_stderr(f):
-        with pytest.raises(SystemExit) as e:
-            load_settings_from_cli(mock_args)
+    with pytest.raises(ConfigError) as e:
+        load_settings_from_cli(mock_args)
 
-    actual_output = f.getvalue()
-
-    assert e.value.code == 1
-    assert actual_output.strip() == "Mocked Tag Validation Error Output"
+    assert str(e.value) == "Mocked Tag Validation Error Output"
     mock_format_validation_error.assert_called_once()
     args, kwargs = mock_format_validation_error.call_args
     assert isinstance(args[0], ValidationError)

@@ -1,5 +1,6 @@
 # switchbot_actions/exporter.py
 import logging
+from http.server import HTTPServer
 
 from prometheus_client import REGISTRY, start_http_server
 from prometheus_client.core import GaugeMetricFamily
@@ -19,6 +20,7 @@ class PrometheusExporter(Collector):
         self.store = state_storage
         self.port = port
         self.target_config = target_config
+        self.server: HTTPServer | None = None
 
         # Unregister default collectors to avoid exposing unwanted metrics
         for coll in list(REGISTRY._collector_to_names.keys()):
@@ -29,8 +31,15 @@ class PrometheusExporter(Collector):
 
     def start_server(self):
         """Starts the Prometheus HTTP server."""
-        start_http_server(self.port)
+        self.server, _ = start_http_server(self.port)
         logger.info(f"Prometheus exporter server started on port {self.port}")
+
+    def stop_server(self):
+        """Stops the Prometheus HTTP server."""
+        if self.server:
+            self.server.shutdown()
+            self.server = None
+            logger.info("Prometheus exporter server stopped.")
 
     def collect(self):
         """
