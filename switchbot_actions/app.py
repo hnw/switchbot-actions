@@ -107,7 +107,7 @@ class Application:
         self.stopping = True
 
         logger.info("Stopping application...")
-        await self.scanner.stop_scan()
+        self.scanner.stop_scan()
 
         for task in self.tasks:
             if not task.done():

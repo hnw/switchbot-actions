@@ -25,7 +25,7 @@ async def execute_action(action: AutomationAction, state: StateObject) -> None:
     elif isinstance(action, WebhookAction):
         await _execute_webhook(action, state)
     elif isinstance(action, MqttPublishAction):
-        await _execute_mqtt_publish(action, state)
+        _execute_mqtt_publish(action, state)
     else:
         logger.warning(f"Unknown trigger type: {action_type}")
 
@@ -63,6 +63,12 @@ async def _execute_webhook(action: WebhookAction, state: StateObject) -> None:
     logger.debug(
         f"Sending webhook: {method} {url} with payload {payload} and headers {headers}"
     )
+    await _send_webhook_request(url, method, payload, headers)
+
+
+async def _send_webhook_request(
+    url: str, method: str, payload: dict | str, headers: dict
+) -> None:
     try:
         async with httpx.AsyncClient() as client:
             if method == "POST":
@@ -93,7 +99,7 @@ async def _execute_webhook(action: WebhookAction, state: StateObject) -> None:
         logger.error(f"Webhook failed: {e}")
 
 
-async def _execute_mqtt_publish(action: MqttPublishAction, state: StateObject) -> None:
+def _execute_mqtt_publish(action: MqttPublishAction, state: StateObject) -> None:
     topic = format_string(action.topic, state)
     qos = action.qos
     retain = action.retain

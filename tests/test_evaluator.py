@@ -34,6 +34,67 @@ def test_get_state_key_mqtt(mqtt_message_plain):
 
 
 @pytest.mark.parametrize(
+    "state_obj, key, expected",
+    [
+        (
+            MagicMock(
+                spec=SwitchBotAdvertisement,
+                rssi=-50,
+                data={"data": {"temperature": 25.0}},
+            ),
+            "rssi",
+            -50,
+        ),
+        (
+            MagicMock(
+                spec=SwitchBotAdvertisement,
+                rssi=-50,
+                data={"data": {"temperature": 25.0}},
+            ),
+            "temperature",
+            25.0,
+        ),
+        (
+            MagicMock(
+                spec=SwitchBotAdvertisement,
+                rssi=-50,
+                data={"data": {"temperature": 25.0}},
+            ),
+            "non_existent",
+            None,
+        ),
+        (
+            MagicMock(
+                spec=aiomqtt.Message,
+                payload="ON",
+            ),
+            "payload",
+            "ON",
+        ),
+        (
+            MagicMock(
+                spec=aiomqtt.Message,
+                payload='{"temperature": 25.0}',
+            ),
+            "temperature",
+            25.0,
+        ),
+        (
+            MagicMock(
+                spec=aiomqtt.Message,
+                payload='{"temperature": 25.0}',
+            ),
+            "non_existent",
+            None,
+        ),
+    ],
+)
+def test_get_value_from_state(state_obj, key, expected):
+    """Test get_value_from_state function."""
+    assert evaluator.get_value_from_state(state_obj, key) == expected
+
+
+@pytest.mark.parametrize(
     "condition, value, expected",
     [
         ("== 25.0", 25.0, True),

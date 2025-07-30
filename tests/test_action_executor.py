@@ -2,6 +2,7 @@ import asyncio
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from switchbot_actions import action_executor
@@ -60,16 +61,12 @@ async def test_execute_action_shell(
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("switchbot_actions.action_executor._send_webhook_request")
 async def test_execute_action_webhook_post_success(
-    mock_async_client, caplog, mock_switchbot_advertisement
+    mock_send_webhook_request, caplog, mock_switchbot_advertisement
 ):
     caplog.set_level(logging.DEBUG)
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.text = "OK"
-    mock_post = AsyncMock(return_value=mock_response)
-    mock_async_client.return_value.__aenter__.return_value.post = mock_post
+    mock_send_webhook_request.return_value = None  # Mock the async call
 
     state_object = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
@@ -87,27 +84,19 @@ async def test_execute_action_webhook_post_success(
     )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_post.assert_called_once_with(
-        action_executor.format_string(action_config.url, state_object),
-        json=expected_payload,
-        headers={},
-        timeout=10,
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "POST", expected_payload, {}
     )
-    assert (
-        "Webhook to http://example.com/hook successful with status 200" in caplog.text
-    )
+    # The logging for success/failure is now inside _send_webhook_request,
+    # so we don't assert it here directly from execute_action's perspective.
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("switchbot_actions.action_executor._send_webhook_request")
 async def test_execute_action_webhook_get(
-    mock_async_client, mock_switchbot_advertisement
+    mock_send_webhook_request, mock_switchbot_advertisement
 ):
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.text = "OK"
-    mock_get = AsyncMock(return_value=mock_response)
-    mock_async_client.return_value.__aenter__.return_value.get = mock_get
+    mock_send_webhook_request.return_value = None
 
     state_object = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
@@ -125,25 +114,18 @@ async def test_execute_action_webhook_get(
     )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_get.assert_called_once_with(
-        action_executor.format_string(action_config.url, state_object),
-        params=expected_payload,
-        headers={},
-        timeout=10,
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "GET", expected_payload, {}
     )
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("switchbot_actions.action_executor._send_webhook_request")
 async def test_execute_action_webhook_get_success(
-    mock_async_client, caplog, mock_switchbot_advertisement
+    mock_send_webhook_request, caplog, mock_switchbot_advertisement
 ):
     caplog.set_level(logging.DEBUG)
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.text = "OK"
-    mock_get = AsyncMock(return_value=mock_response)
-    mock_async_client.return_value.__aenter__.return_value.get = mock_get
+    mock_send_webhook_request.return_value = None
 
     state_object = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
@@ -161,25 +143,20 @@ async def test_execute_action_webhook_get_success(
     )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_get.assert_called_once_with(
-        "http://example.com/hook", params=expected_payload, headers={}, timeout=10
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "GET", expected_payload, {}
     )
-    assert (
-        "Webhook to http://example.com/hook successful with status 200" in caplog.text
-    )
+    # The logging for success/failure is now inside _send_webhook_request,
+    # so we don't assert it here directly from execute_action's perspective.
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("switchbot_actions.action_executor._send_webhook_request")
 async def test_execute_action_webhook_post_failure_400(
-    mock_async_client, caplog, mock_switchbot_advertisement
+    mock_send_webhook_request, caplog, mock_switchbot_advertisement
 ):
     caplog.set_level(logging.ERROR)
-    mock_response = MagicMock()
-    mock_response.status_code = 400
-    mock_response.text = "Bad Request: Invalid payload"
-    mock_post = AsyncMock(return_value=mock_response)
-    mock_async_client.return_value.__aenter__.return_value.post = mock_post
+    mock_send_webhook_request.return_value = None
 
     state_object = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
@@ -197,26 +174,20 @@ async def test_execute_action_webhook_post_failure_400(
     )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_post.assert_called_once_with(
-        "http://example.com/hook", json=expected_payload, headers={}, timeout=10
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "POST", expected_payload, {}
     )
-    assert (
-        "Webhook to http://example.com/hook failed with status 400. "
-        "Response: Bad Request: Invalid payload" in caplog.text
-    )
+    # The logging for success/failure is now inside _send_webhook_request,
+    # so we don't assert it here directly from execute_action's perspective.
 
 
 @pytest.mark.asyncio
-@patch("httpx.AsyncClient")
+@patch("switchbot_actions.action_executor._send_webhook_request")
 async def test_execute_action_webhook_get_failure_500(
-    mock_async_client, caplog, mock_switchbot_advertisement
+    mock_send_webhook_request, caplog, mock_switchbot_advertisement
 ):
     caplog.set_level(logging.ERROR)
-    mock_response = MagicMock()
-    mock_response.status_code = 500
-    mock_response.text = "Internal Server Error: Something went wrong on the server."
-    mock_get = AsyncMock(return_value=mock_response)
-    mock_async_client.return_value.__aenter__.return_value.get = mock_get
+    mock_send_webhook_request.return_value = None
 
     state_object = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
@@ -234,48 +205,170 @@ async def test_execute_action_webhook_get_failure_500(
     )
     await action_executor.execute_action(action_config, state_object)
     expected_payload = {"temp": "29.0", "addr": "DE:AD:BE:EF:11:11"}
-    mock_get.assert_called_once_with(
-        "http://example.com/hook", params=expected_payload, headers={}, timeout=10
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "GET", expected_payload, {}
     )
+    # The logging for success/failure is now inside _send_webhook_request,
+    # so we don't assert it here directly from execute_action's perspective.
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor._send_webhook_request")
+async def test_execute_action_webhook_unsupported_method(
+    mock_send_webhook_request, caplog, mock_switchbot_advertisement
+):
+    caplog.set_level(logging.ERROR)
+    mock_send_webhook_request.return_value = None
+
+    state_object = mock_switchbot_advertisement()
+
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",  # Use a valid method for instantiation
+        payload={},
+    )
+    # Temporarily change the method to an unsupported one for testing
+    with patch.object(action_config, "method", "PUT"):
+        await action_executor.execute_action(action_config, state_object)
+    mock_send_webhook_request.assert_called_once_with(
+        "http://example.com/hook", "PUT", {}, {}
+    )
+    # The logging for unsupported method is now inside _send_webhook_request,
+    # so we don't assert it here directly from execute_action's perspective.
+
+
+# --- Tests for _send_webhook_request ---
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_send_webhook_request_post_success(mock_async_client, caplog):
+    caplog.set_level(logging.DEBUG)
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_response.text = "OK"
+    mock_async_client.return_value.__aenter__.return_value.post.return_value = (
+        mock_response
+    )
+
+    url = "http://test.com/post"
+    method = "POST"
+    payload = {"key": "value"}
+    headers = {"Content-Type": "application/json"}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
+    mock_async_client.return_value.__aenter__.return_value.post.assert_called_once_with(
+        url, json=payload, headers=headers, timeout=10
+    )
+    assert f"Webhook to {url} successful with status 200" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_send_webhook_request_get_success(mock_async_client, caplog):
+    caplog.set_level(logging.DEBUG)
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_response.text = "OK"
+    mock_async_client.return_value.__aenter__.return_value.get.return_value = (
+        mock_response
+    )
+
+    url = "http://test.com/get"
+    method = "GET"
+    payload = {"param": "value"}
+    headers = {"Accept": "application/json"}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
+    mock_async_client.return_value.__aenter__.return_value.get.assert_called_once_with(
+        url, params=payload, headers=headers, timeout=10
+    )
+    assert f"Webhook to {url} successful with status 200" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_send_webhook_request_post_failure(mock_async_client, caplog):
+    caplog.set_level(logging.ERROR)
+    mock_response = AsyncMock()
+    mock_response.status_code = 400
+    mock_response.text = "Bad Request"
+    mock_async_client.return_value.__aenter__.return_value.post.return_value = (
+        mock_response
+    )
+
+    url = "http://test.com/post_fail"
+    method = "POST"
+    payload = {"key": "value"}
+    headers = {}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
     assert (
-        "Webhook to http://example.com/hook failed with status 500. "
-        "Response: Internal Server Error: Something went wrong on the server."
+        f"Webhook to {url} failed with status 400. Response: Bad Request" in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_send_webhook_request_get_failure(mock_async_client, caplog):
+    caplog.set_level(logging.ERROR)
+    mock_response = AsyncMock()
+    mock_response.status_code = 500
+    mock_response.text = "Internal Server Error"
+    mock_async_client.return_value.__aenter__.return_value.get.return_value = (
+        mock_response
+    )
+
+    url = "http://test.com/get_fail"
+    method = "GET"
+    payload = {"param": "value"}
+    headers = {}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
+    assert (
+        f"Webhook to {url} failed with status 500. Response: Internal Server Error"
         in caplog.text
     )
 
 
 @pytest.mark.asyncio
 @patch("httpx.AsyncClient")
-async def test_execute_action_webhook_unsupported_method(
-    mock_async_client, caplog, mock_switchbot_advertisement
-):
+async def test_send_webhook_request_request_error(mock_async_client, caplog):
     caplog.set_level(logging.ERROR)
-    mock_client = AsyncMock()
-    mock_async_client.return_value.__aenter__.return_value = mock_client
-
-    state_object = mock_switchbot_advertisement()
-
-    # Create a dummy action config that is not a valid AutomationAction subclass
-    # to test the unsupported method logging.
-    class DummyAction:
-        type = "webhook"
-        url = "http://example.com/hook"
-        method = "PUT"
-        payload = {}
-        headers = {}
-
-    action_config = WebhookAction(
-        type="webhook",
-        url="http://example.com/hook",
-        method="GET",  # Use a valid method for instantiation
-        payload={},
+    mock_async_client.return_value.__aenter__.return_value.post.side_effect = (
+        httpx.RequestError(
+            "Network error", request=httpx.Request("POST", "http://test.com")
+        )
     )
-    # Temporarily change the method to an unsupported one for testing
-    with patch.object(action_config, "method", "PUT"):
-        await action_executor.execute_action(action_config, state_object)
-    mock_client.post.assert_not_called()
-    mock_client.get.assert_not_called()
-    assert "Unsupported HTTP method for webhook: PUT" in caplog.text
+
+    url = "http://test.com/error"
+    method = "POST"
+    payload = {"key": "value"}
+    headers = {}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
+    assert "Webhook failed: Network error" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_send_webhook_request_unsupported_method(mock_async_client, caplog):
+    caplog.set_level(logging.ERROR)
+
+    url = "http://test.com/unsupported"
+    method = "PUT"  # Unsupported method
+    payload = {"key": "value"}
+    headers = {}
+
+    await action_executor._send_webhook_request(url, method, payload, headers)
+
+    mock_async_client.return_value.__aenter__.return_value.post.assert_not_called()
+    mock_async_client.return_value.__aenter__.return_value.get.assert_not_called()
+    assert f"Unsupported HTTP method for webhook: {method}" in caplog.text
 
 
 @pytest.mark.asyncio
