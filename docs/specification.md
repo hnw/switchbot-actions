@@ -255,11 +255,11 @@ This object represents a received MQTT message.
 
 The application uses the following signals for internal communication between components:
 
-| `blinker` Signal Name          | Emitter Component   | Role & Description                                           |
-| ------------------------------ | ------------------- | ------------------------------------------------------------ |
-| `state-changed`                | `SwitchbotClient`     | Notifies that a new SwitchBot BLE advertisement was received.  |
-| `mqtt-message-received`        | `MqttClient`        | Notifies that a new MQTT message was received.               |
-| `publish-mqtt-message-request` | `action_executor`   | Requests the `MqttClient` to publish a message.              |
+| `blinker` Signal Name              | Emitter Component   | Role & Description                                            |
+| ---------------------------------- | ------------------- | ------------------------------------------------------------- |
+| `switchbot-advertisement-received` | `SwitchbotClient`   | Notifies that a new SwitchBot BLE advertisement was received. |
+| `mqtt-message-received`            | `MqttClient`        | Notifies that a new MQTT message was received.                |
+| `publish-mqtt-message-request`     | `action_executor`   | Requests the `MqttClient` to publish a message.               |
 
 ### 6.2. How to Add a New Trigger Source
 
