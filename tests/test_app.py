@@ -1,291 +1,357 @@
 import argparse
 import asyncio
 import signal
+from copy import deepcopy
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-import yaml
 
 from switchbot_actions.app import Application, run_app
 from switchbot_actions.config import (
     AppSettings,
     MqttSettings,
     PrometheusExporterSettings,
-    ScannerSettings,
 )
-from switchbot_actions.signals import publish_mqtt_message_request
+from switchbot_actions.error import ConfigError
+
+# Fixtures
 
 
-@pytest.mark.asyncio
-@patch("switchbot_actions.app.logger.info")
-@patch("switchbot_actions.app.logger.error")
-@patch("switchbot_actions.exporter.start_http_server")
-@patch("switchbot_actions.app.load_settings_from_cli")
-async def test_reload_settings_cli_args_are_kept(
-    mock_load_settings_from_cli,
-    mock_start_http_server,
-    mock_logger_error,
-    mock_logger_info,
-):
-    """Test that reloading settings correctly applies new settings
-    from config_loader."""
-    # Initial setup: Simulate settings loaded from CLI with some overrides
-    initial_settings = AppSettings(
-        scanner=ScannerSettings(cycle=20, duration=5, interface=1),
+@pytest.fixture
+def mock_ble_scanner():
+    with patch("switchbot_actions.app.GetSwitchbotDevices") as mock:
+        yield mock
+
+
+@pytest.fixture
+def cli_args():
+    return argparse.Namespace(config="/path/to/config.yaml")
+
+
+@pytest.fixture
+def initial_settings():
+    return AppSettings(
+        mqtt=MqttSettings(host="localhost", port=1883),
         prometheus_exporter=PrometheusExporterSettings(enabled=True, port=8000),
-        debug=True,
-    )
-    # Mock load_settings_from_cli to return the initial settings for the first call
-    mock_load_settings_from_cli.return_value = initial_settings
-
-    # Create a dummy args object for Application constructor
-    dummy_args = argparse.Namespace(config="/path/to/config.yaml")
-
-    with patch("switchbot_actions.app.GetSwitchbotDevices"):
-        app = Application(initial_settings, dummy_args)
-
-    # Assert http server port
-    mock_start_http_server.assert_called_once_with(8000)
-    mock_start_http_server.reset_mock()
-
-    # Check initial settings
-    assert app.settings is initial_settings
-    assert app.settings.scanner.cycle == 20
-    assert app.settings.scanner.duration == 5
-    assert app.settings.scanner.interface == 1
-    assert app.settings.debug is True
-
-    # Simulate reload: Mock load_settings_from_cli to return new settings
-    reloaded_settings = AppSettings(
-        scanner=ScannerSettings(cycle=30, duration=10, interface=0),
-        prometheus_exporter=PrometheusExporterSettings(enabled=True, port=8000),
-        debug=False,
-    )
-    mock_load_settings_from_cli.return_value = reloaded_settings
-
-    app.reload_settings()
-
-    # Assert that load_settings_from_cli was called with the correct args
-    mock_load_settings_from_cli.assert_called_once_with(dummy_args)
-
-    # Assert that app.settings has been updated to the reloaded_settings object
-    assert app.settings is reloaded_settings
-    assert app.settings.scanner.cycle == 30
-    assert app.settings.scanner.duration == 10
-    assert app.settings.scanner.interface == 0
-    assert app.settings.debug is False
-    assert app.settings.prometheus_exporter.enabled is True
-
-    mock_logger_error.assert_not_called()
-    mock_logger_info.assert_any_call("Configuration reloaded successfully.")
-
-
-@pytest.mark.asyncio
-@patch("switchbot_actions.app.MqttClient")
-@patch("switchbot_actions.app.GetSwitchbotDevices")
-async def test_mqtt_publish_action_via_signal(
-    mock_get_switchbot_devices, mock_mqtt_client_class
-):
-    """Test that mqtt_publish action is correctly executed via signal."""
-    # Mock MqttClient instance
-    mock_mqtt_client_instance = mock_mqtt_client_class.return_value
-    mock_mqtt_client_instance.publish = AsyncMock()
-
-    # Initial setup: MQTT enabled
-    initial_settings = AppSettings(mqtt=MqttSettings(host="localhost", port=1883))
-
-    dummy_args = argparse.Namespace(config="/path/to/config.yaml")
-
-    app = Application(initial_settings, dummy_args)
-
-    # Ensure MQTT client is initialized and connected to the signal
-    assert app.mqtt_client is mock_mqtt_client_instance
-    mock_mqtt_client_class.assert_called_once()
-
-    # Emit the signal
-    topic = "test/topic"
-    payload = "test_payload"
-    qos = 1
-    retain = True
-    publish_mqtt_message_request.send(
-        app, topic=topic, payload=payload, qos=qos, retain=retain
-    )
-
-    # Allow the asyncio task to run
-    await asyncio.sleep(0.01)
-
-    # Assert that MqttClient.publish was called with the correct arguments
-    mock_mqtt_client_instance.publish.assert_called_once_with(
-        topic=topic, payload=payload, qos=qos, retain=retain
     )
 
 
-@pytest.mark.asyncio
-@patch("switchbot_actions.app.MqttClient")
+@pytest.fixture
 @patch("switchbot_actions.app.SwitchbotClient")
-@patch("switchbot_actions.app.GetSwitchbotDevices")
-async def test_application_start_and_stop_with_mqtt(
-    mock_get_switchbot_devices,
-    mock_switchbot_client_class,
-    mock_mqtt_client_class,
-):
-    """Test that the application starts and stops correctly with MQTT enabled."""
-    mock_mqtt_client_instance = mock_mqtt_client_class.return_value
-    mock_mqtt_client_instance.run = AsyncMock()
-    mock_switchbot_client_instance = mock_switchbot_client_class.return_value
-    mock_switchbot_client_instance.start_scan = AsyncMock()
-    mock_switchbot_client_instance.stop_scan = Mock()
-
-    initial_settings = AppSettings(mqtt=MqttSettings(host="localhost", port=1883))
-    dummy_args = argparse.Namespace(config="/path/to/config.yaml")
-
-    app = Application(initial_settings, dummy_args)
-
-    # Start the application
-    asyncio.create_task(app.start())
-    await asyncio.sleep(0.01)  # Allow tasks to start
-
-    mock_mqtt_client_instance.run.assert_called_once()
-    mock_switchbot_client_instance.start_scan.assert_called_once()
-
-    # Stop the application
-    await app.stop()
-
-    mock_switchbot_client_instance.stop_scan.assert_called_once()
-
-
-@pytest.mark.asyncio
+@patch("switchbot_actions.app.PrometheusExporter")
 @patch("switchbot_actions.app.MqttClient")
-@patch("switchbot_actions.app.GetSwitchbotDevices")
-@patch("switchbot_actions.signals.publish_mqtt_message_request.disconnect")
-async def test_mqtt_client_disconnects_on_reload(
-    mock_disconnect_signal, mock_get_switchbot_devices, mock_mqtt_client_class
+def app(
+    mock_mqtt, mock_exporter, mock_scanner, initial_settings, cli_args, mock_ble_scanner
 ):
-    """
-    Test that the MQTT client disconnects when settings are reloaded
-    and MQTT is disabled.
-    """
-    mock_mqtt_client_instance = mock_mqtt_client_class.return_value
-    mock_mqtt_client_instance.disconnect = AsyncMock()
+    # Prevent component start methods from running during initialization
+    with patch.object(Application, "_start_components") as _:
+        application = Application(initial_settings, cli_args)
+        # Manually set mocks after init
+        application.mqtt_client = mock_mqtt.return_value
+        application.exporter = mock_exporter.return_value
+        application.scanner = mock_scanner.return_value
+        return application
 
-    # Initial setup: MQTT enabled
-    initial_settings = AppSettings(mqtt=MqttSettings(host="localhost", port=1883))
-    dummy_args = argparse.Namespace(config="/path/to/config.yaml")
 
-    app = Application(initial_settings, dummy_args)
+# Tests
 
-    # Ensure MQTT client is initialized
-    assert app.mqtt_client is mock_mqtt_client_instance
-    mock_mqtt_client_class.assert_called_once()
 
-    # Simulate reload: MQTT disabled
-    reloaded_settings = AppSettings()
-    with patch("switchbot_actions.app.load_settings_from_cli") as mock_load_settings:
-        mock_load_settings.return_value = reloaded_settings
-        app.reload_settings()
-
-    # Assert that the MQTT client was disconnected
-    mock_disconnect_signal.assert_called_once_with(app._handle_mqtt_publish)
-    assert app.mqtt_client is None
+def test_initialization(app, initial_settings):
+    """Test that all components are initialized on Application start."""
+    with (
+        patch.object(app, "_start_mqtt") as m_mqtt,
+        patch.object(app, "_start_exporter") as m_exporter,
+        patch.object(app, "_start_automations") as m_auto,
+    ):
+        app._start_components()
+        m_mqtt.assert_called_once()
+        m_exporter.assert_called_once()
+        m_auto.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.app.Application")
-@patch("switchbot_actions.app.asyncio.get_running_loop")
-@patch("switchbot_actions.app.logger.info")
-@patch("switchbot_actions.app.logger.error")
-async def test_run_app_handles_keyboard_interrupt(
-    mock_logger_error,
-    mock_logger_info,
-    mock_get_running_loop,
-    mock_application_class,
-):
-    """Test that run_app handles KeyboardInterrupt gracefully."""
-    mock_app_instance = mock_application_class.return_value
-    mock_app_instance.start = AsyncMock(side_effect=KeyboardInterrupt)
-    mock_app_instance.stop = AsyncMock()
-
-    mock_loop = Mock()
-    mock_get_running_loop.return_value = mock_loop
-
-    await run_app(AppSettings(), argparse.Namespace())
-
-    mock_loop.add_signal_handler.assert_called_once_with(
-        signal.SIGHUP, mock_app_instance.reload_settings
-    )
-    mock_app_instance.start.assert_called_once()
-    mock_logger_info.assert_any_call("Keyboard interrupt received.")
-    mock_app_instance.stop.assert_called_once()
-    mock_logger_error.assert_not_called()
+async def test_stop(app):
+    """Test that all components are stopped on Application stop."""
+    with (
+        patch.object(app, "_stop_mqtt", new_callable=AsyncMock) as m_mqtt,
+        patch.object(app, "_stop_exporter") as m_exporter,
+        patch.object(app, "_stop_automations") as m_auto,
+    ):
+        await app._stop_components()
+        m_mqtt.assert_called_once()
+        m_exporter.assert_called_once()
+        m_auto.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.app.Application")
-@patch("switchbot_actions.app.asyncio.get_running_loop")
-@patch("switchbot_actions.app.logger.info")
-@patch("switchbot_actions.app.logger.error")
-async def test_run_app_handles_unexpected_exception(
-    mock_logger_error,
-    mock_logger_info,
-    mock_get_running_loop,
-    mock_application_class,
-):
-    """Test that run_app handles unexpected exceptions gracefully."""
-    mock_app_instance = mock_application_class.return_value
-    mock_app_instance.start = AsyncMock(side_effect=ValueError("Something went wrong"))
-    mock_app_instance.stop = AsyncMock()
-
-    mock_loop = Mock()
-    mock_get_running_loop.return_value = mock_loop
-
-    await run_app(AppSettings(), argparse.Namespace())
-
-    mock_loop.add_signal_handler.assert_called_once_with(
-        signal.SIGHUP, mock_app_instance.reload_settings
-    )
-    mock_app_instance.start.assert_called_once()
-    mock_logger_error.assert_any_call(
-        "An unexpected error occurred: Something went wrong", exc_info=True
-    )
-    mock_app_instance.stop.assert_called_once()
-    mock_logger_info.assert_not_called()
-
-
-@pytest.mark.asyncio
-@patch("switchbot_actions.app.logger.error")
-@patch("switchbot_actions.exporter.start_http_server")
 @patch("switchbot_actions.app.load_settings_from_cli")
-async def test_reload_settings_with_invalid_config(
-    mock_load_settings_from_cli,
-    mock_start_http_server,
-    mock_logger_error,
+@patch("switchbot_actions.app.logger")
+async def test_reload_no_changes(
+    mock_logger, mock_load_settings, app, initial_settings
 ):
-    """Test that reloading with invalid config does not crash and logs an error."""
-    initial_settings = AppSettings(
-        scanner=ScannerSettings(cycle=10, duration=3),
-        prometheus_exporter=PrometheusExporterSettings(enabled=True, port=8000),
-    )
-    mock_load_settings_from_cli.return_value = initial_settings
+    """Test that no components are restarted if the configuration hasn't changed."""
+    mock_load_settings.return_value = deepcopy(initial_settings)
+    with patch.object(app, "_stop_changed_components") as mock_stop:
+        await app.reload_settings()
+        mock_logger.info.assert_any_call("No configuration changes detected.")
+        mock_stop.assert_not_called()
 
-    dummy_args = argparse.Namespace(config="/path/to/config.yaml")
 
-    with patch("switchbot_actions.app.GetSwitchbotDevices"):
-        app = Application(initial_settings, dummy_args)
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.load_settings_from_cli")
+@patch("switchbot_actions.app.logger")
+async def test_reload_single_component_change(
+    mock_logger, mock_load_settings, app, initial_settings
+):
+    """Test that only the changed component is restarted."""
+    new_settings = deepcopy(initial_settings)
+    new_settings.mqtt.host = "new-broker"
+
+    mock_load_settings.return_value = new_settings
+
+    with (
+        patch.object(
+            app, "_stop_changed_components", new_callable=AsyncMock
+        ) as mock_stop,
+        patch.object(app, "_start_changed_components") as mock_start,
+    ):
+        await app.reload_settings()
+
+        mock_logger.info.assert_any_call("Configuration changed for: mqtt")
+        mock_stop.assert_called_once_with(["mqtt"])
+        mock_start.assert_called_once_with(["mqtt"])
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.load_settings_from_cli")
+@patch("switchbot_actions.app.logger")
+async def test_reload_failure_and_rollback(
+    mock_logger, mock_load_settings, app, initial_settings
+):
+    """Test that a failed reload triggers a rollback to the old settings."""
+    new_settings = deepcopy(initial_settings)
+    new_settings.mqtt.host = "invalid-broker-that-will-fail"
+
+    mock_load_settings.return_value = new_settings
 
     original_settings = app.settings
 
-    # Assert http server port
-    mock_start_http_server.assert_called_once_with(8000)
-    mock_start_http_server.reset_mock()
+    with (
+        patch.object(app, "_stop_changed_components", new_callable=AsyncMock),
+        patch.object(app, "_start_mqtt") as mock_start_mqtt,
+        patch.object(app, "_start_exporter") as mock_start_exporter,
+        patch.object(app, "_start_automations") as mock_start_automations,
+    ):
+        # Simulate initial start failure
+        mock_start_mqtt.side_effect = [Exception("Initial Start Failed"), None]
 
-    # Simulate failed reload with invalid YAML
-    mock_load_settings_from_cli.side_effect = yaml.YAMLError("Error parsing YAML file")
-    app.reload_settings()
+        await app.reload_settings()
 
-    # Assert that settings have not changed and an error was logged for YAML parsing
+        assert app.settings is original_settings
+        mock_logger.error.assert_any_call(
+            "Failed to apply new configuration: Initial Start Failed",
+            exc_info=True,
+        )
+        mock_logger.info.assert_any_call("Rolling back to the previous configuration.")
+        mock_logger.info.assert_any_call("Rollback successful.")
+
+        # Assert that _start_mqtt was called twice
+        # (once for initial attempt, once for rollback)
+        assert mock_start_mqtt.call_count == 2
+
+        # Assert that other start methods were NOT called
+        mock_start_exporter.assert_not_called()
+        mock_start_automations.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.load_settings_from_cli")
+@patch("switchbot_actions.app.logger")
+async def test_reload_config_load_error(mock_logger, mock_load_settings, app):
+    """Test that the application handles errors during config file loading."""
+    mock_load_settings.side_effect = ConfigError("Invalid YAML")
+    original_settings = app.settings
+
+    await app.reload_settings()
+
     assert app.settings is original_settings
-    mock_logger_error.assert_any_call(
-        "Failed to reload configuration: Error parsing YAML file", exc_info=True
+    mock_logger.error.assert_any_call(
+        "Failed to load new configuration, keeping the old. Reason:\nInvalid YAML"
     )
-    mock_logger_error.assert_any_call("Keeping the old configuration.")
-    mock_logger_error.reset_mock()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.Application")
+@patch("switchbot_actions.app.asyncio.get_running_loop")
+async def test_run_app_signal_handler(mock_get_loop, mock_app_class):
+    """Test that the SIGHUP signal handler is registered."""
+    mock_loop = Mock()
+    mock_get_loop.return_value = mock_loop
+    mock_app_instance = mock_app_class.return_value
+    mock_app_instance.start = AsyncMock()
+    mock_app_instance.stop = AsyncMock()
+    mock_app_instance.reload_settings = AsyncMock()
+
+    await run_app(AppSettings(), argparse.Namespace())
+
+    # Get the lambda function passed to add_signal_handler
+    args, kwargs = mock_loop.add_signal_handler.call_args
+    signal_num, handler_func = args
+    assert signal_num == signal.SIGHUP
+
+    # Call the lambda to ensure it calls the correct method
+    handler_func()
+
+    mock_app_instance.reload_settings.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.Application")
+@patch("switchbot_actions.app.asyncio.get_running_loop")
+async def test_run_app_keyboard_interrupt(mock_get_loop, mock_app_class, caplog):
+    """Test that KeyboardInterrupt is handled gracefully."""
+    mock_loop = Mock()
+    mock_get_loop.return_value = mock_loop
+    mock_app_instance = mock_app_class.return_value
+    mock_app_instance.start = AsyncMock(side_effect=KeyboardInterrupt)
+    mock_app_instance.stop = AsyncMock()
+
+    with patch("switchbot_actions.app.logger") as mock_logger:
+        await run_app(AppSettings(), argparse.Namespace())
+        mock_logger.info.assert_any_call("Keyboard interrupt received.")
+        mock_app_instance.stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.Application")
+@patch("switchbot_actions.app.asyncio.get_running_loop")
+async def test_run_app_unexpected_error(mock_get_loop, mock_app_class, caplog):
+    """Test that unexpected errors are caught and logged."""
+    mock_loop = Mock()
+    mock_get_loop.return_value = mock_loop
+    mock_app_instance = mock_app_class.return_value
+    test_exception = Exception("Unexpected Error")
+    mock_app_instance.start = AsyncMock(side_effect=test_exception)
+    mock_app_instance.stop = AsyncMock()
+
+    with patch("switchbot_actions.app.logger") as mock_logger:
+        await run_app(AppSettings(), argparse.Namespace())
+        mock_logger.error.assert_any_call(
+            "An unexpected error occurred: Unexpected Error", exc_info=True
+        )
+        mock_app_instance.stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.load_settings_from_cli")
+async def test_reload_integration_with_real_components(
+    mock_load_settings, cli_args, mock_ble_scanner, caplog
+):
+    """
+    Integration test for the reload functionality with real component instances.
+    Verifies that MQTT and Prometheus components are correctly stopped and restarted.
+    """
+    # Initial settings
+    initial_settings = AppSettings(
+        mqtt=MqttSettings(host="localhost", port=1883),
+        prometheus_exporter=PrometheusExporterSettings(enabled=True, port=8001),
+    )
+
+    # New settings for reload
+    new_settings = deepcopy(initial_settings)
+    assert new_settings.mqtt is not None
+    new_settings.mqtt.port = 1884
+    assert new_settings.prometheus_exporter is not None
+    new_settings.prometheus_exporter.port = 8002
+
+    mock_load_settings.return_value = new_settings
+
+    # Mock the parts that interact with external systems
+    with (
+        patch("switchbot_actions.mqtt.aiomqtt.Client") as mock_aiomqtt_client_class,
+        patch("switchbot_actions.exporter.start_http_server") as mock_start_http_server,
+    ):
+        # --- Mock aiomqtt.Client ---
+        mock_mqtt_client = AsyncMock()  # The instance
+
+        # Make the instance an async context manager
+        mock_mqtt_client.__aenter__.return_value = mock_mqtt_client
+        mock_mqtt_client.__aexit__.return_value = None
+
+        # Make `messages` an async iterable that will stay pending until cancelled
+        async def mock_messages_iterator():
+            await asyncio.sleep(3600)  # A long time
+            yield  # This will never be reached
+
+        mock_mqtt_client.messages = mock_messages_iterator()
+
+        # The class returns our mocked instance
+        mock_aiomqtt_client_class.return_value = mock_mqtt_client
+
+        # --- Mock Prometheus server ---
+        mock_http_server = Mock()
+        mock_start_http_server.return_value = (mock_http_server, Mock())
+
+        # --- Run Test ---
+        app = Application(initial_settings, cli_args)
+        assert app.mqtt_task is not None
+        initial_mqtt_task = app.mqtt_task
+
+        # Simulate SIGHUP to trigger reload
+        await app.reload_settings()
+
+        # Allow the event loop to process the cancellation and new task creation
+        await asyncio.sleep(0)
+
+        # Assertions
+        # 1. MQTT client was restarted
+        assert app.mqtt_task is not None
+        assert app.mqtt_task != initial_mqtt_task
+        assert initial_mqtt_task.cancelled()
+
+        # 2. Prometheus exporter was restarted
+        mock_http_server.shutdown.assert_called_once()
+        mock_start_http_server.assert_called_with(new_settings.prometheus_exporter.port)
+
+        # 3. Settings were updated
+        assert app.settings.mqtt is not None
+        assert app.settings.mqtt.port == 1884
+        assert app.settings.prometheus_exporter is not None
+        assert app.settings.prometheus_exporter.port == 8002
+
+        # Clean up the application to avoid resource warnings
+        await app.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.load_settings_from_cli")
+@patch("switchbot_actions.app.logger")
+async def test_reload_and_rollback_failure_exits(
+    mock_logger, mock_load_settings, app, initial_settings
+):
+    """
+    Test that if rollback fails, the application exits with status code 1.
+    """
+    new_settings = deepcopy(initial_settings)
+    new_settings.mqtt.host = "new-broker"
+
+    mock_load_settings.return_value = new_settings
+
+    with (
+        patch.object(app, "_stop_changed_components", new_callable=AsyncMock),
+        patch.object(
+            app,
+            "_start_changed_components",
+            side_effect=[
+                Exception("Initial Start Failed"),
+                Exception("Rollback Failed"),
+            ],
+        ),
+        pytest.raises(SystemExit) as excinfo,
+    ):
+        await app.reload_settings()
+
+        mock_logger.critical.assert_any_call(
+            "Rollback failed: Rollback Failed", exc_info=True
+        )
+        assert excinfo.value.code == 1

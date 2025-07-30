@@ -5,6 +5,12 @@ from pydantic import ValidationError
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 
+class ConfigError(Exception):
+    """Custom exception for configuration-related errors."""
+
+    pass
+
+
 def get_error_snippet(
     config_path: Path, error_lc, context_lines: int = 2
 ) -> Optional[str]:

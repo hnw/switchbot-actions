@@ -5,10 +5,17 @@ import pytest
 from pydantic import ValidationError
 
 from switchbot_actions.error import (
+    ConfigError,
     format_validation_error,
     generate_hybrid_error_message,
     get_error_snippet,
 )
+
+
+def test_config_error_exception():
+    """Test that ConfigError can be raised and caught."""
+    with pytest.raises(ConfigError, match="Test error message"):
+        raise ConfigError("Test error message")
 
 
 class MockMark:

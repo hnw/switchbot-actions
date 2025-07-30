@@ -19,14 +19,22 @@ class MqttClient:
             username=self.settings.username,
             password=self.settings.password,
         )
+        self._stop_event = asyncio.Event()
+
+    async def __aenter__(self):
+        return self.client
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
 
     async def run(self):
-        while True:
+        logger.info("Starting MQTT client.")
+        while not self._stop_event.is_set():
             try:
-                async with self.client:
-                    await self._subscribe_to_topics()
+                async with self as client:
+                    await self._subscribe_to_topics(client)
                     logger.info("MQTT client connected.")
-                    async for message in self.client.messages:
+                    async for message in client.messages:
                         mqtt_message_received.send(self, message=message)
             except aiomqtt.MqttError as error:
                 logger.error(
@@ -34,13 +42,22 @@ class MqttClient:
                     f"Reconnecting in {self.settings.reconnect_interval} seconds."
                 )
                 await asyncio.sleep(self.settings.reconnect_interval)
+            except asyncio.CancelledError:
+                logger.info("MQTT client task cancelled.")
+                break
             finally:
                 logger.info("MQTT client disconnected.")
 
-    async def _subscribe_to_topics(self):
+    async def stop(self):
+        logger.info("Stopping MQTT client.")
+        self._stop_event.set()
+        # Wait for the run loop to finish
+        await asyncio.sleep(0)
+
+    async def _subscribe_to_topics(self, client: aiomqtt.Client):
         # At the moment, we subscribe to all topics.
         # In the future, we may want to subscribe to specific topics based on the rules.
-        await self.client.subscribe("#")
+        await client.subscribe("#")
 
     async def publish(
         self, topic: str, payload: str, qos: int = 0, retain: bool = False
