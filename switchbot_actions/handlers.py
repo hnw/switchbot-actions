@@ -53,6 +53,13 @@ class AutomationHandler:
 
     async def _run_all_runners(self, new_state: StateObject) -> None:
         # Run all action runners concurrently
-        await asyncio.gather(
-            *[runner.run(new_state) for runner in self._action_runners]
+        results = await asyncio.gather(
+            *[runner.run(new_state) for runner in self._action_runners],
+            return_exceptions=True,
         )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(
+                    f"An action runner failed with an exception: {result}",
+                    exc_info=True,
+                )

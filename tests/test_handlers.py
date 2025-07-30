@@ -1,5 +1,6 @@
 # tests/test_handlers.py
 import asyncio
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -189,3 +190,49 @@ async def test_run_all_runners_concurrently(
 
     mock_run_1.assert_awaited_once_with(new_state)
     mock_run_2.assert_awaited_once_with(new_state)
+
+
+@pytest.mark.asyncio
+async def test_run_all_runners_handles_exceptions(
+    automation_handler_factory, mock_switchbot_advertisement, caplog
+):
+    """
+    Test that _run_all_runners handles exceptions from individual runners
+    without stopping other runners and logs the error.
+    """
+    configs = [
+        AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+        AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+        AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+    ]
+    handler = automation_handler_factory(configs)
+
+    # Mock the run method of each runner
+    mock_run_1 = AsyncMock()
+    mock_run_2 = AsyncMock(side_effect=ValueError("Test exception"))
+    mock_run_3 = AsyncMock()
+
+    handler._action_runners[0].run = mock_run_1
+    handler._action_runners[1].run = mock_run_2
+    handler._action_runners[2].run = mock_run_3
+
+    new_state = mock_switchbot_advertisement()
+
+    with caplog.at_level(logging.ERROR):
+        await handler._run_all_runners(new_state)
+
+        # Assert that all runners were attempted to be run
+        mock_run_1.assert_awaited_once_with(new_state)
+        mock_run_2.assert_awaited_once_with(new_state)
+        mock_run_3.assert_awaited_once_with(new_state)
+
+        # Assert that the exception was logged
+        assert len(caplog.records) == 1
+        assert (
+            "An action runner failed with an exception: Test exception" in caplog.text
+        )
+        assert caplog.records[0].levelname == "ERROR"
+        assert (
+            "An action runner failed with an exception: Test exception"
+            in caplog.records[0].message
+        )
