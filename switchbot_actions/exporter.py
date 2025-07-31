@@ -31,8 +31,15 @@ class PrometheusExporter(Collector):
 
     def start_server(self):
         """Starts the Prometheus HTTP server."""
-        self.server, _ = start_http_server(self.port)
-        logger.info(f"Prometheus exporter server started on port {self.port}")
+        try:
+            self.server, _ = start_http_server(self.port)
+            logger.info(f"Prometheus exporter server started on port {self.port}")
+        except OSError as e:
+            logger.error(
+                f"Failed to start Prometheus exporter on port {self.port}. "
+                f"The port may be in use by another process. Original error: {e}"
+            )
+            raise
 
     def stop_server(self):
         """Stops the Prometheus HTTP server."""

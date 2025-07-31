@@ -355,3 +355,35 @@ async def test_reload_and_rollback_failure_exits(
             "Rollback failed: Rollback Failed", exc_info=True
         )
         assert excinfo.value.code == 1
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.exporter.logger")
+@patch("switchbot_actions.app.PrometheusExporter")
+@patch("switchbot_actions.app.logger")
+async def test_prometheus_exporter_port_in_use_error(
+    mock_app_logger,
+    mock_prometheus_exporter_class,
+    mock_exporter_logger,
+    initial_settings,
+    cli_args,
+):
+    """
+    Test that the application handles OSError when Prometheus exporter port is in use.
+    """
+    # Configure the mock PrometheusExporter to raise OSError during start_server
+    mock_exporter_instance = Mock()
+    mock_prometheus_exporter_class.return_value = mock_exporter_instance
+    mock_exporter_instance.start_server.side_effect = OSError("Address already in use")
+
+    # Call run_app, which should catch the OSError and exit
+    with pytest.raises(SystemExit) as excinfo:
+        await run_app(initial_settings, cli_args)
+
+    assert excinfo.value.code == 1
+
+    mock_app_logger.critical.assert_any_call(
+        "Application encountered a critical error during startup and will exit: "
+        "Address already in use",
+        exc_info=True,
+    )
