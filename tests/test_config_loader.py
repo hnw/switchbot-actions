@@ -161,6 +161,63 @@ automations:
     assert "could not find expected ':'" in str(e.value)
 
 
+def test_prometheus_exporter_precedence(tmp_path):
+    """
+    Test that command-line arguments correctly override config file settings
+    for prometheus_exporter_enabled.
+    """
+
+    # Test Case 1: Config File Priority (enabled: true, no CLI arg)
+    config_content_true = """
+prometheus_exporter:
+  enabled: true
+  port: 8000
+"""
+    config_file_true = tmp_path / "config_true.yaml"
+    config_file_true.write_text(config_content_true)
+
+    mock_args_1 = argparse.Namespace(
+        config=str(config_file_true),
+        prometheus_exporter_enabled=None,  # No CLI override
+    )
+    settings_1 = load_settings_from_cli(mock_args_1)
+    assert settings_1.prometheus_exporter.enabled is True
+
+    # Test Case 2: Positive Flag Override (config: false,
+    # CLI: --prometheus-exporter-enabled)
+    config_content_false = """
+prometheus_exporter:
+  enabled: false
+  port: 8000
+"""
+    config_file_false = tmp_path / "config_false.yaml"
+    config_file_false.write_text(config_content_false)
+
+    mock_args_2 = argparse.Namespace(
+        config=str(config_file_false),
+        prometheus_exporter_enabled=True,  # CLI override to True
+    )
+    settings_2 = load_settings_from_cli(mock_args_2)
+    assert settings_2.prometheus_exporter.enabled is True
+
+    # Test Case 3: Negative Flag Override (config: true,
+    # CLI: --no-prometheus-exporter-enabled)
+    config_content_true_again = """
+prometheus_exporter:
+  enabled: true
+  port: 8000
+"""
+    config_file_true_again = tmp_path / "config_true_again.yaml"
+    config_file_true_again.write_text(config_content_true_again)
+
+    mock_args_3 = argparse.Namespace(
+        config=str(config_file_true_again),
+        prometheus_exporter_enabled=False,  # CLI override to False
+    )
+    settings_3 = load_settings_from_cli(mock_args_3)
+    assert settings_3.prometheus_exporter.enabled is False
+
+
 @patch(
     "switchbot_actions.config_loader.YAML",
 )

@@ -21,7 +21,10 @@ def cli_main():
         help="Path to the configuration file (default: config.yaml)",
     )
     parser.add_argument(
-        "-d", "--debug", action="store_true", help="Enable debug logging"
+        "-d",
+        "--debug",
+        action=argparse.BooleanOptionalAction,
+        help="Enable debug logging",
     )
     parser.add_argument(
         "--scan-cycle", type=int, help="Time in seconds between BLE scan cycles"
@@ -36,7 +39,7 @@ def cli_main():
     )
     parser.add_argument(
         "--prometheus-exporter-enabled",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         help="Enable Prometheus exporter",
     )
     parser.add_argument(
