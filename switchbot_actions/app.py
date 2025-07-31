@@ -206,18 +206,28 @@ class Application:
 
 
 async def run_app(settings: AppSettings, args: argparse.Namespace):
-    app = Application(settings, args)
-    loop = asyncio.get_running_loop()
-
-    loop.add_signal_handler(
-        signal.SIGHUP, lambda: asyncio.create_task(app.reload_settings())
-    )
-
+    app = None  # Initialize app to None
     try:
+        app = Application(settings, args)
+        loop = asyncio.get_running_loop()
+
+        loop.add_signal_handler(
+            signal.SIGHUP, lambda: asyncio.create_task(app.reload_settings())
+        )
+
         await app.start()
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received.")
+    except OSError as e:
+        logger.critical(
+            f"Application encountered a critical error during startup and will exit: "
+            f"{e}",
+            exc_info=True,
+        )
+        sys.exit(1)
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
     finally:
-        await app.stop()
+        # If app failed to initialize, it won't be defined.
+        if "app" in locals() and app:
+            await app.stop()
