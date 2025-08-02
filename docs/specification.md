@@ -153,16 +153,7 @@ Configures the BLE scanning behavior.
   - `duration`: (integer, optional, default: 3) Time in seconds the scanner will actively listen for BLE advertisements. Must be less than or equal to `cycle`.
   - `interface`: (integer, optional, default: 0) Bluetooth adapter number to use (e.g., `0` for `hci0`).
 
-### 4.2. `mqtt`
-
-Configures the MQTT client connection.
-
-  - `host`: (string, required) Hostname or IP address of the MQTT broker.
-  - `port`: (integer, optional, default: 1883) Port for the MQTT broker.
-  - `username` / `password`: (string, optional) Credentials for authentication.
-  - `reconnect_interval`: (integer, optional, default: 10) Seconds to wait before attempting to reconnect.
-
-### 4.3. `automations`
+### 4.2. `automations`
 
 A list of automation rules. Each rule is a map with the following structure:
 
@@ -182,6 +173,15 @@ A list of automation rules. Each rule is a map with the following structure:
       - `type`: (string, required) The action type, e.g., `shell_command`, `webhook`, `mqtt_publish`.
       - Other parameters depend on the `type`. Values support placeholders (e.g., `{temperature}`, `{address}`). Refer to Section 5, "State Object Structure," for available placeholders.
 
+### 4.3. `mqtt`
+
+Configures the MQTT client connection.
+
+  - `host`: (string, required) Hostname or IP address of the MQTT broker.
+  - `port`: (integer, optional, default: 1883) Port for the MQTT broker.
+  - `username` / `password`: (string, optional) Credentials for authentication.
+  - `reconnect_interval`: (integer, optional, default: 10) Seconds to wait before attempting to reconnect.
+
 ### 4.4. `prometheus_exporter`
 
 Configures the Prometheus metrics endpoint.
@@ -200,11 +200,43 @@ Configures the application's logging behavior.
   - `format`: (string, optional) Log format string, using Python's `logging` module syntax.
   - `loggers`: (map, optional) Allows setting specific log levels for individual loggers (e.g., `bleak: "WARNING"`). Ignored if the `--debug` flag is used.
 
-## 5. State Object Structure
+## 5. Action Reference
+
+This section details the parameters for each action type available in the `then` block. All string-based parameters support placeholders (e.g., `{temperature}`, `{address}`). Refer to Section 6, "State Object Structure," for available placeholders.
+
+### 5.1. `webhook` Action
+
+Sends an HTTP request to a specified URL.
+
+  - `url`: (string, required) The URL to send the webhook to.
+  - `method`: (string, optional, default: `"POST"`) The HTTP method to use. Supported values are `"POST"` and `"GET"`.
+  - `payload`: (string or map, optional, default: `""`) The body of the request.
+      - If a string, it's sent as the raw request body.
+      - If a map, it's sent as a JSON object for `POST` requests or as URL parameters for `GET` requests.
+  - `headers`: (map, optional, default: `{}`) A map of HTTP headers to include in the request.
+
+### 5.2. `mqtt_publish` Action
+
+Publishes a message to an MQTT topic.
+
+  - `topic`: (string, required) The MQTT topic to publish to.
+  - `payload`: (string or map, optional, default: `""`) The message payload.
+      - If a string, it's sent as the raw message payload.
+      - If a map, it's converted to a JSON string before publishing.
+  - `qos`: (integer, optional, default: `0`) The Quality of Service level for the message. Supported values are `0`, `1`, and `2`.
+  - `retain`: (boolean, optional, default: `false`) If `true`, the message will be retained by the broker.
+
+### 5.3. `shell_command` Action
+
+Executes a shell command.
+
+  - `command`: (string, required) The shell command to execute.
+
+## 6. State Object Structure
 
 Automation rules operate on **State Objects**. These objects contain the event data that triggered a rule and are used for both evaluating `if` conditions and populating placeholders in `then` actions.
 
-### 5.1. SwitchBot Device State (`source: "switchbot"`, `"switchbot_timer"`)
+### 6.1. SwitchBot Device State (`source: "switchbot"`, `"switchbot_timer"`)
 
 This object contains flattened data from a SwitchBot device's BLE advertisement.
 
@@ -228,7 +260,7 @@ This object contains flattened data from a SwitchBot device's BLE advertisement.
     }
     ```
 
-### 5.2. MQTT Message State (`source: "mqtt"`, `"mqtt_timer"`)
+### 6.2. MQTT Message State (`source: "mqtt"`, `"mqtt_timer"`)
 
 This object represents a received MQTT message.
 
@@ -249,9 +281,9 @@ This object represents a received MQTT message.
     }
     ```
 
-## 6. Developer Guide
+## 7. Developer Guide
 
-### 6.1. Internal Signals
+### 7.1. Internal Signals
 
 The application uses the following signals for internal communication between components:
 
@@ -261,7 +293,7 @@ The application uses the following signals for internal communication between co
 | `mqtt-message-received`            | `MqttClient`        | Notifies that a new MQTT message was received.                |
 | `publish-mqtt-message-request`     | `action_executor`   | Requests the `MqttClient` to publish a message.               |
 
-### 6.2. How to Add a New Trigger Source
+### 7.2. How to Add a New Trigger Source
 
 To add a new source (e.g., a webhook listener):
 
@@ -272,14 +304,14 @@ To add a new source (e.g., a webhook listener):
 5.  **Update `config.py`** to validate the new `source` and any associated parameters.
 6.  **Document** the new source, its State Object structure, and configuration options in this specification.
 
-### 6.3. How to Add a New Action Type
+### 7.3. How to Add a New Action Type
 
 1.  **Define a new `pydantic` model** for the action's configuration in `config.py` and add it to the `AutomationAction` union type.
 2.  **Implement the execution logic** as a new `async def _execute_...` function in `action_executor.py`.
 3.  **Add a new `elif` block** in `execute_action` to call your new function.
 4.  **Document** the new action type and its parameters in this specification.
 
-## 7. Project Structure
+## 8. Project Structure
 
 ```
 /switchbot-actions/
