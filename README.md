@@ -159,9 +159,8 @@ automations:
   - name: "High Temperature Alert"
     if:
       source: "switchbot"
-      device:
+      conditions:
         modelName: "WoSensorTH"
-      state:
         temperature: "> 28.0"
     then:
       type: "shell_command"

@@ -26,11 +26,9 @@ automations:
     if:
       # Source of the event. "switchbot" for real-time state changes.
       source: "switchbot"
-      # Conditions to identify the target device(s).
-      device:
+      # Conditions to identify the target device(s) and their state.
+      conditions:
         modelName: "WoSensorTH"
-      # Conditions based on the device's state.
-      state:
         # Triggers when the temperature is greater than 28.
         temperature: "> 28.0"
     # "then" block: Defines the action to be executed.
@@ -47,10 +45,9 @@ automations:
     cooldown: "2s"
     if:
       source: "switchbot"
-      device:
+      conditions:
         modelName: "WoHand"
         address: "XX:XX:XX:XX:XX:AA"
-      state:
         isOn: True
     then:
       type: "webhook"
@@ -68,10 +65,9 @@ automations:
       source: "switchbot_timer"
       # The duration the state must be continuously met.
       duration: "5m"
-      device:
+      conditions:
         modelName: "WoPresence"
         address: "YY:YY:YY:YY:YY:BB"
-      state:
         motion_detected: False
     then:
       type: "shell_command"
@@ -82,9 +78,8 @@ automations:
     if:
       source: "switchbot_timer"
       duration: "10m"
-      device:
+      conditions:
         modelName: "WoContact"
-      state:
         contact_open: True
     then:
       type: "webhook"
@@ -96,7 +91,7 @@ automations:
     if:
       source: "mqtt"
       topic: "home/living/light/set"
-      state:
+      conditions:
         # Evaluates the entire payload of the MQTT message.
         payload: "ON"
     then:
@@ -107,7 +102,7 @@ automations:
     if:
       source: "mqtt"
       topic: "home/sensors/thermostat"
-      state:
+      conditions:
         # Evaluates a key within a JSON payload.
         temperature: "> 22.0"
     then:
@@ -127,7 +122,7 @@ automations:
       source: "mqtt_timer"
       duration: "5m"
       topic: "home/sensors/+/status"
-      state:
+      conditions:
         payload: "offline"
     then:
       type: "webhook"

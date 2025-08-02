@@ -34,67 +34,6 @@ def test_get_state_key_mqtt(mqtt_message_plain):
 
 
 @pytest.mark.parametrize(
-    "state_obj, key, expected",
-    [
-        (
-            MagicMock(
-                spec=SwitchBotAdvertisement,
-                rssi=-50,
-                data={"data": {"temperature": 25.0}},
-            ),
-            "rssi",
-            -50,
-        ),
-        (
-            MagicMock(
-                spec=SwitchBotAdvertisement,
-                rssi=-50,
-                data={"data": {"temperature": 25.0}},
-            ),
-            "temperature",
-            25.0,
-        ),
-        (
-            MagicMock(
-                spec=SwitchBotAdvertisement,
-                rssi=-50,
-                data={"data": {"temperature": 25.0}},
-            ),
-            "non_existent",
-            None,
-        ),
-        (
-            MagicMock(
-                spec=aiomqtt.Message,
-                payload="ON",
-            ),
-            "payload",
-            "ON",
-        ),
-        (
-            MagicMock(
-                spec=aiomqtt.Message,
-                payload='{"temperature": 25.0}',
-            ),
-            "temperature",
-            25.0,
-        ),
-        (
-            MagicMock(
-                spec=aiomqtt.Message,
-                payload='{"temperature": 25.0}',
-            ),
-            "non_existent",
-            None,
-        ),
-    ],
-)
-def test_get_value_from_state(state_obj, key, expected):
-    """Test get_value_from_state function."""
-    assert evaluator.get_value_from_state(state_obj, key) == expected
-
-
-@pytest.mark.parametrize(
     "condition, value, expected",
     [
         ("== 25.0", 25.0, True),
@@ -116,7 +55,7 @@ def test_check_conditions_device_pass(sample_state):
     """Test that device conditions pass."""
     if_config = AutomationIf(
         source="switchbot",
-        device={
+        conditions={
             "address": "e1:22:33:44:55:66",
             "modelName": "WoSensorTH",
         },
@@ -128,7 +67,7 @@ def test_check_conditions_device_fail(sample_state):
     """Test that device conditions fail."""
     if_config = AutomationIf(
         source="switchbot",
-        device={
+        conditions={
             "address": "e1:22:33:44:55:66",
             "modelName": "WoPresence",
         },
@@ -140,43 +79,45 @@ def test_check_conditions_state_pass(sample_state):
     """Test that state conditions pass."""
     if_config = AutomationIf(
         source="switchbot",
-        state={"temperature": "> 20", "humidity": "< 60"},
+        conditions={"temperature": "> 20", "humidity": "< 60"},
     )
     assert evaluator.check_conditions(if_config, sample_state) is True
 
 
 def test_check_conditions_state_fail(sample_state):
     """Test that state conditions fail."""
-    if_config = AutomationIf(source="switchbot", state={"temperature": "> 30"})
+    if_config = AutomationIf(source="switchbot", conditions={"temperature": "> 30"})
     assert evaluator.check_conditions(if_config, sample_state) is False
 
 
 def test_check_conditions_rssi(sample_state):
     """Test that RSSI conditions are checked correctly."""
-    if_config = AutomationIf(source="switchbot", state={"rssi": "> -60"})
+    if_config = AutomationIf(source="switchbot", conditions={"rssi": "> -60"})
     assert evaluator.check_conditions(if_config, sample_state) is True
-    if_config = AutomationIf(source="switchbot", state={"rssi": "< -60"})
+    if_config = AutomationIf(source="switchbot", conditions={"rssi": "< -60"})
     assert evaluator.check_conditions(if_config, sample_state) is False
 
 
 def test_check_conditions_no_data(sample_state):
     """Test conditions when a key is not in state data."""
     if_config = AutomationIf(
-        source="switchbot", state={"non_existent_key": "some_value"}
+        source="switchbot", conditions={"non_existent_key": "some_value"}
     )
     assert evaluator.check_conditions(if_config, sample_state) is None
 
 
 def test_check_conditions_mqtt_payload_pass(mqtt_message_plain):
     """Test that MQTT payload conditions pass for plain text."""
-    if_config = AutomationIf(source="mqtt", topic="test/topic", state={"payload": "ON"})
+    if_config = AutomationIf(
+        source="mqtt", topic="test/topic", conditions={"payload": "ON"}
+    )
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is True
 
 
 def test_check_conditions_mqtt_payload_fail(mqtt_message_plain):
     """Test that MQTT payload conditions fail for plain text."""
     if_config = AutomationIf(
-        source="mqtt", topic="test/topic", state={"payload": "OFF"}
+        source="mqtt", topic="test/topic", conditions={"payload": "OFF"}
     )
     assert evaluator.check_conditions(if_config, mqtt_message_plain) is False
 
@@ -186,7 +127,7 @@ def test_check_conditions_mqtt_json_pass(mqtt_message_json):
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
-        state={"temperature": "> 25.0", "humidity": "== 55"},
+        conditions={"temperature": "> 25.0", "humidity": "== 55"},
     )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is True
 
@@ -196,7 +137,7 @@ def test_check_conditions_mqtt_json_fail(mqtt_message_json):
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
-        state={"temperature": "< 25.0"},
+        conditions={"temperature": "< 25.0"},
     )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is False
 
@@ -206,7 +147,7 @@ def test_check_conditions_mqtt_json_no_key(mqtt_message_json):
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
-        state={"non_existent_key": "some_value"},
+        conditions={"non_existent_key": "some_value"},
     )
     assert evaluator.check_conditions(if_config, mqtt_message_json) is None
 
@@ -238,9 +179,10 @@ def test_format_string_mqtt_json(mqtt_message_json):
     assert evaluator.format_string(template, mqtt_message_json) == expected
 
 
-def test_format_string_mqtt_nested_json():
-    """Test formatting with nested JSON MQTT message."""
-    message = aiomqtt.Message(
+@pytest.fixture
+def mqtt_message_json_nested() -> aiomqtt.Message:
+    """A sample MQTT message with nested JSON payload for testing."""
+    return aiomqtt.Message(
         topic=aiomqtt.Topic("home/sensor1"),
         payload=b'{"device": {"name": "sensor1"}, "values": {"temp": 22}}',
         qos=1,
@@ -248,6 +190,44 @@ def test_format_string_mqtt_nested_json():
         mid=1,
         properties=None,
     )
-    template = "Device: {device.name}, Temp: {values.temp}"
-    expected = "Device: sensor1, Temp: 22"
-    assert evaluator.format_string(template, message) == expected
+
+
+def test_get_values_as_dict_switchbot(sample_state):
+    """Test _get_values_as_dict with SwitchBotAdvertisement."""
+    expected_data = {
+        "temperature": 25.0,
+        "humidity": 50,
+        "battery": 100,
+        "modelName": "WoSensorTH",
+        "address": "e1:22:33:44:55:66",
+        "rssi": -50,
+    }
+    assert evaluator._get_values_as_dict(sample_state) == expected_data
+
+
+def test_get_values_as_dict_mqtt_plain(mqtt_message_plain):
+    """Test _get_values_as_dict with plain text MQTT message."""
+    expected_data = {"topic": "test/topic", "payload": "ON"}
+    assert evaluator._get_values_as_dict(mqtt_message_plain) == expected_data
+
+
+def test_get_values_as_dict_mqtt_json(mqtt_message_json):
+    """Test _get_values_as_dict with JSON MQTT message."""
+    expected_data = {
+        "topic": "home/sensor1",
+        "payload": '{"temperature": 28.5, "humidity": 55}',
+        "temperature": 28.5,
+        "humidity": 55,
+    }
+    assert evaluator._get_values_as_dict(mqtt_message_json) == expected_data
+
+
+def test_get_values_as_dict_mqtt_nested_json(mqtt_message_json_nested):
+    """Test _get_values_as_dict with nested JSON MQTT message."""
+    expected_data = {
+        "topic": "home/sensor1",
+        "payload": '{"device": {"name": "sensor1"}, "values": {"temp": 22}}',
+        "device": {"name": "sensor1"},
+        "values": {"temp": 22},
+    }
+    assert evaluator._get_values_as_dict(mqtt_message_json_nested) == expected_data

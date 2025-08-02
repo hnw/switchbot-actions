@@ -166,9 +166,12 @@ A list of automation rules. Each rule is a map with the following structure:
           - `"mqtt"`: Triggers immediately when an MQTT message is received that meets the conditions.
           - `"mqtt_timer"`: Triggers when an MQTT message's state has been continuously met for `duration`.
       - **`duration`**: (string, required for `_timer` sources) The period the state must be continuously met.
-      - **`device`**: (map, optional, for `switchbot` sources) Filters devices based on attributes like `modelName` or `address`.
       - **`topic`**: (string, required for `mqtt` sources) The MQTT topic to subscribe to. Wildcards (`+`, `#`) are supported.
-      - **`state`**: (map, optional) Defines the state conditions that must be met. Conditions are simple comparisons (e.g., `temperature: "> 25.0"`).
+      - **`conditions`**: (map, optional) Defines the conditions that must be met. This single block is used to filter by device attributes (like `modelName` or `address`) and device state values (like `temperature: "> 25.0"`).
+
+      > [!NOTE]
+      > **Backward Compatibility**:
+      > For backward compatibility, the legacy `device` and `state` keys are still supported. If they are found in the configuration, their contents will be automatically merged into the `conditions` block, and a `DeprecationWarning` will be logged. Users are encouraged to adopt the unified `conditions` block for new automations.
   - **`then`**: (list or map, required) Defines the action(s) to perform. Can be a single action (map) or a list of actions.
       - `type`: (string, required) The action type, e.g., `shell_command`, `webhook`, `mqtt_publish`.
       - Other parameters depend on the `type`. Values support placeholders (e.g., `{temperature}`, `{address}`). Refer to Section 5, "State Object Structure," for available placeholders.

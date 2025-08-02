@@ -23,6 +23,52 @@ OPERATORS = {
 }
 
 
+class MqttFormatter(string.Formatter):
+    def get_field(self, field_name, args, kwargs):
+        # Handle dot notation for nested access
+        obj = kwargs
+        for part in field_name.split("."):
+            if isinstance(obj, dict):
+                obj = obj.get(part)
+            elif hasattr(obj, part):
+                obj = getattr(obj, part)
+            else:
+                return (
+                    None,
+                    field_name,
+                )  # Return None if not found, and original field_name
+        return obj, field_name
+
+
+def _get_values_as_dict(state: StateObject) -> Dict[str, Any]:
+    """Extracts all relevant key-value pairs from the state object into a dictionary."""
+    if isinstance(state, SwitchBotAdvertisement):
+        flat_data = state.data.get("data", {})
+        for key, value in state.data.items():
+            if key != "data":
+                flat_data[key] = value
+        if hasattr(state, "address"):
+            flat_data["address"] = state.address
+        if hasattr(state, "rssi"):
+            flat_data["rssi"] = state.rssi
+        return flat_data
+    elif isinstance(state, aiomqtt.Message):
+        if isinstance(state.payload, bytes):
+            payload_decoded = state.payload.decode()
+        else:
+            payload_decoded = str(state.payload)
+
+        format_data = {"topic": str(state.topic), "payload": payload_decoded}
+        try:
+            payload_json = json.loads(payload_decoded)
+            if isinstance(payload_json, dict):
+                format_data.update(payload_json)
+        except json.JSONDecodeError:
+            pass
+        return format_data
+    return {}
+
+
 def get_state_key(state: StateObject) -> str:
     """Returns a unique key from the state object."""
     if isinstance(state, SwitchBotAdvertisement):
@@ -30,30 +76,6 @@ def get_state_key(state: StateObject) -> str:
     elif isinstance(state, aiomqtt.Message):
         return str(state.topic)
     raise TypeError(f"Unsupported state object type: {type(state)}")
-
-
-def get_value_from_state(state: StateObject, key: str) -> Any:
-    """Extracts a value from the state object based on the key."""
-    if isinstance(state, SwitchBotAdvertisement):
-        if key == "rssi":
-            return getattr(state, "rssi", None)
-        return state.data.get("data", {}).get(key)
-    elif isinstance(state, aiomqtt.Message):
-        if isinstance(state.payload, bytes):
-            payload_decoded = state.payload.decode()
-        else:
-            payload_decoded = str(state.payload)
-
-        try:
-            payload_json = json.loads(payload_decoded)
-        except json.JSONDecodeError:
-            payload_json = None
-
-        if key == "payload":
-            return payload_decoded
-        if isinstance(payload_json, dict):
-            return payload_json.get(key)
-    return None
 
 
 def evaluate_condition(condition: str, new_value: Any) -> bool:
@@ -73,6 +95,8 @@ def evaluate_condition(condition: str, new_value: Any) -> bool:
             return False
         if isinstance(new_value, bool):
             expected_value = val_str.lower() in ("true", "1", "t", "y", "yes")
+        elif isinstance(new_value, str):
+            expected_value = val_str
         else:
             expected_value = type(new_value)(val_str)
         return op(new_value, expected_value)
@@ -83,55 +107,24 @@ def evaluate_condition(condition: str, new_value: Any) -> bool:
 def check_conditions(if_config: AutomationIf, state: StateObject) -> bool | None:
     """Checks if the state object meets all specified conditions."""
     source = if_config.source
-    if source in ["switchbot", "switchbot_timer"] and isinstance(
-        state, SwitchBotAdvertisement
-    ):
-        return _check_switchbot_conditions(if_config, state)
-    elif source in ["mqtt", "mqtt_timer"] and isinstance(state, aiomqtt.Message):
-        return _check_mqtt_conditions(if_config, state)
-    return None  # Not applicable
-
-
-def _check_switchbot_conditions(
-    if_config: AutomationIf, state: SwitchBotAdvertisement
-) -> bool | None:
-    device_cond = if_config.device
-    state_cond = if_config.state
-
-    for key, expected_value in device_cond.items():
-        if key == "address":
-            actual_value = state.address
-        else:
-            actual_value = state.data.get(key)
-        if actual_value != expected_value:
-            return False
-
-    for key, condition in state_cond.items():
-        new_value = get_value_from_state(state, key)
-        if new_value is None:
-            return None
-
-        if not evaluate_condition(condition, new_value):
-            return False
-
-    return True
-
-
-def _check_mqtt_conditions(
-    if_config: AutomationIf, state: aiomqtt.Message
-) -> bool | None:
-    mqtt_topic = if_config.topic
-    if not mqtt_topic:
+    if source.startswith("switchbot") and not isinstance(state, SwitchBotAdvertisement):
+        return None
+    if source.startswith("mqtt") and not isinstance(state, aiomqtt.Message):
+        return None
+    if not (source.startswith("switchbot") or source.startswith("mqtt")):
         return None
 
-    if not aiomqtt.Topic(mqtt_topic).matches(state.topic):
-        return None
+    if source.startswith("mqtt") and isinstance(state, aiomqtt.Message):
+        if if_config.topic:
+            if not aiomqtt.Topic(if_config.topic).matches(str(state.topic)):
+                return None
 
-    state_cond = if_config.state
-    for key, condition in state_cond.items():
-        new_value = get_value_from_state(state, key)
+    all_values = _get_values_as_dict(state)
+
+    for key, condition in if_config.conditions.items():
+        new_value = all_values.get(key)
         if new_value is None:
-            return None
+            return None  # Skip evaluation if the key doesn't exist in the state
 
         if not evaluate_condition(condition, new_value):
             return False
@@ -160,55 +153,6 @@ def format_object(
 
 def format_string(template_string: str, state: StateObject) -> str:
     """Replaces placeholders in a string with actual data."""
-    if isinstance(state, SwitchBotAdvertisement):
-        return _format_switchbot_string(template_string, state)
-    elif isinstance(state, aiomqtt.Message):
-        return _format_mqtt_string(template_string, state)
-    return template_string
-
-
-def _format_switchbot_string(
-    template_string: str, state: SwitchBotAdvertisement
-) -> str:
-    flat_data = {
-        **state.data.get("data", {}),
-        "address": state.address,
-        "modelName": state.data.get("modelName"),
-        "rssi": getattr(state, "rssi", None),
-    }
-    return str(template_string).format(**flat_data)
-
-
-class MqttFormatter(string.Formatter):
-    def get_field(self, field_name, args, kwargs):
-        # Handle dot notation for nested access
-        obj = kwargs
-        for part in field_name.split("."):
-            if isinstance(obj, dict):
-                obj = obj.get(part)
-            elif hasattr(obj, part):
-                obj = getattr(obj, part)
-            else:
-                return (
-                    None,
-                    field_name,
-                )  # Return None if not found, and original field_name
-        return obj, field_name
-
-
-def _format_mqtt_string(template_string: str, state: aiomqtt.Message) -> str:
-    if isinstance(state.payload, bytes):
-        payload_decoded = state.payload.decode()
-    else:
-        payload_decoded = str(state.payload)
-
-    format_data = {"topic": str(state.topic), "payload": payload_decoded}
-    try:
-        payload_json = json.loads(payload_decoded)
-        if isinstance(payload_json, dict):
-            format_data.update(payload_json)
-    except json.JSONDecodeError:
-        pass
-
-    formatter = MqttFormatter()
-    return formatter.format(template_string, **format_data)
+    all_values = _get_values_as_dict(state)
+    formatter = MqttFormatter()  # Use MqttFormatter for dot notation support
+    return formatter.format(template_string, **all_values)

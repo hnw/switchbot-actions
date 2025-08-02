@@ -64,9 +64,28 @@ class LoggingSettings(BaseConfigModel):
 class AutomationIf(BaseConfigModel):
     source: Literal["switchbot", "switchbot_timer", "mqtt", "mqtt_timer"]
     duration: Optional[float] = None
-    device: Dict[str, Any] = Field(default_factory=dict)
-    state: Dict[str, Any] = Field(default_factory=dict)
+    device: Optional[Dict[str, Any]] = None
+    state: Optional[Dict[str, Any]] = None
+    conditions: Dict[str, Any] = Field(default_factory=dict)
     topic: Optional[str] = None
+
+    @model_validator(mode="before")
+    def backward_compatibility_for_device_and_state(
+        cls, values: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        if "device" in values or "state" in values:
+            import warnings
+
+            warnings.warn(
+                "'device' and 'state' are deprecated, use 'conditions' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            conditions = values.get("conditions", {})
+            conditions.update(values.pop("device", {}))
+            conditions.update(values.pop("state", {}))
+            values["conditions"] = conditions
+        return values
 
     @field_validator("duration", mode="before")
     def parse_duration_string(cls, v: Any) -> Optional[float]:

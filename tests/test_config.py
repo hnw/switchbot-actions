@@ -78,6 +78,44 @@ def test_logging_settings_invalid_level():
         LoggingSettings(level="INVALID_LEVEL")  # type: ignore
 
 
+def test_automation_if_backward_compatibility():
+    # Old format using device and state
+    with pytest.warns(DeprecationWarning):
+        if_config_old = AutomationIf(
+            source="switchbot",
+            device={"address": "A"},
+            state={"temperature": "> 25"},
+        )
+    assert if_config_old.conditions == {
+        "address": "A",
+        "temperature": "> 25",
+    }
+    assert if_config_old.device is None
+    assert if_config_old.state is None
+
+    # New format using conditions
+    if_config_new = AutomationIf(
+        source="switchbot",
+        conditions={"address": "A", "temperature": "> 25"},
+    )
+    assert if_config_new.conditions == {
+        "address": "A",
+        "temperature": "> 25",
+    }
+
+    # Mixed format
+    with pytest.warns(DeprecationWarning):
+        if_config_mixed = AutomationIf(
+            source="switchbot",
+            device={"address": "A"},
+            conditions={"temperature": "> 25"},
+        )
+    assert if_config_mixed.conditions == {
+        "address": "A",
+        "temperature": "> 25",
+    }
+
+
 def test_automation_if_timer_source_requires_duration():
     # Valid case
     AutomationIf(source="switchbot_timer", duration=10)
