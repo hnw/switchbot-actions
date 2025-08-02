@@ -2,36 +2,14 @@ import asyncio
 import logging
 from typing import Any
 
-from .action_executor import (
-    ActionExecutor,
-    MqttPublishExecutor,
-    ShellCommandExecutor,
-    WebhookExecutor,
-)
+from .action_executor import create_action_executor
 from .action_runner import ActionRunnerBase, EventActionRunner, TimerActionRunner
-from .config import (
-    AutomationAction,
-    AutomationRule,
-    MqttPublishAction,
-    ShellCommandAction,
-    WebhookAction,
-)
-from .evaluator import StateObject
+from .config import AutomationRule
+from .evaluator import RawStateEvent, StateObject, create_state_object
 from .mqtt import mqtt_message_received
 from .signals import switchbot_advertisement_received
 
 logger = logging.getLogger(__name__)
-
-
-def _create_action_executor(action: AutomationAction) -> ActionExecutor:
-    if isinstance(action, ShellCommandAction):
-        return ShellCommandExecutor(action)
-    elif isinstance(action, WebhookAction):
-        return WebhookExecutor(action)
-    elif isinstance(action, MqttPublishAction):
-        return MqttPublishExecutor(action)
-    else:
-        raise ValueError(f"Unknown action type: {action.type}")
 
 
 class AutomationHandler:
@@ -43,9 +21,7 @@ class AutomationHandler:
     def __init__(self, configs: list[AutomationRule]):
         self._action_runners: list[ActionRunnerBase] = []
         for config in configs:
-            executors = [
-                _create_action_executor(action) for action in config.then_block
-            ]
+            executors = [create_action_executor(action) for action in config.then_block]
             source = config.if_block.source
             if source in ["switchbot", "mqtt"]:
                 self._action_runners.append(EventActionRunner(config, executors))
@@ -65,22 +41,24 @@ class AutomationHandler:
 
     def handle_state_change(self, sender: Any, **kwargs: Any) -> None:
         """Receives state and dispatches it to all registered ActionRunners."""
-        new_state: StateObject | None = kwargs.get("new_state")
-        if not new_state:
+        raw_state: RawStateEvent | None = kwargs.get("new_state")
+        if not raw_state:
             return
-        asyncio.create_task(self._run_all_runners(new_state))
+        state = create_state_object(raw_state)
+        asyncio.create_task(self._run_all_runners(state))
 
     def handle_mqtt_message(self, sender: Any, **kwargs: Any) -> None:
         """Receives MQTT message and dispatches it to all registered ActionRunners."""
-        message: StateObject | None = kwargs.get("message")
-        if not message:
+        raw_message: RawStateEvent | None = kwargs.get("message")
+        if not raw_message:
             return
-        asyncio.create_task(self._run_all_runners(message))
+        state = create_state_object(raw_message)
+        asyncio.create_task(self._run_all_runners(state))
 
-    async def _run_all_runners(self, new_state: StateObject) -> None:
+    async def _run_all_runners(self, state: StateObject) -> None:
         # Run all action runners concurrently
         results = await asyncio.gather(
-            *[runner.run(new_state) for runner in self._action_runners],
+            *[runner.run(state) for runner in self._action_runners],
             return_exceptions=True,
         )
         for result in results:

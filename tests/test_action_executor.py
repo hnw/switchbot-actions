@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -8,28 +8,14 @@ from switchbot_actions.action_executor import (
     MqttPublishExecutor,
     ShellCommandExecutor,
     WebhookExecutor,
+    create_action_executor,
 )
 from switchbot_actions.config import (
     MqttPublishAction,
     ShellCommandAction,
     WebhookAction,
 )
-from switchbot_actions.evaluator import format_string
-
-
-# --- Tests for format_string ---
-def test_format_string(mock_switchbot_advertisement):
-    state_object = mock_switchbot_advertisement(
-        address="DE:AD:BE:EF:11:11",
-        rssi=-70,
-        data={
-            "modelName": "WoSensorTH",
-            "data": {"temperature": 29.0, "humidity": 65, "battery": 80},
-        },
-    )
-    template = "Temp: {temperature}, Hum: {humidity}, RSSI: {rssi}, Addr: {address}"
-    result = format_string(template, state_object)
-    assert result == "Temp: 29.0, Hum: 65, RSSI: -70, Addr: DE:AD:BE:EF:11:11"
+from switchbot_actions.evaluator import create_state_object
 
 
 # --- Tests for ShellCommandExecutor ---
@@ -43,7 +29,7 @@ async def test_shell_command_executor(
     mock_process.returncode = 0
     mock_create_subprocess_shell.return_value = mock_process
 
-    state_object = mock_switchbot_advertisement(
+    raw_state = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:22:22",
         rssi=-55,
         data={
@@ -51,6 +37,7 @@ async def test_shell_command_executor(
             "data": {"isOn": True, "battery": 95},
         },
     )
+    state_object = create_state_object(raw_state)
     action_config = ShellCommandAction(
         type="shell_command",
         command="echo 'Bot {address} pressed'",
@@ -59,7 +46,7 @@ async def test_shell_command_executor(
     await executor.execute(state_object)
 
     mock_create_subprocess_shell.assert_called_once_with(
-        format_string(action_config.command, state_object),
+        state_object.format(action_config.command),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -70,10 +57,11 @@ async def test_shell_command_executor(
 @pytest.mark.asyncio
 @patch("switchbot_actions.action_executor.WebhookExecutor._send_request")
 async def test_webhook_executor_post(mock_send_request, mock_switchbot_advertisement):
-    state_object = mock_switchbot_advertisement(
+    raw_state = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:11:11",
         data={"data": {"temperature": 29.0}},
     )
+    state_object = create_state_object(raw_state)
     action_config = WebhookAction(
         type="webhook",
         url="http://example.com/hook",
@@ -142,7 +130,8 @@ async def test_mqtt_publish_executor(mock_signal_send, mqtt_message_json):
         payload={"new_temp": "{temperature}"},
     )
     executor = MqttPublishExecutor(action_config)
-    await executor.execute(mqtt_message_json)
+    state_object = create_state_object(mqtt_message_json)
+    await executor.execute(state_object)
 
     mock_signal_send.assert_called_once_with(
         None,
@@ -151,3 +140,11 @@ async def test_mqtt_publish_executor(mock_signal_send, mqtt_message_json):
         qos=0,
         retain=False,
     )
+
+
+def test_create_action_executor_raises_error_for_unknown_type():
+    """Test that the factory function raises a ValueError for an unknown action type."""
+    mock_action = MagicMock()
+    mock_action.type = "unknown"
+    with pytest.raises(ValueError, match="Unknown action type: unknown"):
+        create_action_executor(mock_action)

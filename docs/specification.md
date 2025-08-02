@@ -15,70 +15,79 @@ These signals are consumed by the `AutomationHandler`, which acts as a central d
 
 Each `ActionRunner` instance encapsulates the logic for its trigger type, including condition evaluation, cooldown management, and action execution. When an action is triggered, it delegates the execution to the `action_executor` module, which handles the specifics of running shell commands, webhooks, etc.
 
-The core of the condition evaluation logic resides in the `evaluator` module. This module is responsible for interpreting the structure of state objects and evaluating conditions, making the system extensible to new event sources.
+The core of the condition evaluation logic is encapsulated within the StateObject class, defined in the evaluator module. When the AutomationHandler receives a raw event (e.g., from SwitchbotClient or MqttClient), it uses a factory function (create_state_object) to wrap the event in a corresponding StateObject subclass (e.g., SwitchBotState). This unified StateObject is then passed to the appropriate ActionRunner, which uses the object's methods to check conditions and format action parameters, making the system extensible to new event sources.
 
 ### Mermaid Class Diagram
 
 ```mermaid
 classDiagram
     direction LR
-    class AutomationHandler {
-        +handle_state_change()
-        +handle_mqtt_message()
-    }
-    class ActionRunnerBase {
-        <<Abstract>>
-        +run(state: StateObject)
-        #_execute_actions(state: StateObject)
-    }
-    class EventActionRunner
-    class TimerActionRunner {
-      #_timer_callback(state: StateObject)
-    }
-    class SwitchbotClient {
-        +start_scan()
-    }
-    class MqttClient {
-        +run()
-        +publish()
-    }
-    class StateStore {
-        +get_state(key: str)
-        +handle_state_change(sender, **kwargs)
-    }
-    class PrometheusExporter{
-        +start_server()
-    }
-    class evaluator {
-        <<Module>>
-        +get_state_key(state: StateObject)
-        +check_conditions(if_config, state: StateObject)
-        +format_string(template, state: StateObject)
-    }
-    class action_executor {
-        <<Module>>
-        +execute_action(action, state: StateObject)
-    }
-    class Timer {
-        +start()
-        +stop()
-    }
 
-    AutomationHandler "1" --* "N" ActionRunnerBase : creates and holds
-    ActionRunnerBase <|-- EventActionRunner
-    ActionRunnerBase <|-- TimerActionRunner
+    subgraph Inputs
+        SwitchbotClient
+        MqttClient
+    end
 
-    SwitchbotClient ..> StateStore : notifies via signal
+    subgraph State_Representation
+        class StateObject {
+            <<Abstract>>
+            +id: str
+            +check_conditions(if_config)
+            +format(template_data)
+        }
+        StateObject <|-- SwitchBotState
+        StateObject <|-- MqttState
+        class state_factory {
+            <<Factory>>
+            +create_state_object()
+        }
+        state_factory ..> StateObject : creates
+    end
+
+    subgraph Core_Automation_Logic
+        AutomationHandler
+        class ActionRunnerBase {
+            <<Abstract>>
+            +run(state)
+        }
+        ActionRunnerBase <|-- EventActionRunner
+        ActionRunnerBase <|-- TimerActionRunner
+    end
+
+    subgraph Output_Actions
+        class ActionExecutor {
+            <<Abstract>>
+            +execute(state)
+        }
+        ActionExecutor <|-- ShellCommandExecutor
+        ActionExecutor <|-- WebhookExecutor
+        ActionExecutor <|-- MqttPublishExecutor
+        class action_factory {
+            <<Factory>>
+            +create_action_executor()
+        }
+        action_factory ..> ActionExecutor : creates
+    end
+
+    subgraph Storage_and_Metrics
+        StateStore
+        PrometheusExporter
+    end
+
+    %% --- Relationships ---
+
+    %% Automation Flow
     SwitchbotClient ..> AutomationHandler : notifies via signal
     MqttClient ..> AutomationHandler : notifies via signal
-    action_executor ..> MqttClient : publish request via signal
+    AutomationHandler ..> state_factory : uses
+    AutomationHandler ..> action_factory : uses
+    AutomationHandler "1" --* "N" ActionRunnerBase : creates & holds
+    ActionRunnerBase --> StateObject : uses
+    ActionRunnerBase "1" --* "N" ActionExecutor : holds & uses
 
-    PrometheusExporter --> StateStore : reads current state
-
-    ActionRunnerBase ..> evaluator : uses for conditions
-    ActionRunnerBase ..> action_executor : uses for execution
-    TimerActionRunner --> Timer : uses (provides callback)
-    action_executor ..> evaluator: uses for formatting
+    %% Storage & Metrics Flow
+    SwitchbotClient ..> StateStore : notifies via signal
+    PrometheusExporter --> StateStore : reads states
 ```
 
 ## 3. Components
@@ -103,13 +112,13 @@ classDiagram
   - **Responsibility**: Exposes device states from `StateStore` as Prometheus metrics.
   - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all entities and formats it into Prometheus metrics.
 
-### 3.5. `evaluator` (Module)
+### 3.5. `evaluator` (State Object Encapsulation)
 
-  - **Responsibility**: Centralizes the logic for interpreting state objects and evaluating conditions.
+  - **Responsibility**: Encapsulates event data and its associated logic into a unified `StateObject` interface. This abstracts away the differences between various event sources (e.g., SwitchBot vs. MQTT).
   - **Functionality**:
-      - `get_state_key(state)`: Extracts a unique key (e.g., MAC address or MQTT topic) from a state object.
-      - `check_conditions(if_config, state)`: Determines if a state object meets the conditions defined in a rule's `if` block.
-      - `format_string(template_string, state)`: Replaces placeholders in a string with actual state data.
+      - **`StateObject` (Abstract Class)**: The core abstraction that defines the common interface for all state events. It provides methods like `.id` to get a unique identifier, `.check_conditions(if_config)` to evaluate rules, and `.format(template)` to populate placeholders in actions.
+      - **`SwitchBotState` & `MqttState` (Concrete Classes)**: Implement the `StateObject` interface for SwitchBot BLE advertisements and MQTT messages, respectively.
+      - **`create_state_object(raw_event)` (Factory Function)**: A factory that takes a raw event object and returns the appropriate, fully initialized `StateObject` instance.
 
 ### 3.6. `action_executor` (Module)
 
@@ -300,12 +309,13 @@ The application uses the following signals for internal communication between co
 
 To add a new source (e.g., a webhook listener):
 
-1.  **Create a component** that monitors the source and emits a new, uniquely named signal with a structured "State Object" as its payload.
-2.  **Update `AutomationHandler`** to subscribe to this new signal.
-3.  **Create a new `ActionRunner` subclass** if the trigger logic (e.g., event-based vs. timer-based) differs from existing ones.
-4.  **Update `AutomationHandler`** to instantiate your new `ActionRunner` when the corresponding `source` is found in `config.yaml`.
-5.  **Update `config.py`** to validate the new `source` and any associated parameters.
-6.  **Document** the new source, its State Object structure, and configuration options in this specification.
+1.  **Create a new `StateObject` subclass** in `evaluator.py` to encapsulate the data and logic for the new event type.
+2.  **Update the `create_state_object` factory** in `evaluator.py` to handle the new raw event type and return your new class.
+3.  **Create a component** that monitors the new source (e.g., a webhook listener) and emits a new, uniquely named signal with the *raw event data* as its payload.
+4.  **Update `AutomationHandler`** to subscribe to this new signal. Its handler function will use the `create_state_object` factory to create the `StateObject` and pass it to the runners.
+5.  **Create a new `ActionRunner` subclass** if the trigger logic (e.g., event-based vs. timer-based) differs from existing ones.
+6.  **Update `config.py`** to validate the new `source` and any associated parameters.
+7.  **Document** the new source, its State Object structure, and configuration options in this specification.
 
 ### 7.3. How to Add a New Action Type
 
@@ -326,7 +336,7 @@ To add a new source (e.g., a webhook listener):
 │   ├── action_runner.py    # ActionRunnerBase and concrete implementations
 │   ├── cli.py              # Command-line interface entry point
 │   ├── config.py           # Pydantic models for configuration
-│   ├── evaluator.py        # Condition evaluation logic
+│   ├── evaluator.py        # StateObject class hierarchy for event data encapsulation
 │   ├── exporter.py         # PrometheusExporter
 │   ├── handlers.py         # AutomationHandler
 │   ├── logging.py          # Logging setup

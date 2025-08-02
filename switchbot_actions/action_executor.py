@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
 import httpx
 
@@ -10,17 +11,19 @@ from .config import (
     ShellCommandAction,
     WebhookAction,
 )
-from .evaluator import StateObject, format_object, format_string
+from .evaluator import StateObject
 from .signals import publish_mqtt_message_request
+
+T_Action = TypeVar("T_Action", bound=AutomationAction)
 
 logger = logging.getLogger(__name__)
 
 
-class ActionExecutor(ABC):
+class ActionExecutor(ABC, Generic[T_Action]):
     """Abstract base class for action executors."""
 
-    def __init__(self, action: AutomationAction):
-        self.action = action
+    def __init__(self, action: T_Action):
+        self.action: T_Action = action
 
     @abstractmethod
     async def execute(self, state: StateObject) -> None:
@@ -31,12 +34,8 @@ class ActionExecutor(ABC):
 class ShellCommandExecutor(ActionExecutor):
     """Executes a shell command."""
 
-    def __init__(self, action: ShellCommandAction):
-        super().__init__(action)
-        self.action: ShellCommandAction
-
     async def execute(self, state: StateObject) -> None:
-        command = format_string(self.action.command, state)
+        command = state.format(self.action.command)
         logger.debug(f"Executing shell command: {command}")
         process = await asyncio.create_subprocess_shell(
             command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -53,15 +52,11 @@ class ShellCommandExecutor(ActionExecutor):
 class WebhookExecutor(ActionExecutor):
     """Sends a webhook."""
 
-    def __init__(self, action: WebhookAction):
-        super().__init__(action)
-        self.action: WebhookAction
-
     async def execute(self, state: StateObject) -> None:
-        url = format_string(self.action.url, state)
+        url = state.format(self.action.url)
         method = self.action.method
-        payload = format_object(self.action.payload, state)
-        headers = format_object(self.action.headers, state)
+        payload = state.format(self.action.payload)
+        headers = state.format(self.action.headers)
 
         logger.debug(
             f"Sending webhook: {method} {url} with payload {payload} "
@@ -106,16 +101,12 @@ class WebhookExecutor(ActionExecutor):
 class MqttPublishExecutor(ActionExecutor):
     """Publishes an MQTT message."""
 
-    def __init__(self, action: MqttPublishAction):
-        super().__init__(action)
-        self.action: MqttPublishAction
-
     async def execute(self, state: StateObject) -> None:
-        topic = format_string(self.action.topic, state)
+        topic = state.format(self.action.topic)
         qos = self.action.qos
         retain = self.action.retain
 
-        payload = format_object(self.action.payload, state)
+        payload = state.format(self.action.payload)
 
         logger.debug(
             f"Publishing MQTT message to topic '{topic}' with payload '{payload}' "
@@ -124,3 +115,14 @@ class MqttPublishExecutor(ActionExecutor):
         publish_mqtt_message_request.send(
             None, topic=topic, payload=payload, qos=qos, retain=retain
         )
+
+
+def create_action_executor(action: AutomationAction) -> ActionExecutor:
+    if isinstance(action, ShellCommandAction):
+        return ShellCommandExecutor(action)
+    elif isinstance(action, WebhookAction):
+        return WebhookExecutor(action)
+    elif isinstance(action, MqttPublishAction):
+        return MqttPublishExecutor(action)
+    else:
+        raise ValueError(f"Unknown action type: {action.type}")

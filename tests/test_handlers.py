@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from switchbot_actions.config import AutomationRule
-from switchbot_actions.handlers import AutomationHandler, _create_action_executor
+from switchbot_actions.evaluator import create_state_object
+from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.mqtt import mqtt_message_received
 from switchbot_actions.signals import switchbot_advertisement_received
 
@@ -44,7 +45,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
     with (
         patch("switchbot_actions.handlers.EventActionRunner") as mock_event,
         patch("switchbot_actions.handlers.TimerActionRunner") as mock_timer,
-        patch("switchbot_actions.handlers._create_action_executor") as mock_factory,
+        patch("switchbot_actions.handlers.create_action_executor") as mock_factory,
     ):
         # Give the factory mock a name for clearer error messages
         mock_factory.return_value = MagicMock(name="ActionExecutorMock")
@@ -75,6 +76,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
 
 
 @pytest.mark.asyncio
+@patch("switchbot_actions.handlers.create_state_object")
 @patch(
     "switchbot_actions.handlers.AutomationHandler._run_all_runners",
     new_callable=AsyncMock,
@@ -83,6 +85,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
 async def test_handle_state_change_schedules_runner_task(
     mock_create_task,
     mock_run_all_runners,
+    mock_create_state_object,
     automation_handler_factory,
     mock_switchbot_advertisement,
 ):
@@ -94,18 +97,23 @@ async def test_handle_state_change_schedules_runner_task(
     ]
     _ = automation_handler_factory(configs)
 
-    new_state = mock_switchbot_advertisement()
-    switchbot_advertisement_received.send(None, new_state=new_state)
+    raw_state = mock_switchbot_advertisement()
+    mock_state_object = MagicMock()
+    mock_create_state_object.return_value = mock_state_object
 
+    switchbot_advertisement_received.send(None, new_state=raw_state)
+
+    mock_create_state_object.assert_called_once_with(raw_state)
     mock_create_task.assert_called_once()
 
     coro = mock_create_task.call_args[0][0]
     await coro
 
-    mock_run_all_runners.assert_called_once_with(new_state)
+    mock_run_all_runners.assert_called_once_with(mock_state_object)
 
 
 @pytest.mark.asyncio
+@patch("switchbot_actions.handlers.create_state_object")
 @patch(
     "switchbot_actions.handlers.AutomationHandler._run_all_runners",
     new_callable=AsyncMock,
@@ -114,6 +122,7 @@ async def test_handle_state_change_schedules_runner_task(
 async def test_handle_mqtt_message_schedules_runner_task(
     mock_create_task,
     mock_run_all_runners,
+    mock_create_state_object,
     automation_handler_factory,
     mqtt_message_plain,
 ):
@@ -127,14 +136,18 @@ async def test_handle_mqtt_message_schedules_runner_task(
     ]
     _ = automation_handler_factory(configs)
 
+    mock_state_object = MagicMock()
+    mock_create_state_object.return_value = mock_state_object
+
     mqtt_message_received.send(None, message=mqtt_message_plain)
 
+    mock_create_state_object.assert_called_once_with(mqtt_message_plain)
     mock_create_task.assert_called_once()
 
     coro = mock_create_task.call_args[0][0]
     await coro
 
-    mock_run_all_runners.assert_called_once_with(mqtt_message_plain)
+    mock_run_all_runners.assert_called_once_with(mock_state_object)
 
 
 @pytest.mark.asyncio
@@ -200,11 +213,12 @@ async def test_run_all_runners_concurrently(
     handler._action_runners[0].run = mock_run_1
     handler._action_runners[1].run = mock_run_2
 
-    new_state = mock_switchbot_advertisement()
-    await handler._run_all_runners(new_state)
+    raw_state = mock_switchbot_advertisement()
+    state = create_state_object(raw_state)
+    await handler._run_all_runners(state)
 
-    mock_run_1.assert_awaited_once_with(new_state)
-    mock_run_2.assert_awaited_once_with(new_state)
+    mock_run_1.assert_awaited_once_with(state)
+    mock_run_2.assert_awaited_once_with(state)
 
 
 @pytest.mark.asyncio
@@ -231,15 +245,16 @@ async def test_run_all_runners_handles_exceptions(
     handler._action_runners[1].run = mock_run_2
     handler._action_runners[2].run = mock_run_3
 
-    new_state = mock_switchbot_advertisement()
+    raw_state = mock_switchbot_advertisement()
+    state = create_state_object(raw_state)
 
     with caplog.at_level(logging.ERROR):
-        await handler._run_all_runners(new_state)
+        await handler._run_all_runners(state)
 
         # Assert that all runners were attempted to be run
-        mock_run_1.assert_awaited_once_with(new_state)
-        mock_run_2.assert_awaited_once_with(new_state)
-        mock_run_3.assert_awaited_once_with(new_state)
+        mock_run_1.assert_awaited_once_with(state)
+        mock_run_2.assert_awaited_once_with(state)
+        mock_run_3.assert_awaited_once_with(state)
 
         # Assert that the exception was logged
         assert len(caplog.records) == 1
@@ -251,11 +266,3 @@ async def test_run_all_runners_handles_exceptions(
             "An action runner failed with an exception: Test exception"
             in caplog.records[0].message
         )
-
-
-def test_create_action_executor_raises_error_for_unknown_type():
-    """Test that the factory function raises a ValueError for an unknown action type."""
-    mock_action = MagicMock()
-    mock_action.type = "unknown"
-    with pytest.raises(ValueError, match="Unknown action type: unknown"):
-        _create_action_executor(mock_action)

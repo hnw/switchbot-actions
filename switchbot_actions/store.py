@@ -27,7 +27,8 @@ class StateStore:
         if not new_state:
             return
 
-        key = evaluator.get_state_key(new_state)
+        state_obj = evaluator.create_state_object(new_state)
+        key = state_obj.id
         with self._lock:
             self._states[key] = new_state
         logger.debug(f"State updated for key {key}")

@@ -7,7 +7,7 @@ from pytimeparse2 import parse
 
 from .action_executor import ActionExecutor
 from .config import AutomationRule
-from .evaluator import StateObject, check_conditions, get_state_key
+from .evaluator import StateObject
 from .timers import Timer
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,7 @@ class ActionRunnerBase(ABC):
 
     async def _execute_actions(self, state: StateObject) -> None:
         name = self.config.name
-        state_key = get_state_key(state)
-        logger.debug(f"Trigger '{name}' actions started for state key {state_key}")
+        logger.debug(f"Trigger '{name}' actions started for {state.id}")
 
         cooldown_str = self.config.cooldown
         if cooldown_str:
@@ -38,37 +37,35 @@ class ActionRunnerBase(ABC):
                 else:
                     duration_seconds = duration.total_seconds()
 
-                last_run = self._last_run_timestamp.get(state_key)
+                last_run = self._last_run_timestamp.get(state.id)
                 if last_run and (time.time() - last_run < duration_seconds):
                     logger.debug(
-                        f"Trigger '{name}' for state key {state_key} "
-                        "is on cooldown, skipping."
+                        f"Trigger '{name}' for {state.id} is on cooldown, skipping."
                     )
                     return
 
         for executor in self.executors:
             await executor.execute(state)
 
-        self._last_run_timestamp[state_key] = time.time()
+        self._last_run_timestamp[state.id] = time.time()
 
 
 class EventActionRunner(ActionRunnerBase):
     async def run(self, state: StateObject) -> None:
-        conditions_now_met = check_conditions(self.config.if_block, state)
-        state_key = get_state_key(state)
+        conditions_now_met = state.check_conditions(self.config.if_block)
 
         if conditions_now_met is None:
             return  # Skip if conditions are not applicable
 
-        rule_conditions_previously_met = self._rule_conditions_met.get(state_key, False)
+        rule_conditions_previously_met = self._rule_conditions_met.get(state.id, False)
 
         if conditions_now_met and not rule_conditions_previously_met:
             # Conditions just became true (edge trigger)
-            self._rule_conditions_met[state_key] = True
+            self._rule_conditions_met[state.id] = True
             await self._execute_actions(state)
         elif not conditions_now_met and rule_conditions_previously_met:
             # Conditions just became false
-            self._rule_conditions_met[state_key] = False
+            self._rule_conditions_met[state.id] = False
         # else: conditions remain true or remain false, do nothing for edge trigger
 
 
@@ -79,18 +76,16 @@ class TimerActionRunner(ActionRunnerBase):
 
     async def run(self, state: StateObject) -> None:
         name = self.config.name
-        conditions_now_met = check_conditions(self.config.if_block, state)
-
-        state_key = get_state_key(state)
+        conditions_now_met = state.check_conditions(self.config.if_block)
 
         if conditions_now_met is None:
             return
 
-        rule_conditions_previously_met = self._rule_conditions_met.get(state_key, False)
+        rule_conditions_previously_met = self._rule_conditions_met.get(state.id, False)
 
         if conditions_now_met and not rule_conditions_previously_met:
             # Conditions just became true, start timer
-            self._rule_conditions_met[state_key] = True
+            self._rule_conditions_met[state.id] = True
             duration = self.config.if_block.duration
 
             assert duration is not None, "Duration must be set for timer-based rules"
@@ -98,26 +93,24 @@ class TimerActionRunner(ActionRunnerBase):
             timer = Timer(
                 duration,
                 lambda: asyncio.create_task(self._timer_callback(state)),
-                name=f"Rule {name} Timer for {state_key}",
+                name=f"Rule {name} Timer for {state.id}",
             )
-            self._active_timers[state_key] = timer
+            self._active_timers[state.id] = timer
             timer.start()
             logger.debug(
-                f"Timer started for rule {name} "
-                f"for {duration} seconds on device {state_key}."
+                f"Timer started for rule {name} for {duration} seconds on {state.id}."
             )
 
         elif not conditions_now_met and rule_conditions_previously_met:
             # Conditions just became false, stop timer
-            self._rule_conditions_met[state_key] = False
-            if state_key in self._active_timers:
-                self._active_timers[state_key].stop()
-                del self._active_timers[state_key]
-                logger.debug(f"Timer cancelled for rule {name} on device {state_key}.")
+            self._rule_conditions_met[state.id] = False
+            if state.id in self._active_timers:
+                self._active_timers[state.id].stop()
+                del self._active_timers[state.id]
+                logger.debug(f"Timer cancelled for rule {name} on {state.id}.")
 
     async def _timer_callback(self, state: StateObject) -> None:
         """Called when the timer completes."""
-        state_key = get_state_key(state)
         await self._execute_actions(state)
-        if state_key in self._active_timers:
-            del self._active_timers[state_key]  # Clear the timer after execution
+        if state.id in self._active_timers:
+            del self._active_timers[state.id]  # Clear the timer after execution

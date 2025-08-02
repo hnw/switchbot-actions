@@ -51,3 +51,19 @@ def mqtt_message_json() -> aiomqtt.Message:
         properties=None,
     )
     return message
+
+
+@pytest.fixture
+def sample_state(mock_switchbot_advertisement):
+    """A sample StateObject (SwitchBotState) for testing purposes."""
+    raw_state = mock_switchbot_advertisement(
+        address="e1:22:33:44:55:66",
+        data={
+            "data": {"temperature": 25.0, "humidity": 50, "battery": 100},
+            "modelName": "WoSensorTH",
+        },
+        rssi=-50,
+    )
+    from switchbot_actions.evaluator import create_state_object
+
+    return create_state_object(raw_state)

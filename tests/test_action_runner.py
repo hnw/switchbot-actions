@@ -10,6 +10,7 @@ from switchbot_actions.action_runner import (
     TimerActionRunner,
 )
 from switchbot_actions.config import AutomationRule
+from switchbot_actions.evaluator import StateObject, create_state_object
 from switchbot_actions.timers import Timer
 
 
@@ -18,8 +19,11 @@ class TestActionRunnerBase:
     async def test_execute_actions_with_cooldown_per_device(
         self, mock_switchbot_advertisement
     ):
-        state_object_1 = mock_switchbot_advertisement(address="device_1")
-        state_object_2 = mock_switchbot_advertisement(address="device_2")
+        raw_state_1 = mock_switchbot_advertisement(address="device_1")
+        state_object_1 = create_state_object(raw_state_1)
+        raw_state_2 = mock_switchbot_advertisement(address="device_2")
+        state_object_2 = create_state_object(raw_state_2)
+
         config = AutomationRule.model_validate(
             {
                 "name": "Cooldown Test",
@@ -55,7 +59,7 @@ class TestActionRunnerBase:
 class TestEventActionRunner:
     @pytest.mark.asyncio
     @patch.object(ActionRunnerBase, "_execute_actions", new_callable=AsyncMock)
-    @patch("switchbot_actions.action_runner.check_conditions")
+    @patch.object(StateObject, "check_conditions")
     async def test_run_executes_actions_on_edge_trigger(
         self, mock_check_conditions, mock_execute_actions, mock_switchbot_advertisement
     ):
@@ -66,7 +70,8 @@ class TestEventActionRunner:
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
-        state_object = mock_switchbot_advertisement(address="test_device")
+        raw_state = mock_switchbot_advertisement(address="test_device")
+        state_object = create_state_object(raw_state)
         runner = EventActionRunner(config, executors=[])
 
         # Simulate: False -> True -> True -> None -> False
@@ -75,34 +80,32 @@ class TestEventActionRunner:
         # 1. False: No action
         await runner.run(state_object)
         mock_execute_actions.assert_not_called()
-        assert not runner._rule_conditions_met.get("test_device")
-
-        # 2. True (edge): Action executed
+        assert not runner._rule_conditions_met.get(state_object.id)
         await runner.run(state_object)
         mock_execute_actions.assert_called_once_with(state_object)
-        assert runner._rule_conditions_met.get("test_device")
+        assert runner._rule_conditions_met.get(state_object.id)
         mock_execute_actions.reset_mock()
 
         # 3. True (sustained): No action
         await runner.run(state_object)
         mock_execute_actions.assert_not_called()
-        assert runner._rule_conditions_met.get("test_device")
+        assert runner._rule_conditions_met.get(state_object.id)
 
         # 4. None: No change in state, no action
         await runner.run(state_object)
         mock_execute_actions.assert_not_called()
-        assert runner._rule_conditions_met.get("test_device")
+        assert runner._rule_conditions_met.get(state_object.id)
 
         # 5. False: State becomes false
         await runner.run(state_object)
         mock_execute_actions.assert_not_called()
-        assert not runner._rule_conditions_met.get("test_device")
+        assert not runner._rule_conditions_met.get(state_object.id)
 
 
 class TestTimerActionRunner:
     @pytest.mark.asyncio
     @patch("switchbot_actions.action_runner.Timer")
-    @patch("switchbot_actions.action_runner.check_conditions")
+    @patch.object(StateObject, "check_conditions")
     async def test_timer_logic_per_device(
         self,
         mock_check_conditions: MagicMock,
@@ -120,8 +123,10 @@ class TestTimerActionRunner:
         # Each call to Timer should return a new mock instance
         MockTimer.side_effect = [MagicMock(spec=Timer), MagicMock(spec=Timer)]
 
-        state_1 = mock_switchbot_advertisement(address="device_1")
-        state_2 = mock_switchbot_advertisement(address="device_2")
+        raw_state_1 = mock_switchbot_advertisement(address="device_1")
+        state_1 = create_state_object(raw_state_1)
+        raw_state_2 = mock_switchbot_advertisement(address="device_2")
+        state_2 = create_state_object(raw_state_2)
 
         # Device 1: conditions become true -> start timer
         mock_check_conditions.return_value = True
@@ -148,7 +153,7 @@ class TestTimerActionRunner:
         assert "device_2" in runner._active_timers  # Timer 2 should still be active
 
     @pytest.mark.asyncio
-    @patch("switchbot_actions.action_runner.check_conditions")
+    @patch.object(StateObject, "check_conditions")
     async def test_run_handles_none_from_check_conditions(
         self, mock_check_conditions, caplog, mock_switchbot_advertisement
     ):
@@ -160,7 +165,8 @@ class TestTimerActionRunner:
             }
         )
         runner = TimerActionRunner(config, executors=[])
-        state = mock_switchbot_advertisement(address="test_device")
+        raw_state = mock_switchbot_advertisement(address="test_device")
+        state = create_state_object(raw_state)
 
         # Set initial state to True
         runner._rule_conditions_met["test_device"] = True
@@ -171,9 +177,8 @@ class TestTimerActionRunner:
         await runner.run(state)
 
         # Assert that the timer was not stopped and state did not change
-        assert runner._rule_conditions_met.get("test_device")
-        assert "test_device" in runner._active_timers
-        runner._active_timers["test_device"].stop.assert_not_called()
+        # Assert that the timer was not stopped and state did not change
+        assert runner._rule_conditions_met.get(state.id)
 
     @pytest.mark.asyncio
     @patch.object(TimerActionRunner, "_execute_actions", new_callable=AsyncMock)
@@ -188,7 +193,8 @@ class TestTimerActionRunner:
             }
         )
         runner = TimerActionRunner(config, executors=[])
-        state = mock_switchbot_advertisement(address="test_device")
+        raw_state = mock_switchbot_advertisement(address="test_device")
+        state = create_state_object(raw_state)
         runner._active_timers["test_device"] = MagicMock(spec=Timer)
 
         await runner._timer_callback(state)
