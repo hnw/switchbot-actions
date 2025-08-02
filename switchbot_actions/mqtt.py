@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+from typing import Any, Dict, Union
 
 import aiomqtt
 from blinker import signal
@@ -60,8 +62,14 @@ class MqttClient:
         await client.subscribe("#")
 
     async def publish(
-        self, topic: str, payload: str, qos: int = 0, retain: bool = False
+        self,
+        topic: str,
+        payload: Union[str, Dict[str, Any]],
+        qos: int = 0,
+        retain: bool = False,
     ):
+        if isinstance(payload, dict):
+            payload = json.dumps(payload)
         try:
             await self.client.publish(topic, payload, qos=qos, retain=retain)
         except aiomqtt.MqttError:

@@ -1,12 +1,12 @@
 # tests/test_handlers.py
 import asyncio
 import logging
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from switchbot_actions.config import AutomationRule
-from switchbot_actions.handlers import AutomationHandler
+from switchbot_actions.handlers import AutomationHandler, _create_action_executor
 from switchbot_actions.mqtt import mqtt_message_received
 from switchbot_actions.signals import switchbot_advertisement_received
 
@@ -44,19 +44,34 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
     with (
         patch("switchbot_actions.handlers.EventActionRunner") as mock_event,
         patch("switchbot_actions.handlers.TimerActionRunner") as mock_timer,
+        patch("switchbot_actions.handlers._create_action_executor") as mock_factory,
     ):
+        # Give the factory mock a name for clearer error messages
+        mock_factory.return_value = MagicMock(name="ActionExecutorMock")
+
+        then_block = [{"type": "shell_command", "command": "echo 'hi'"}]
         configs = [
-            AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
             AutomationRule.model_validate(
-                {"if": {"source": "switchbot_timer", "duration": "1s"}, "then": []}
+                {"if": {"source": "switchbot"}, "then": then_block}
+            ),
+            AutomationRule.model_validate(
+                {
+                    "if": {"source": "switchbot_timer", "duration": "1s"},
+                    "then": then_block,
+                }
             ),
         ]
 
         handler = automation_handler_factory(configs)
 
         assert len(handler._action_runners) == 2
-        mock_event.assert_called_once_with(configs[0])
-        mock_timer.assert_called_once_with(configs[1])
+        # The factory should be called once for each action in each rule
+        assert mock_factory.call_count == 2
+
+        # Check that the runners were instantiated
+        # with the config and the mocked executors
+        mock_event.assert_called_once_with(configs[0], [mock_factory.return_value])
+        mock_timer.assert_called_once_with(configs[1], [mock_factory.return_value])
 
 
 @pytest.mark.asyncio
@@ -236,3 +251,11 @@ async def test_run_all_runners_handles_exceptions(
             "An action runner failed with an exception: Test exception"
             in caplog.records[0].message
         )
+
+
+def test_create_action_executor_raises_error_for_unknown_type():
+    """Test that the factory function raises a ValueError for an unknown action type."""
+    mock_action = MagicMock()
+    mock_action.type = "unknown"
+    with pytest.raises(ValueError, match="Unknown action type: unknown"):
+        _create_action_executor(mock_action)

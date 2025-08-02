@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 from pytimeparse2 import parse
 
-from .action_executor import execute_action
+from .action_executor import ActionExecutor
 from .config import AutomationRule
 from .evaluator import StateObject, check_conditions, get_state_key
 from .timers import Timer
@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class ActionRunnerBase(ABC):
-    def __init__(self, config: AutomationRule):
+    def __init__(self, config: AutomationRule, executors: list[ActionExecutor]):
         self.config = config
+        self.executors = executors
         self._last_run_timestamp: dict[str, float] = {}
         self._rule_conditions_met: dict[str, bool] = {}
 
@@ -45,8 +46,8 @@ class ActionRunnerBase(ABC):
                     )
                     return
 
-        for action in self.config.then_block:
-            await execute_action(action, state)
+        for executor in self.executors:
+            await executor.execute(state)
 
         self._last_run_timestamp[state_key] = time.time()
 
@@ -72,8 +73,8 @@ class EventActionRunner(ActionRunnerBase):
 
 
 class TimerActionRunner(ActionRunnerBase):
-    def __init__(self, config: AutomationRule):
-        super().__init__(config)
+    def __init__(self, config: AutomationRule, executors: list[ActionExecutor]):
+        super().__init__(config, executors)
         self._active_timers: dict[str, Timer] = {}
 
     async def run(self, state: StateObject) -> None:

@@ -2,7 +2,7 @@ import json
 import logging
 import operator
 import string
-from typing import Any, TypeAlias, Union
+from typing import Any, Dict, TypeAlias, Union, overload
 
 import aiomqtt
 from switchbot import SwitchBotAdvertisement
@@ -137,6 +137,25 @@ def _check_mqtt_conditions(
             return False
 
     return True
+
+
+@overload
+def format_object(template_data: str, state: StateObject) -> str: ...
+
+
+@overload
+def format_object(
+    template_data: Dict[str, Any], state: StateObject
+) -> Dict[str, Any]: ...
+
+
+def format_object(
+    template_data: Union[str, Dict[str, Any]], state: StateObject
+) -> Union[str, Dict[str, Any]]:
+    if isinstance(template_data, dict):
+        return {k: format_string(str(v), state) for k, v in template_data.items()}
+    else:
+        return format_string(str(template_data), state)
 
 
 def format_string(template_string: str, state: StateObject) -> str:

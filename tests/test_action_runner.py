@@ -15,9 +15,8 @@ from switchbot_actions.timers import Timer
 
 class TestActionRunnerBase:
     @pytest.mark.asyncio
-    @patch("switchbot_actions.action_runner.execute_action")
     async def test_execute_actions_with_cooldown_per_device(
-        self, mock_execute_action, mock_switchbot_advertisement
+        self, mock_switchbot_advertisement
     ):
         state_object_1 = mock_switchbot_advertisement(address="device_1")
         state_object_2 = mock_switchbot_advertisement(address="device_2")
@@ -29,32 +28,28 @@ class TestActionRunnerBase:
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
-        runner = EventActionRunner(config)
+        mock_executor = AsyncMock()
+        mock_executor.execute = AsyncMock()
+        runner = EventActionRunner(config, executors=[mock_executor])
 
         # Run for device 1, should execute
         await runner._execute_actions(state_object_1)
-        mock_execute_action.assert_called_once_with(
-            config.then_block[0], state_object_1
-        )
-        mock_execute_action.reset_mock()
+        mock_executor.execute.assert_called_once_with(state_object_1)
+        mock_executor.execute.reset_mock()
 
         # Run for device 2, should also execute as cooldown is per-device
         await runner._execute_actions(state_object_2)
-        mock_execute_action.assert_called_once_with(
-            config.then_block[0], state_object_2
-        )
-        mock_execute_action.reset_mock()
+        mock_executor.execute.assert_called_once_with(state_object_2)
+        mock_executor.execute.reset_mock()
 
         # Run for device 1 again within cooldown, should skip
         await runner._execute_actions(state_object_1)
-        mock_execute_action.assert_not_called()
+        mock_executor.execute.assert_not_called()
 
         # Advance time past cooldown for device 1
         with patch("time.time", return_value=time.time() + 15):
             await runner._execute_actions(state_object_1)
-            mock_execute_action.assert_called_once_with(
-                config.then_block[0], state_object_1
-            )
+            mock_executor.execute.assert_called_once_with(state_object_1)
 
 
 class TestEventActionRunner:
@@ -72,7 +67,7 @@ class TestEventActionRunner:
             }
         )
         state_object = mock_switchbot_advertisement(address="test_device")
-        runner = EventActionRunner(config)
+        runner = EventActionRunner(config, executors=[])
 
         # Simulate: False -> True -> True -> None -> False
         mock_check_conditions.side_effect = [False, True, True, None, False]
@@ -121,7 +116,7 @@ class TestTimerActionRunner:
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
-        runner = TimerActionRunner(config)
+        runner = TimerActionRunner(config, executors=[])
         # Each call to Timer should return a new mock instance
         MockTimer.side_effect = [MagicMock(spec=Timer), MagicMock(spec=Timer)]
 
@@ -164,7 +159,7 @@ class TestTimerActionRunner:
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
-        runner = TimerActionRunner(config)
+        runner = TimerActionRunner(config, executors=[])
         state = mock_switchbot_advertisement(address="test_device")
 
         # Set initial state to True
@@ -192,7 +187,7 @@ class TestTimerActionRunner:
                 "then": [{"type": "shell_command", "command": "echo 'test'"}],
             }
         )
-        runner = TimerActionRunner(config)
+        runner = TimerActionRunner(config, executors=[])
         state = mock_switchbot_advertisement(address="test_device")
         runner._active_timers["test_device"] = MagicMock(spec=Timer)
 
