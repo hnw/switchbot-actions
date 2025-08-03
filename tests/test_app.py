@@ -2,7 +2,8 @@ import argparse
 import asyncio
 import signal
 from copy import deepcopy
-from unittest.mock import AsyncMock, Mock, patch
+from http.server import HTTPServer
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -289,7 +290,7 @@ async def test_reload_integration_with_real_components(
         mock_aiomqtt_client_class.return_value = mock_mqtt_client
 
         # --- Mock Prometheus server ---
-        mock_http_server = Mock()
+        mock_http_server = MagicMock(spec=HTTPServer)
         mock_start_http_server.return_value = (mock_http_server, Mock())
 
         # --- Run Test ---
@@ -374,7 +375,7 @@ async def test_prometheus_exporter_port_in_use_error(
     # Configure the mock PrometheusExporter to raise OSError during start_server
     mock_exporter_instance = Mock()
     mock_prometheus_exporter_class.return_value = mock_exporter_instance
-    mock_exporter_instance.start_server.side_effect = OSError("Address already in use")
+    mock_exporter_instance.start.side_effect = OSError("Address already in use")
 
     # Call run_app, which should catch the OSError and exit
     with pytest.raises(SystemExit) as excinfo:

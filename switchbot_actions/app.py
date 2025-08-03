@@ -75,16 +75,14 @@ class Application:
         if self.settings.prometheus_exporter.enabled:
             logger.info("Starting Prometheus exporter.")
             self.exporter = PrometheusExporter(
-                state_storage=self.storage,
-                port=self.settings.prometheus_exporter.port,
-                target_config=self.settings.prometheus_exporter.target,
+                settings=self.settings.prometheus_exporter
             )
-            self.exporter.start_server()
+            self.exporter.start()
 
     def _stop_exporter(self):
         if self.exporter:
             logger.info("Stopping Prometheus exporter.")
-            self.exporter.stop_server()
+            self.exporter.stop()
             self.exporter = None
 
     def _start_automations(self):
