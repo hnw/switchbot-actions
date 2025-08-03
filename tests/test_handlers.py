@@ -75,10 +75,10 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
         assert mock_factory.call_count == 4  # 4 rules, each with 1 action
 
         # Verify trigger types directly from the handler's runners
-        assert isinstance(handler._switchbot_runners[0].trigger, EdgeTrigger)
-        assert isinstance(handler._switchbot_runners[1].trigger, DurationTrigger)
-        assert isinstance(handler._mqtt_runners[0].trigger, EdgeTrigger)
-        assert isinstance(handler._mqtt_runners[1].trigger, DurationTrigger)
+        assert isinstance(handler._switchbot_runners[0]._trigger, EdgeTrigger)
+        assert isinstance(handler._switchbot_runners[1]._trigger, DurationTrigger)
+        assert isinstance(handler._mqtt_runners[0]._trigger, EdgeTrigger)
+        assert isinstance(handler._mqtt_runners[1]._trigger, DurationTrigger)
 
 
 @pytest.mark.asyncio

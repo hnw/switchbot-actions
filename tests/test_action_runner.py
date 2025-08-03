@@ -33,22 +33,22 @@ class TestActionRunner:
         runner = ActionRunner(config, executors=[mock_executor], trigger=trigger)
 
         # Run for device 1, should execute
-        await runner._execute_actions(state_object_1)
+        await runner.execute_actions(state_object_1)
         mock_executor.execute.assert_called_once_with(state_object_1)
         mock_executor.execute.reset_mock()
 
         # Run for device 2, should also execute as cooldown is per-device
-        await runner._execute_actions(state_object_2)
+        await runner.execute_actions(state_object_2)
         mock_executor.execute.assert_called_once_with(state_object_2)
         mock_executor.execute.reset_mock()
 
         # Run for device 1 again within cooldown, should skip
-        await runner._execute_actions(state_object_1)
+        await runner.execute_actions(state_object_1)
         mock_executor.execute.assert_not_called()
 
         # Advance time past cooldown for device 1
         with patch("time.time", return_value=time.time() + 15):
-            await runner._execute_actions(state_object_1)
+            await runner.execute_actions(state_object_1)
             mock_executor.execute.assert_called_once_with(state_object_1)
 
     @pytest.mark.asyncio

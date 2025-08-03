@@ -21,20 +21,20 @@ class ActionRunner(Generic[T]):
         executors: list[ActionExecutor],
         trigger: Trigger[T],
     ):
-        self.config = config
-        self.executors = executors
-        self.trigger = trigger
+        self._config = config
+        self._executors = executors
+        self._trigger = trigger
         self._last_run_timestamp: dict[str, float] = {}
-        self.trigger.set_callback(self._execute_actions)
+        self._trigger.set_callback(self.execute_actions)
 
     async def run(self, state: T) -> None:
-        await self.trigger.process_state(state)
+        await self._trigger.process_state(state)
 
-    async def _execute_actions(self, state: T) -> None:
-        name = self.config.name
+    async def execute_actions(self, state: T) -> None:
+        name = self._config.name
         logger.debug(f"Trigger '{name}' actions started for {state.id}")
 
-        cooldown_str = self.config.cooldown
+        cooldown_str = self._config.cooldown
         if cooldown_str:
             duration = parse(cooldown_str)
             if duration is not None:
@@ -50,7 +50,7 @@ class ActionRunner(Generic[T]):
                     )
                     return
 
-        for executor in self.executors:
+        for executor in self._executors:
             await executor.execute(state)
 
         self._last_run_timestamp[state.id] = time.time()

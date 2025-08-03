@@ -51,7 +51,7 @@ T = TypeVar("T", bound=StateObject)
 
 class Trigger(ABC, Generic[T]):
     def __init__(self, if_config: AutomationIf):
-        self.if_config = if_config
+        self._if_config = if_config
         self._callback: Callable[[T], Any] | None = None
         self._rule_conditions_met: dict[str, bool] = {}
 
@@ -67,7 +67,7 @@ class Trigger(ABC, Generic[T]):
         all_values = state.get_values_dict()
 
         # Evaluate conditions
-        for key, condition in self.if_config.conditions.items():
+        for key, condition in self._if_config.conditions.items():
             if key not in all_values:
                 return None  # Return None if the key is not found in state data
             value_to_check = all_values.get(key)
@@ -105,7 +105,7 @@ class DurationTrigger(Trigger[T]):
         self._active_timers: dict[str, Timer] = {}
 
     async def process_state(self, state: T) -> None:
-        name = self.if_config.name
+        name = self._if_config.name
         conditions_now_met = self._check_all_conditions(state)
 
         if conditions_now_met is None:
@@ -116,7 +116,7 @@ class DurationTrigger(Trigger[T]):
         if conditions_now_met and not rule_conditions_previously_met:
             # Conditions just became true, start timer
             self._rule_conditions_met[state.id] = True
-            duration = self.if_config.duration
+            duration = self._if_config.duration
 
             assert duration is not None, "Duration must be set for timer-based rules"
 

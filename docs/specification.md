@@ -32,26 +32,33 @@ classDiagram
         class StateObject {
             <<Abstract>>
             +id: str
-            +check_conditions(if_config)
             +format(template_data)
         }
         StateObject <|-- SwitchBotState
         StateObject <|-- MqttState
-        class state_factory {
+        class factory {
             <<Factory>>
             +create_state_object()
         }
-        state_factory ..> StateObject : creates
+        factory ..> StateObject
     end
 
     subgraph Core_Automation_Logic
         AutomationHandler
-        class ActionRunnerBase {
-            <<Abstract>>
+        class ActionRunner {
+            #_trigger: Trigger
+            #_executors: List[ActionExecutor]
             +run(state)
+            +execute_actions(state)
         }
-        ActionRunnerBase <|-- EventActionRunner
-        ActionRunnerBase <|-- TimerActionRunner
+        class Trigger {
+            <<Abstract>>
+            #_if_config
+            +set_callback(callback)
+            +process_state(state)
+        }
+        Trigger <|-- EdgeTrigger
+        Trigger <|-- DurationTrigger
     end
 
     subgraph Output_Actions
@@ -62,11 +69,11 @@ classDiagram
         ActionExecutor <|-- ShellCommandExecutor
         ActionExecutor <|-- WebhookExecutor
         ActionExecutor <|-- MqttPublishExecutor
-        class action_factory {
+        class factory {
             <<Factory>>
             +create_action_executor()
         }
-        action_factory ..> ActionExecutor : creates
+        factory ..> ActionExecutor
     end
 
     subgraph Storage_and_Metrics
@@ -79,15 +86,15 @@ classDiagram
     %% Automation Flow
     SwitchbotClient ..> AutomationHandler : notifies via signal
     MqttClient ..> AutomationHandler : notifies via signal
-    AutomationHandler ..> state_factory : uses
-    AutomationHandler ..> action_factory : uses
-    AutomationHandler "1" --* "N" ActionRunnerBase : creates & holds
-    ActionRunnerBase --> StateObject : uses
-    ActionRunnerBase "1" --* "N" ActionExecutor : holds & uses
+    AutomationHandler ..> factory
+    AutomationHandler "1" --* "N" ActionRunner : creates & holds
+    ActionRunner "1" o-- "1" Trigger : uses
+    ActionRunner --> StateObject : uses
+    ActionRunner "1" --* "N" ActionExecutor : holds & uses
 
     %% Storage & Metrics Flow
     SwitchbotClient ..> StateStore : notifies via signal
-    PrometheusExporter --> StateStore : reads states
+    SwitchbotClient ..> PrometheusExporter : notifies via signal
 ```
 
 ## 3. Components
