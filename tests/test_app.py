@@ -387,3 +387,38 @@ async def test_prometheus_exporter_port_in_use_error(
         "Address already in use",
         exc_info=True,
     )
+
+
+@patch("switchbot_actions.app.Application._start_components")
+@patch("switchbot_actions.app.setup_logging")
+def test_application_init_calls_setup_logging(
+    mock_setup_logging,
+    mock_start_components,
+    initial_settings,
+    cli_args,
+):
+    """Test that Application.__init__ calls setup_logging with the correct settings."""
+    _ = Application(initial_settings, cli_args)
+
+    mock_setup_logging.assert_called_once_with(initial_settings)
+    mock_start_components.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.app.setup_logging")
+@patch("switchbot_actions.app.load_settings_from_cli")
+async def test_reload_settings_calls_setup_logging(
+    mock_load_settings,
+    mock_setup_logging,
+    app,
+):
+    """Test that reload_settings calls setup_logging with the new settings."""
+    new_settings = deepcopy(app.settings)
+    new_settings.debug = True
+    mock_load_settings.return_value = new_settings
+
+    mock_setup_logging.reset_mock()
+
+    await app.reload_settings()
+
+    mock_setup_logging.assert_called_once_with(new_settings)

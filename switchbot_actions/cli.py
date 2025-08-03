@@ -6,7 +6,6 @@ import sys
 from .app import run_app
 from .config_loader import load_settings_from_cli
 from .error import ConfigError
-from .logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +61,6 @@ def cli_main():
     except ConfigError as e:
         print(f"Error loading configuration: {e}", file=sys.stderr)
         sys.exit(1)
-
-    setup_logging(settings)
 
     try:
         asyncio.run(run_app(settings, args))

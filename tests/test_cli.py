@@ -9,14 +9,12 @@ from switchbot_actions.error import ConfigError
 @patch("sys.argv", ["cli_main"])
 @patch("switchbot_actions.cli.run_app", new_callable=MagicMock)
 @patch("switchbot_actions.cli.load_settings_from_cli")
-@patch("switchbot_actions.cli.setup_logging")
 @patch("switchbot_actions.cli.asyncio.run")
 @patch("switchbot_actions.cli.logger")
 def test_cli_main_keyboard_interrupt(
     mock_logger,
     mock_asyncio_run,
     mock_setup_logging,
-    mock_load_settings,
     mock_run_app,
 ):
     """Test that cli_main handles KeyboardInterrupt and exits gracefully."""
@@ -34,7 +32,6 @@ def test_cli_main_keyboard_interrupt(
 @patch("sys.argv", ["cli_main"])
 @patch("switchbot_actions.cli.run_app", new_callable=MagicMock)
 @patch("switchbot_actions.cli.load_settings_from_cli")
-@patch("switchbot_actions.cli.setup_logging")
 @patch("switchbot_actions.cli.asyncio.run")
 @patch("switchbot_actions.cli.logger")
 @patch("sys.stderr", new_callable=MagicMock)
@@ -42,7 +39,6 @@ def test_cli_main_config_error(
     mock_stderr,
     mock_logger,
     mock_asyncio_run,
-    mock_setup_logging,
     mock_load_settings,
     mock_run_app,
 ):
@@ -57,6 +53,5 @@ def test_cli_main_config_error(
         [call("Error loading configuration: Test configuration error"), call("\n")]
     )
     mock_load_settings.assert_called_once()
-    mock_setup_logging.assert_not_called()
     mock_asyncio_run.assert_not_called()
     mock_run_app.assert_not_called()

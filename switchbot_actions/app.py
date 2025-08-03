@@ -11,6 +11,7 @@ from .config_loader import load_settings_from_cli
 from .error import ConfigError
 from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
+from .logging import setup_logging
 from .mqtt import MqttClient
 from .scanner import SwitchbotClient
 from .signals import publish_mqtt_message_request
@@ -25,6 +26,8 @@ class Application:
         self.cli_args = cli_args
         self.tasks: list[asyncio.Task] = []
         self.stopping = False
+
+        setup_logging(self.settings)
 
         self.storage = StateStore()
         self.ble_scanner = GetSwitchbotDevices(
@@ -124,6 +127,8 @@ class Application:
                 f"Unexpected error loading new configuration: {e}", exc_info=True
             )
             return
+
+        setup_logging(new_settings)
 
         changed_components = self._get_changed_components(self.settings, new_settings)
         if not changed_components:
