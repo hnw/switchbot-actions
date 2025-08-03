@@ -240,6 +240,27 @@ def test_app_settings_from_dict():
     )
 
 
+def test_automation_rule_if_block_name_assignment():
+    # Test with rule name provided
+    rule_with_name = AutomationRule.model_validate(
+        {
+            "name": "MyRule",
+            "if": {"source": "switchbot"},
+            "then": [{"type": "shell_command", "command": "echo hello"}],
+        }
+    )
+    assert rule_with_name.if_block.name == "MyRule:switchbot"
+
+    # Test with rule name as None
+    rule_without_name = AutomationRule.model_validate(
+        {
+            "if": {"source": "mqtt_timer", "duration": 10, "topic": "test/topic"},
+            "then": [{"type": "shell_command", "command": "echo hello"}],
+        }
+    )
+    assert rule_without_name.if_block.name == "Unnamed Rule:mqtt_timer"
+
+
 def test_app_settings_invalid_config_data():
     invalid_config_data = {
         "scanner": {"cycle": 5, "duration": 10},  # Invalid duration

@@ -3,6 +3,7 @@ import pytest
 
 from switchbot_actions.config import AutomationIf
 from switchbot_actions.evaluator import StateObject, create_state_object
+from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
 
 
 @pytest.mark.parametrize(
@@ -18,15 +19,13 @@ from switchbot_actions.evaluator import StateObject, create_state_object
         ("invalid", 123, False),
     ],
 )
-def test_state_object_evaluate_condition(
-    sample_state: StateObject, condition, value, expected
-):
-    """Test various condition evaluations using StateObject._evaluate_condition."""
-    assert sample_state._evaluate_condition(condition, value) == expected
+def test_evaluate_single_condition(condition, value, expected):
+    """Test various condition evaluations using _evaluate_single_condition."""
+    assert _evaluate_single_condition(condition, value) == expected
 
 
-def test_state_object_check_conditions_device_pass(sample_state: StateObject):
-    """Test that device conditions pass using StateObject.check_conditions."""
+def test_check_conditions_device_pass(sample_state: StateObject):
+    """Test that device conditions pass using Trigger._check_all_conditions."""
     if_config = AutomationIf(
         source="switchbot",
         conditions={
@@ -34,11 +33,12 @@ def test_state_object_check_conditions_device_pass(sample_state: StateObject):
             "modelName": "WoSensorTH",
         },
     )
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
 
-def test_state_object_check_conditions_device_fail(sample_state: StateObject):
-    """Test that device conditions fail using StateObject.check_conditions."""
+def test_check_conditions_device_fail(sample_state: StateObject):
+    """Test that device conditions fail using Trigger._check_all_conditions."""
     if_config = AutomationIf(
         source="switchbot",
         conditions={
@@ -46,109 +46,120 @@ def test_state_object_check_conditions_device_fail(sample_state: StateObject):
             "modelName": "WoPresence",
         },
     )
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
 
-def test_state_object_check_conditions_state_pass(sample_state: StateObject):
-    """Test that state conditions pass using StateObject.check_conditions."""
+def test_check_conditions_state_pass(sample_state: StateObject):
+    """Test that state conditions pass using Trigger._check_all_conditions."""
     if_config = AutomationIf(
         source="switchbot",
         conditions={"temperature": "> 20", "humidity": "< 60"},
     )
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
 
-def test_state_object_check_conditions_state_fail(sample_state: StateObject):
-    """Test that state conditions fail using StateObject.check_conditions."""
+def test_check_conditions_state_fail(sample_state: StateObject):
+    """Test that state conditions fail using Trigger._check_all_conditions."""
     if_config = AutomationIf(source="switchbot", conditions={"temperature": "> 30"})
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
 
-def test_state_object_check_conditions_rssi(sample_state: StateObject):
+def test_check_conditions_rssi(sample_state: StateObject):
     """Test that RSSI conditions are checked correctly using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     if_config = AutomationIf(source="switchbot", conditions={"rssi": "> -60"})
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
     if_config = AutomationIf(source="switchbot", conditions={"rssi": "< -60"})
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
 
-def test_state_object_check_conditions_no_data(sample_state: StateObject):
+def test_check_conditions_no_data(sample_state: StateObject):
     """Test conditions when a key is not in state data using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     if_config = AutomationIf(
         source="switchbot", conditions={"non_existent_key": "some_value"}
     )
-    assert sample_state.check_conditions(if_config) is None
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is None
 
 
-def test_state_object_check_conditions_mqtt_payload_pass(
+def test_check_conditions_mqtt_payload_pass(
     mqtt_message_plain: aiomqtt.Message,
 ):
     """Test that MQTT payload conditions pass for plain text using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     state = create_state_object(mqtt_message_plain)
     if_config = AutomationIf(
         source="mqtt", topic="test/topic", conditions={"payload": "ON"}
     )
-    assert state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(state) is True
 
 
-def test_state_object_check_conditions_mqtt_payload_fail(
+def test_check_conditions_mqtt_payload_fail(
     mqtt_message_plain: aiomqtt.Message,
 ):
     """Test that MQTT payload conditions fail for plain text using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     state = create_state_object(mqtt_message_plain)
     if_config = AutomationIf(
         source="mqtt", topic="test/topic", conditions={"payload": "OFF"}
     )
-    assert state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(state) is False
 
 
-def test_state_object_check_conditions_mqtt_json_pass(
+def test_check_conditions_mqtt_json_pass(
     mqtt_message_json: aiomqtt.Message,
 ):
     """Test that MQTT payload conditions pass for JSON using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     state = create_state_object(mqtt_message_json)
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
         conditions={"temperature": "> 25.0", "humidity": "== 55"},
     )
-    assert state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(state) is True
 
 
-def test_state_object_check_conditions_mqtt_json_fail(
+def test_check_conditions_mqtt_json_fail(
     mqtt_message_json: aiomqtt.Message,
 ):
     """Test that MQTT payload conditions fail for JSON using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     state = create_state_object(mqtt_message_json)
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
         conditions={"temperature": "< 25.0"},
     )
-    assert state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(state) is False
 
 
-def test_state_object_check_conditions_mqtt_json_no_key(
+def test_check_conditions_mqtt_json_no_key(
     mqtt_message_json: aiomqtt.Message,
 ):
     """Test MQTT conditions when a key is not in the JSON payload using
-    StateObject.check_conditions."""
+    Trigger._check_all_conditions."""
     state = create_state_object(mqtt_message_json)
     if_config = AutomationIf(
         source="mqtt",
         topic="home/sensor1",
         conditions={"non_existent_key": "some_value"},
     )
-    assert state.check_conditions(if_config) is None
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(state) is None
 
 
-def test_state_object_check_conditions_boolean_values(sample_state: StateObject):
+def test_check_conditions_boolean_values(sample_state: StateObject):
     """Test boolean condition evaluation."""
     # Assuming sample_state can be mocked or has a 'power' attribute
     # For this test, we'll temporarily modify the sample_state's internal dict
@@ -156,31 +167,37 @@ def test_state_object_check_conditions_boolean_values(sample_state: StateObject)
     # state object
     sample_state._cached_values = {"power": True}
     if_config = AutomationIf(source="switchbot", conditions={"power": "true"})
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
     sample_state._cached_values = {"power": False}
     if_config = AutomationIf(source="switchbot", conditions={"power": "false"})
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
     sample_state._cached_values = {"power": True}
     if_config = AutomationIf(source="switchbot", conditions={"power": "false"})
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
 
-def test_state_object_check_conditions_string_comparison(sample_state: StateObject):
+def test_check_conditions_string_comparison(sample_state: StateObject):
     """Test string condition evaluation."""
     sample_state._cached_values = {"status": "open"}
     if_config = AutomationIf(source="switchbot", conditions={"status": "== open"})
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
     if_config = AutomationIf(source="switchbot", conditions={"status": "!= closed"})
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
     if_config = AutomationIf(source="switchbot", conditions={"status": "== closed"})
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
 
-def test_state_object_check_conditions_combined_conditions(sample_state: StateObject):
+def test_check_conditions_combined_conditions(sample_state: StateObject):
     """Test evaluation of multiple conditions (AND logic)."""
     sample_state._cached_values = {"temperature": 25.0, "humidity": 50, "power": True}
     if_config = AutomationIf(
@@ -191,7 +208,8 @@ def test_state_object_check_conditions_combined_conditions(sample_state: StateOb
             "power": "true",
         },
     )
-    assert sample_state.check_conditions(if_config) is True
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is True
 
     if_config = AutomationIf(
         source="switchbot",
@@ -201,7 +219,8 @@ def test_state_object_check_conditions_combined_conditions(sample_state: StateOb
             "power": "true",
         },
     )
-    assert sample_state.check_conditions(if_config) is False
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
 
     if_config = AutomationIf(
         source="switchbot",
@@ -210,4 +229,5 @@ def test_state_object_check_conditions_combined_conditions(sample_state: StateOb
             "non_existent_key": "some_value",  # This will result in None
         },
     )
-    assert sample_state.check_conditions(if_config) is None
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is None

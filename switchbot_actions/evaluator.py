@@ -1,28 +1,16 @@
 import json
 import logging
-import operator
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, Optional, TypeAlias, TypeVar, Union, overload
+from typing import Any, Dict, Generic, TypeAlias, TypeVar, Union, overload
 
 import aiomqtt
 from switchbot import SwitchBotAdvertisement
-
-from .config import AutomationIf
 
 RawStateEvent: TypeAlias = Union[SwitchBotAdvertisement, aiomqtt.Message]
 T_State = TypeVar("T_State", bound=RawStateEvent)
 
 logger = logging.getLogger(__name__)
-
-OPERATORS = {
-    "==": operator.eq,
-    "!=": operator.ne,
-    ">": operator.gt,
-    "<": operator.lt,
-    ">=": operator.ge,
-    "<=": operator.le,
-}
 
 
 class MqttFormatter(string.Formatter):
@@ -46,31 +34,6 @@ class StateObject(ABC, Generic[T_State]):
     def __init__(self, raw_event: T_State):
         self._raw_event: T_State = raw_event
         self._cached_values: Dict[str, Any] | None = None
-
-    def _evaluate_condition(self, condition: str, new_value: Any) -> bool:
-        """Evaluates a single state condition."""
-        parts = str(condition).split(" ", 1)
-        op_str = "=="
-        val_str = str(condition)
-
-        if len(parts) == 2 and parts[0] in OPERATORS:
-            op_str = parts[0]
-            val_str = parts[1]
-
-        op = OPERATORS.get(op_str, operator.eq)
-
-        try:
-            if new_value is None:
-                return False
-            if isinstance(new_value, bool):
-                expected_value = val_str.lower() in ("true", "1", "t", "y", "yes")
-            elif isinstance(new_value, str):
-                expected_value = val_str
-            else:
-                expected_value = type(new_value)(val_str)
-            return op(new_value, expected_value)
-        except (ValueError, TypeError):
-            return False
 
     @property
     @abstractmethod
@@ -102,35 +65,6 @@ class StateObject(ABC, Generic[T_State]):
             return {k: self.format(str(v)) for k, v in template_data.items()}
         else:
             return formatter.format(str(template_data), **all_values)
-
-    def check_conditions(self, if_config: AutomationIf) -> Optional[bool]:
-        """
-        Checks if the given conditions are met by the current state.
-        Returns True if all conditions are met, False if any condition is not met,
-        and None if the state does not match the expected source or topic.
-        """
-        all_values = self.get_values_dict()
-
-        # Check source and topic first
-        if if_config.source == "switchbot" or if_config.source == "switchbot_timer":
-            if not isinstance(self, SwitchBotState):
-                return None
-        elif if_config.source == "mqtt" or if_config.source == "mqtt_timer":
-            if not isinstance(self, MqttState):
-                return None
-            if if_config.topic and self.format(if_config.topic) != self.id:
-                return None
-        else:
-            return None  # Unknown source
-
-        # Evaluate conditions
-        for key, condition in if_config.conditions.items():
-            if key not in all_values:
-                return None  # Return None if the key is not found in state data
-            value_to_check = all_values.get(key)
-            if not self._evaluate_condition(str(condition), value_to_check):
-                return False
-        return True
 
 
 class SwitchBotState(StateObject[SwitchBotAdvertisement]):

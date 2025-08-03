@@ -6,6 +6,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    PrivateAttr,
     field_validator,
     model_validator,
 )
@@ -62,12 +63,17 @@ class LoggingSettings(BaseConfigModel):
 
 
 class AutomationIf(BaseConfigModel):
+    _name: str = PrivateAttr(default="")
     source: Literal["switchbot", "switchbot_timer", "mqtt", "mqtt_timer"]
     duration: Optional[float] = None
     device: Optional[Dict[str, Any]] = None
     state: Optional[Dict[str, Any]] = None
     conditions: Dict[str, Any] = Field(default_factory=dict)
     topic: Optional[str] = None
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @model_validator(mode="before")
     def backward_compatibility_for_device_and_state(
@@ -161,9 +167,15 @@ class AutomationRule(BaseConfigModel):
             if hasattr(v, "lc"):
                 seq.lc.line = v.lc.line  # type: ignore[attr-defined]
                 seq.lc.col = v.lc.col  # type: ignore[attr-defined]
-
             return seq
         return v
+
+    @model_validator(mode="after")
+    def _assign_descriptive_name_to_if_block(self) -> "AutomationRule":
+        if self.if_block:
+            rule_name = self.name or "Unnamed Rule"
+            self.if_block._name = f"{rule_name}:{self.if_block.source}"
+        return self
 
 
 class AppSettings(BaseConfigModel):
