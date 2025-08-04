@@ -9,10 +9,13 @@ from .config import (
     AutomationAction,
     MqttPublishAction,
     ShellCommandAction,
+    SwitchBotCommandAction,
     WebhookAction,
 )
 from .evaluator import StateObject
 from .signals import publish_mqtt_message_request
+from .store import StateStore
+from .switchbot_factory import create_switchbot_device
 
 T_Action = TypeVar("T_Action", bound=AutomationAction)
 
@@ -117,12 +120,61 @@ class MqttPublishExecutor(ActionExecutor):
         )
 
 
-def create_action_executor(action: AutomationAction) -> ActionExecutor:
+class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
+    def __init__(self, action: SwitchBotCommandAction, state_store: StateStore):
+        super().__init__(action)
+        self._state_store = state_store
+
+    async def execute(self, state: StateObject) -> None:
+        address = self.action.address
+        command = self.action.command
+        arguments = self.action.arguments
+
+        advertisement = self._state_store.get_state(address)
+        if not advertisement:
+            logger.error(f"Device with address {address} not found in StateStore.")
+            return
+
+        device = create_switchbot_device(advertisement)
+        if not device:
+            model_name = advertisement.data.get("modelName", "Unknown")
+            logger.error(
+                f"Failed to execute 'switchbot_command' on '{address}': "
+                f"Direct control for model '{model_name}' is not implemented. "
+                f"To request support, please open an issue on GitHub "
+                f"with the model name."
+            )
+            return
+        device.update_from_advertisement(advertisement)
+
+        try:
+            logger.debug(f"Executing command '{command}' on device {address}")
+            func = getattr(device, command)
+            await func(**arguments)
+        except AttributeError:
+            logger.error(
+                f"Invalid command '{command}' for device {address}. "
+                "Please check your configuration."
+            )
+        except TypeError as e:
+            logger.error(
+                f"Invalid arguments for command '{command}' on device {address}. "
+                f"Error: {e}. Please check your configuration."
+            )
+        except Exception as e:
+            logger.error(f"Failed to execute command on {address}: {e}")
+
+
+def create_action_executor(
+    action: AutomationAction, state_store: StateStore
+) -> ActionExecutor:
     if isinstance(action, ShellCommandAction):
         return ShellCommandExecutor(action)
     elif isinstance(action, WebhookAction):
         return WebhookExecutor(action)
     elif isinstance(action, MqttPublishAction):
         return MqttPublishExecutor(action)
+    elif isinstance(action, SwitchBotCommandAction):
+        return SwitchBotCommandExecutor(action, state_store)
     else:
         raise ValueError(f"Unknown action type: {action.type}")

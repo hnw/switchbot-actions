@@ -145,8 +145,15 @@ class MqttPublishAction(BaseConfigModel):
     retain: bool = False
 
 
+class SwitchBotCommandAction(BaseConfigModel):
+    type: Literal["switchbot_command"]
+    address: str
+    command: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+
 AutomationAction = Annotated[
-    Union[ShellCommandAction, WebhookAction, MqttPublishAction],
+    Union[ShellCommandAction, WebhookAction, MqttPublishAction, SwitchBotCommandAction],
     Field(discriminator="type"),
 ]
 

@@ -10,13 +10,20 @@ from switchbot_actions.evaluator import MqttState, SwitchBotState, create_state_
 from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.mqtt import mqtt_message_received
 from switchbot_actions.signals import switchbot_advertisement_received
+from switchbot_actions.store import StateStore
 from switchbot_actions.triggers import DurationTrigger, EdgeTrigger
 
 # --- Fixtures ---
 
 
 @pytest.fixture
-def automation_handler_factory():
+def state_store():
+    """Returns a mock StateStore object."""
+    return MagicMock(spec=StateStore)
+
+
+@pytest.fixture
+def automation_handler_factory(state_store):
     """
     A factory fixture to create isolated AutomationHandler instances for each test.
     Ensures that signal connections are torn down after each test.
@@ -24,7 +31,7 @@ def automation_handler_factory():
     created_handlers = []
 
     def factory(configs: list[AutomationRule]) -> AutomationHandler:
-        handler = AutomationHandler(configs=configs)
+        handler = AutomationHandler(configs=configs, state_store=state_store)
         created_handlers.append(handler)
         return handler
 

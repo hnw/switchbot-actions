@@ -3,19 +3,23 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from switchbot import Switchbot, SwitchbotModel
 
 from switchbot_actions.action_executor import (
     MqttPublishExecutor,
     ShellCommandExecutor,
+    SwitchBotCommandExecutor,
     WebhookExecutor,
     create_action_executor,
 )
 from switchbot_actions.config import (
     MqttPublishAction,
     ShellCommandAction,
+    SwitchBotCommandAction,
     WebhookAction,
 )
 from switchbot_actions.evaluator import create_state_object
+from switchbot_actions.store import StateStore
 
 
 # --- Tests for ShellCommandExecutor ---
@@ -142,9 +146,218 @@ async def test_mqtt_publish_executor(mock_signal_send, mqtt_message_json):
     )
 
 
+# --- Tests for SwitchBotCommandExecutor ---
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.create_switchbot_device")
+async def test_switchbot_command_executor_success(
+    mock_create_device, mock_switchbot_advertisement
+):
+    mock_device_instance = AsyncMock(spec=Switchbot)
+    mock_device_instance.update_from_advertisement = MagicMock()
+
+    mock_create_device.return_value = mock_device_instance
+
+    address = "DE:AD:BE:EF:33:33"
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": SwitchbotModel.BOT, "data": {"isOn": True}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = advertisement
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command", address=address, command="turn_on"
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    state_store.get_state.assert_called_once_with(address)
+
+    mock_create_device.assert_called_once_with(advertisement)
+    mock_device_instance.update_from_advertisement.assert_called_once_with(
+        advertisement
+    )
+    mock_device_instance.turn_on.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_switchbot_command_executor_device_not_found(
+    caplog, mock_switchbot_advertisement
+):
+    caplog.set_level(logging.ERROR)
+    address = "DE:AD:BE:EF:44:44"
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": SwitchbotModel.BOT, "data": {"isOn": True}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = None
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command", address=address, command="turn_on"
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    assert f"Device with address {address} not found" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.create_switchbot_device")
+async def test_switchbot_command_executor_unsupported_device(
+    mock_create_device, mock_switchbot_advertisement, caplog
+):
+    """
+    Test that an informative error is logged when the device model
+    is not supported for direct control.
+    """
+    caplog.set_level(logging.ERROR)
+
+    mock_create_device.return_value = None
+
+    address = "DE:AD:BE:EF:88:88"
+    unsupported_model = "WoUnsupportedDevice"
+
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": unsupported_model, "data": {}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = advertisement
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command",
+        address=address,
+        command="press",
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    assert f"Failed to execute 'switchbot_command' on '{address}'" in caplog.text
+    assert (
+        f"Direct control for model '{unsupported_model}' is not implemented"
+        in caplog.text
+    )
+    assert (
+        "To request support, please open an issue on GitHub with the model name."
+        in caplog.text
+    )
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.create_switchbot_device")
+async def test_switchbot_command_executor_invalid_command(
+    mock_create_device, mock_switchbot_advertisement, caplog
+):
+    caplog.set_level(logging.ERROR)
+
+    mock_device_instance = AsyncMock(spec=Switchbot)
+    mock_device_instance.update_from_advertisement = MagicMock()
+    del mock_device_instance.invalid_command
+
+    mock_create_device.return_value = mock_device_instance
+
+    address = "DE:AD:BE:EF:55:55"
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": SwitchbotModel.BOT, "data": {"isOn": True}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = advertisement
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command", address=address, command="invalid_command"
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    assert "Invalid command 'invalid_command'" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.create_switchbot_device")
+async def test_switchbot_command_executor_invalid_arguments(
+    mock_create_device, mock_switchbot_advertisement, caplog
+):
+    caplog.set_level(logging.ERROR)
+
+    mock_device_instance = AsyncMock(spec=Switchbot)
+    mock_device_instance.update_from_advertisement = MagicMock()
+    mock_device_instance.turn_on.side_effect = TypeError("Invalid argument type")
+
+    mock_create_device.return_value = mock_device_instance
+
+    address = "DE:AD:BE:EF:66:66"
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": SwitchbotModel.BOT, "data": {"isOn": True}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = advertisement
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command",
+        address=address,
+        command="turn_on",
+        arguments={"unexpected_arg": True},
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    assert "Invalid arguments for command 'turn_on'" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.create_switchbot_device")
+async def test_switchbot_command_executor_execution_exception(
+    mock_create_device, mock_switchbot_advertisement, caplog
+):
+    caplog.set_level(logging.ERROR)
+
+    mock_device_instance = AsyncMock(spec=Switchbot)
+    mock_device_instance.update_from_advertisement = MagicMock()
+    mock_device_instance.press.side_effect = Exception("Device communication failed")
+
+    mock_create_device.return_value = mock_device_instance
+
+    address = "DE:AD:BE:EF:77:77"
+    advertisement = mock_switchbot_advertisement(
+        address=address,
+        data={"modelName": SwitchbotModel.BOT, "data": {"isOn": True}},
+    )
+    state_object = create_state_object(advertisement)
+
+    state_store = MagicMock(spec=StateStore)
+    state_store.get_state.return_value = advertisement
+
+    action_config = SwitchBotCommandAction(
+        type="switchbot_command",
+        address=address,
+        command="press",
+    )
+    executor = SwitchBotCommandExecutor(action_config, state_store)
+    await executor.execute(state_object)
+
+    assert (
+        f"Failed to execute command on {address}: Device communication failed"
+        in caplog.text
+    )
+
+
+# --- Tests for create_action_executor ---
 def test_create_action_executor_raises_error_for_unknown_type():
     """Test that the factory function raises a ValueError for an unknown action type."""
     mock_action = MagicMock()
     mock_action.type = "unknown"
     with pytest.raises(ValueError, match="Unknown action type: unknown"):
-        create_action_executor(mock_action)
+        create_action_executor(mock_action, MagicMock(spec=StateStore))

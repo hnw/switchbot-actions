@@ -4,8 +4,40 @@ A powerful, configurable automation engine for SwitchBot BLE devices, with an op
 
 `switchbot-actions` is a lightweight, standalone automation engine for your SwitchBot BLE devices. It turns a single `config.yaml` file into a powerful local controller, allowing you to react to device states, create time-based triggers, and integrate with MQTT and Prometheus. Its efficiency makes it a great fit for resource-constrained hardware, running comfortably on a Raspberry Pi 3 and even on a Raspberry Pi Zero. It's ideal for those who prefer a simple, configuration-driven approach to home automation without needing a large, all-in-one platform.
 
+At its core, `switchbot-actions` monitors various input sources and, based on your rules, triggers different actions. The overall architecture can be visualized as follows:
+
+```mermaid
+graph TD
+    subgraph "Inputs (Triggers)"
+        A["SwitchBot<br>Sensors"]
+        B["MQTT<br>Subscriptions"]
+    end
+
+    subgraph "Application"
+        S["switchbot-actions"]
+    end
+
+    subgraph "Outputs (Actions)"
+        W["SwitchBot<br>Commands"]
+        X["MQTT<br>Publishing"]
+        Y["Webhooks"]
+        Z["Shell<br>Commands"]
+        V["Prometheus<br>Metrics"]
+    end
+
+    A --> S
+    B --> S
+
+    S --> W
+    S --> X
+    S --> Y
+    S --> Z
+    S --> V
+```
+
 ## Key Features
 
+  - **Direct Device Control**: A new `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations without external scripts.
   - **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
   - **Full MQTT Integration**: Use MQTT messages as triggers for automations, and publish messages as an action.
   - **Prometheus Exporter**: Exposes metrics at a configurable `/metrics` endpoint.
@@ -17,7 +49,7 @@ A powerful, configurable automation engine for SwitchBot BLE devices, with an op
 
 ### 1. Prerequisites
 
-  - Python 3.10+
+  - Python 3.11+
   - A Linux-based system with a Bluetooth adapter that supports BLE (e.g., a Raspberry Pi).
 
 ### 2. Installation (Recommended)
@@ -168,6 +200,26 @@ automations:
       # as an ERROR, making it visible by default without needing to
       # enable DEBUG level logging.
       command: "echo 'High temperature detected: {temperature}℃' >&2"
+```
+
+### Advanced Example: Inter-Device Automation
+
+This example showcases the power of the new `switchbot_command` action. When a SwitchBot Contact Sensor on a door is opened, it triggers a SwitchBot Bot to press a button.
+
+```yaml
+automations:
+  - name: "Press Light Switch when Office Door Opens"
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoContact"
+        address: "XX:XX:XX:XX:XX:AA" # <-- Address of your Contact Sensor
+        contact_open: True
+    then:
+      # This action directly controls another SwitchBot device.
+      type: "switchbot_command"
+      address: "YY:YY:YY:YY:YY:BB" # <-- Address of your SwitchBot Bot
+      command: "press"
 ```
 
 ### Detailed Reference & More Examples

@@ -13,6 +13,7 @@ from .evaluator import (
 )
 from .mqtt import mqtt_message_received
 from .signals import switchbot_advertisement_received
+from .store import StateStore
 from .triggers import DurationTrigger, EdgeTrigger
 
 logger = logging.getLogger(__name__)
@@ -24,12 +25,15 @@ class AutomationHandler:
     ActionRunner instances.
     """
 
-    def __init__(self, configs: list[AutomationRule]):
+    def __init__(self, configs: list[AutomationRule], state_store: StateStore):
         self._switchbot_runners: list[ActionRunner[SwitchBotState]] = []
         self._mqtt_runners: list[ActionRunner[MqttState]] = []
 
         for config in configs:
-            executors = [create_action_executor(action) for action in config.then_block]
+            executors = [
+                create_action_executor(action, state_store)
+                for action in config.then_block
+            ]
             source = config.if_block.source
 
             if source in ["switchbot", "switchbot_timer"]:

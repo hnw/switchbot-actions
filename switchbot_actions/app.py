@@ -89,7 +89,7 @@ class Application:
         if self.settings.automations:
             logger.info(f"Registering {len(self.settings.automations)} automations.")
             self.automation_handler = AutomationHandler(
-                configs=self.settings.automations
+                configs=self.settings.automations, state_store=self.storage
             )
 
     def _stop_automations(self):

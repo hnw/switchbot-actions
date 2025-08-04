@@ -251,6 +251,14 @@ Executes a shell command.
 
   - `command`: (string, required) The shell command to execute.
 
+### 5.4. `switchbot_command` Action
+
+Directly controls a SwitchBot device.
+
+  - `address`: (string, required) The MAC address of the target SwitchBot device.
+  - `command`: (string, required) The command to execute. This must match a method name in the `pyswitchbot` library (e.g., `turn_on`, `press`, `set_position`).
+  - `arguments`: (map, optional, default: `{}`) A map of keyword arguments to pass to the command function.
+
 ## 6. State Object Structure
 
 Automation rules operate on **State Objects**. These objects contain the event data that triggered a rule and are used for both evaluating `if` conditions and populating placeholders in `then` actions.

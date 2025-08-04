@@ -130,6 +130,37 @@ automations:
       payload:
         message: "Sensor at topic {topic} is offline!"
 
+  - name: "Press a SwitchBot Bot when a door is opened"
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoContact"
+        contact_open: True
+    then:
+      # Directly control another SwitchBot device.
+      type: "switchbot_command"
+      # The MAC address of the target SwitchBot Bot.
+      address: "XX:XX:XX:XX:XX:CC"
+      # The command to execute. Must match a method in the pyswitchbot library.
+      command: "press"
+
+  - name: "Open curtains if the room is bright"
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoContact"
+        # Trigger when the light sensor detects a bright environment.
+        light_level: "bright"
+    then:
+      type: "switchbot_command"
+      # The MAC address of the target SwitchBot Curtain.
+      address: "YY:YY:YY:YY:YY:DD"
+      # Command to set the curtain position.
+      command: "set_position"
+      # Arguments to pass to the command.
+      arguments:
+        position: 100 # 0 = closed, 100 = fully open
+
 # ----------------------------------------------------
 # MQTT Client Settings
 # ----------------------------------------------------
