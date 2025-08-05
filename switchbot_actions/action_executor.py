@@ -126,16 +126,25 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
         self._state_store = state_store
 
     async def execute(self, state: StateObject) -> None:
+        # The address should be resolved by Pydantic validation before execution.
         address = self.action.address
+        if not address:
+            logger.error(
+                "SwitchBotCommandAction is missing a target device address. "
+                "This indicates a problem with configuration validation."
+            )
+            return
+
         command = self.action.command
-        arguments = self.action.arguments
+        constructor_args = self.action.config
+        method_args = self.action.params
 
         advertisement = self._state_store.get_state(address)
         if not advertisement:
             logger.error(f"Device with address {address} not found in StateStore.")
             return
 
-        device = create_switchbot_device(advertisement)
+        device = create_switchbot_device(advertisement, **constructor_args)
         if not device:
             model_name = advertisement.data.get("modelName", "Unknown")
             logger.error(
@@ -148,9 +157,12 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
         device.update_from_advertisement(advertisement)
 
         try:
-            logger.debug(f"Executing command '{command}' on device {address}")
+            logger.debug(
+                f"Executing command '{command}' on device {address} "
+                f"with params {method_args}"
+            )
             func = getattr(device, command)
-            await func(**arguments)
+            await func(**method_args)
         except AttributeError:
             logger.error(
                 f"Invalid command '{command}' for device {address}. "

@@ -169,7 +169,29 @@ Configures the BLE scanning behavior.
   - `duration`: (integer, optional, default: 3) Time in seconds the scanner will actively listen for BLE advertisements. Must be less than or equal to `cycle`.
   - `interface`: (integer, optional, default: 0) Bluetooth adapter number to use (e.g., `0` for `hci0`).
 
-### 4.2. `automations`
+### 4.2. `devices` (Optional)
+
+An optional top-level section to define reusable SwitchBot devices. This is particularly useful for devices that are used in multiple automations or require specific constructor parameters (e.g., a password for a lock, or a custom retry count).
+
+Each key under `devices` is a user-defined name for the device.
+
+  - `address`: (string, required) The MAC address of the device.
+  - `config`: (map, optional) A map of keyword arguments to be passed to the device's constructor in the `pyswitchbot` library.
+
+**Example:**
+
+```yaml
+devices:
+  living-room-curtain:
+    address: "aa:bb:cc:dd:ee:ff"
+    config:
+      password: "my_secret_password"
+      retry_count: 5
+  bedroom-light:
+    address: "11:22:33:44:55:66"
+```
+
+### 4.3. `automations`
 
 A list of automation rules. Each rule is a map with the following structure:
 
@@ -185,6 +207,8 @@ A list of automation rules. Each rule is a map with the following structure:
       - **`topic`**: (string, required for `mqtt` sources) The MQTT topic to subscribe to. Wildcards (`+`, `#`) are supported.
       - **`conditions`**: (map, optional) Defines the conditions that must be met. This single block is used to filter by device attributes (like `modelName` or `address`) and device state values (like `temperature: "> 25.0"`).
 
+      - **`device`**: (string, optional) A reference to a device defined in the top-level `devices` section. If specified, the `address` from the referenced device will be automatically injected into `conditions.address`. If `conditions.address` is also explicitly defined, the `device` reference will take precedence and overwrite it.
+
       > [!NOTE]
       > **Backward Compatibility**:
       > For backward compatibility, the legacy `device` and `state` keys are still supported. If they are found in the configuration, their contents will be automatically merged into the `conditions` block, and a `DeprecationWarning` will be logged. Users are encouraged to adopt the unified `conditions` block for new automations.
@@ -192,7 +216,7 @@ A list of automation rules. Each rule is a map with the following structure:
       - `type`: (string, required) The action type, e.g., `shell_command`, `webhook`, `mqtt_publish`.
       - Other parameters depend on the `type`. Values support placeholders (e.g., `{temperature}`, `{address}`). Refer to Section 5, "State Object Structure," for available placeholders.
 
-### 4.3. `mqtt`
+### 4.4. `mqtt`
 
 Configures the MQTT client connection.
 
@@ -201,7 +225,7 @@ Configures the MQTT client connection.
   - `username` / `password`: (string, optional) Credentials for authentication.
   - `reconnect_interval`: (integer, optional, default: 10) Seconds to wait before attempting to reconnect.
 
-### 4.4. `prometheus_exporter`
+### 4.5. `prometheus_exporter`
 
 Configures the Prometheus metrics endpoint.
 
@@ -211,7 +235,7 @@ Configures the Prometheus metrics endpoint.
       - `addresses`: (list, optional) A list of MAC addresses. If specified, only these devices will be exported.
       - `metrics`: (list, optional) A list of metric names (e.g., `temperature`, `rssi`). If specified, only these metrics will be exported.
 
-### 4.5. `logging`
+### 4.6. `logging`
 
 Configures the application's logging behavior.
 
@@ -253,11 +277,58 @@ Executes a shell command.
 
 ### 5.4. `switchbot_command` Action
 
-Directly controls a SwitchBot device.
+Directly controls a SwitchBot device. This action has two mutually exclusive ways to specify the target device:
 
-  - `address`: (string, required) The MAC address of the target SwitchBot device.
+1.  **Reference (`device`)**: Reference a pre-defined device from the top-level `devices` section. This is the recommended approach for devices used in multiple automations.
+2.  **Self-Contained (`address`)**: Specify the device's address and configuration directly within the action. This is useful for simple, one-off actions.
+
+**Parameters:**
+
+  - `device`: (string, optional) The name of the device to control, as defined in the `devices` section. If used, `address` cannot be specified.
+  - `address`: (string, optional) The MAC address of the target device. If used, `device` cannot be specified.
+  - `config`: (map, optional) Constructor arguments for the device, such as `password`. This can be used in self-contained actions or to override specific settings from a referenced device.
   - `command`: (string, required) The command to execute. This must match a method name in the `pyswitchbot` library (e.g., `turn_on`, `press`, `set_position`).
-  - `arguments`: (map, optional, default: `{}`) A map of keyword arguments to pass to the command function.
+  - `params`: (map, optional, default: `{}`) A map of keyword arguments to pass to the command's method.
+
+**Examples:**
+
+**1. Using a Device Reference:**
+
+```yaml
+devices:
+  front-door-lock:
+    address: "aa:bb:cc:dd:ee:ff"
+    config:
+      key_id: "xxx"
+      encryption_key: "xxx"
+
+automations:
+  - if:
+      source: "switchbot_timer"
+      duration: "5m"
+      device: "front-door-lock"
+      conditions:
+        door_open: True
+    then:
+      type: "switchbot_command"
+      device: "front-door-lock"
+      command: "lock"
+```
+
+**2. Self-Contained Action:**
+
+```yaml
+automations:
+  - if:
+      source: "switchbot"
+      conditions: { modelName: "WoContact", is_light: True }
+    then:
+      type: "switchbot_command"
+      address: "11:22:33:44:55:66"
+      command: "set_position"
+      params:
+        position: 100
+```
 
 ## 6. State Object Structure
 

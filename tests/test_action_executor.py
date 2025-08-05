@@ -309,7 +309,7 @@ async def test_switchbot_command_executor_invalid_arguments(
         type="switchbot_command",
         address=address,
         command="turn_on",
-        arguments={"unexpected_arg": True},
+        params={"unexpected_arg": True},
     )
     executor = SwitchBotCommandExecutor(action_config, state_store)
     await executor.execute(state_object)

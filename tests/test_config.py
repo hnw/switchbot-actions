@@ -11,6 +11,7 @@ from switchbot_actions.config import (
     PrometheusExporterSettings,
     ScannerSettings,
     ShellCommandAction,
+    SwitchBotCommandAction,
     WebhookAction,
 )
 
@@ -76,44 +77,6 @@ def test_logging_settings_valid_levels(level):
 def test_logging_settings_invalid_level():
     with pytest.raises(ValidationError):
         LoggingSettings(level="INVALID_LEVEL")  # type: ignore
-
-
-def test_automation_if_backward_compatibility():
-    # Old format using device and state
-    with pytest.warns(DeprecationWarning):
-        if_config_old = AutomationIf(
-            source="switchbot",
-            device={"address": "A"},
-            state={"temperature": "> 25"},
-        )
-    assert if_config_old.conditions == {
-        "address": "A",
-        "temperature": "> 25",
-    }
-    assert if_config_old.device is None
-    assert if_config_old.state is None
-
-    # New format using conditions
-    if_config_new = AutomationIf(
-        source="switchbot",
-        conditions={"address": "A", "temperature": "> 25"},
-    )
-    assert if_config_new.conditions == {
-        "address": "A",
-        "temperature": "> 25",
-    }
-
-    # Mixed format
-    with pytest.warns(DeprecationWarning):
-        if_config_mixed = AutomationIf(
-            source="switchbot",
-            device={"address": "A"},
-            conditions={"temperature": "> 25"},
-        )
-    assert if_config_mixed.conditions == {
-        "address": "A",
-        "temperature": "> 25",
-    }
 
 
 def test_automation_if_timer_source_requires_duration():
@@ -323,3 +286,248 @@ def test_app_settings_with_multiple_automations():
     assert (
         settings.automations[1].then_block[0].command == "echo 'Light status changed'"
     )
+
+
+def test_switchbot_command_device_reference_success():
+    """Test successful validation with a device reference."""
+    config = {
+        "devices": {
+            "living-curtain": {
+                "address": "aa:bb:cc:dd:ee:ff",
+                "config": {"password": "pass", "retry_count": 5},
+            }
+        },
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {
+                    "type": "switchbot_command",
+                    "device": "living-curtain",
+                    "command": "set_position",
+                    "params": {"position": 100},
+                },
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config)
+    action = settings.automations[0].then_block[0]
+    assert isinstance(action, SwitchBotCommandAction)
+    assert action.address == "aa:bb:cc:dd:ee:ff"
+    assert action.config == {"password": "pass", "retry_count": 5}
+    assert action.params == {"position": 100}
+
+
+def test_switchbot_command_self_contained_success():
+    """Test successful validation for a self-contained action."""
+    config = {
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {
+                    "type": "switchbot_command",
+                    "address": "11:22:33:44:55:66",
+                    "config": {"retry_count": 3},
+                    "command": "turn_on",
+                },
+            }
+        ]
+    }
+    settings = AppSettings.model_validate(config)
+    action = settings.automations[0].then_block[0]
+    assert isinstance(action, SwitchBotCommandAction)
+    assert action.address == "11:22:33:44:55:66"
+    assert action.config == {"retry_count": 3}
+    assert action.command == "turn_on"
+
+
+def test_switchbot_command_device_reference_not_found_error():
+    """Test that validation fails if the device reference is not found."""
+    config = {
+        "devices": {},
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {
+                    "type": "switchbot_command",
+                    "device": "non-existent-device",
+                    "command": "press",
+                },
+            }
+        ],
+    }
+    with pytest.raises(
+        ValidationError,
+        match="Device 'non-existent-device' not found in devices section.",
+    ):
+        AppSettings.model_validate(config)
+
+
+def test_switchbot_command_device_and_address_conflict_error():
+    """Test that validation fails if both 'device' and 'address' are provided."""
+    config = {
+        "devices": {"some-device": {"address": "aa:bb:cc:dd:ee:ff"}},
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {
+                    "type": "switchbot_command",
+                    "device": "some-device",
+                    "address": "11:22:33:44:55:66",
+                    "command": "press",
+                },
+            }
+        ],
+    }
+    with pytest.raises(
+        ValidationError, match="'device' and 'address' cannot be used simultaneously."
+    ):
+        AppSettings.model_validate(config)
+
+
+def test_switchbot_command_missing_device_and_address_error():
+    """Test that validation fails if neither 'device' nor 'address' is provided."""
+    config = {
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {"type": "switchbot_command", "command": "press"},
+            }
+        ]
+    }
+    with pytest.raises(
+        ValidationError, match="Either 'device' or 'address' must be specified."
+    ):
+        AppSettings.model_validate(config)
+
+
+def test_switchbot_command_config_merge_logic():
+    """Test that device-level and action-level configs are merged correctly."""
+    config = {
+        "devices": {
+            "my-device": {
+                "address": "aa:bb:cc:dd:ee:ff",
+                "config": {"password": "device-pass", "retry_count": 3},
+            }
+        },
+        "automations": [
+            {
+                "if": {"source": "switchbot"},
+                "then": {
+                    "type": "switchbot_command",
+                    "device": "my-device",
+                    "command": "do_something",
+                    "config": {"retry_count": 10, "new_param": "action-param"},
+                },
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config)
+    action = settings.automations[0].then_block[0]
+    assert isinstance(action, SwitchBotCommandAction)
+    assert action.config == {
+        "password": "device-pass",
+        "retry_count": 10,  # Action-level overrides device-level
+        "new_param": "action-param",
+    }
+
+
+def test_if_block_device_reference_success():
+    """Test successful validation with a device reference in if_block."""
+    config = {
+        "devices": {
+            "my-meter": {
+                "address": "11:22:33:44:55:66",
+                "config": {"model": "meter"},
+            }
+        },
+        "automations": [
+            {
+                "if": {
+                    "source": "switchbot",
+                    "device": "my-meter",
+                    "conditions": {"temperature": {"gt": 25}},
+                },
+                "then": [{"type": "shell_command", "command": "echo hot"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config)
+    if_block = settings.automations[0].if_block
+    assert if_block.conditions["address"] == "11:22:33:44:55:66"
+    assert if_block.conditions["temperature"] == {"gt": 25}
+
+
+def test_if_block_device_reference_overwrites_address():
+    """Test that device reference in if_block overwrites existing address."""
+    config = {
+        "devices": {
+            "my-meter": {
+                "address": "11:22:33:44:55:66",
+                "config": {"model": "meter"},
+            }
+        },
+        "automations": [
+            {
+                "if": {
+                    "source": "switchbot",
+                    "device": "my-meter",
+                    "conditions": {
+                        "address": "aa:bb:cc:dd:ee:ff",
+                        "temperature": {"gt": 25},
+                    },
+                },
+                "then": [{"type": "shell_command", "command": "echo hot"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config)
+    if_block = settings.automations[0].if_block
+    assert (
+        if_block.conditions["address"] == "11:22:33:44:55:66"
+    )  # Should be overwritten
+    assert if_block.conditions["temperature"] == {"gt": 25}
+
+
+def test_if_block_device_reference_not_found_error():
+    """Test that validation fails if device reference in if_block is not found."""
+    config = {
+        "devices": {},
+        "automations": [
+            {
+                "if": {
+                    "source": "switchbot",
+                    "device": "non-existent-meter",
+                    "conditions": {"temperature": {"gt": 25}},
+                },
+                "then": [{"type": "shell_command", "command": "echo hot"}],
+            }
+        ],
+    }
+    with pytest.raises(
+        ValidationError,
+        match="Device 'non-existent-meter' not found in devices section for if_block.",
+    ):
+        AppSettings.model_validate(config)
+
+
+def test_if_block_device_reference_no_impact_on_existing_rules():
+    """Test that existing rules without device reference are not affected."""
+    config = {
+        "automations": [
+            {
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {
+                        "address": "aa:bb:cc:dd:ee:ff",
+                        "temperature": {"gt": 25},
+                    },
+                },
+                "then": [{"type": "shell_command", "command": "echo hot"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config)
+    if_block = settings.automations[0].if_block
+    assert if_block.conditions["address"] == "aa:bb:cc:dd:ee:ff"
+    assert if_block.conditions["temperature"] == {"gt": 25}
+    assert if_block.device is None

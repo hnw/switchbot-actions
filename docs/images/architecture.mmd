@@ -1,0 +1,26 @@
+graph TD
+    subgraph "Inputs (Triggers)"
+        A["SwitchBot<br>Sensors"]
+        B["MQTT<br>Subscriptions"]
+    end
+
+    subgraph "Application"
+        S["switchbot-actions"]
+    end
+
+    subgraph "Outputs (Actions)"
+        W["SwitchBot<br>Commands"]
+        X["MQTT<br>Publishing"]
+        Y["Webhooks"]
+        Z["Shell<br>Commands"]
+        V["Prometheus<br>Metrics"]
+    end
+
+    A --> S
+    B --> S
+
+    S --> W
+    S --> X
+    S --> Y
+    S --> Z
+    S --> V

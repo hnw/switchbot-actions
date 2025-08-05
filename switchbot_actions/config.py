@@ -66,32 +66,13 @@ class AutomationIf(BaseConfigModel):
     _name: str = PrivateAttr(default="")
     source: Literal["switchbot", "switchbot_timer", "mqtt", "mqtt_timer"]
     duration: Optional[float] = None
-    device: Optional[Dict[str, Any]] = None
-    state: Optional[Dict[str, Any]] = None
     conditions: Dict[str, Any] = Field(default_factory=dict)
     topic: Optional[str] = None
+    device: Optional[str] = None
 
     @property
     def name(self) -> str:
         return self._name
-
-    @model_validator(mode="before")
-    def backward_compatibility_for_device_and_state(
-        cls, values: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        if "device" in values or "state" in values:
-            import warnings
-
-            warnings.warn(
-                "'device' and 'state' are deprecated, use 'conditions' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            conditions = values.get("conditions", {})
-            conditions.update(values.pop("device", {}))
-            conditions.update(values.pop("state", {}))
-            values["conditions"] = conditions
-        return values
 
     @field_validator("duration", mode="before")
     def parse_duration_string(cls, v: Any) -> Optional[float]:
@@ -145,11 +126,28 @@ class MqttPublishAction(BaseConfigModel):
     retain: bool = False
 
 
+class DeviceSettings(BaseConfigModel):
+    address: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+
 class SwitchBotCommandAction(BaseConfigModel):
     type: Literal["switchbot_command"]
-    address: str
+    device: Optional[str] = None  # Reference to a device in the top-level devices map
+    address: Optional[str] = None  # Direct address, for self-contained actions
+    config: Dict[str, Any] = Field(
+        default_factory=dict
+    )  # Constructor arguments, for self-contained actions
     command: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_device_or_address(self) -> "SwitchBotCommandAction":
+        if not self.device and not self.address:
+            raise ValueError("Either 'device' or 'address' must be specified.")
+        if self.device and self.address:
+            raise ValueError("'device' and 'address' cannot be used simultaneously.")
+        return self
 
 
 AutomationAction = Annotated[
@@ -188,6 +186,7 @@ class AutomationRule(BaseConfigModel):
 class AppSettings(BaseConfigModel):
     config_path: str = "config.yaml"
     debug: bool = False
+    devices: Dict[str, DeviceSettings] = Field(default_factory=dict)
     scanner: ScannerSettings = Field(default_factory=ScannerSettings)
     prometheus_exporter: PrometheusExporterSettings = Field(
         default_factory=PrometheusExporterSettings  # type: ignore[arg-type]
@@ -201,4 +200,34 @@ class AppSettings(BaseConfigModel):
         for i, rule in enumerate(self.automations):
             if rule.name is None:
                 rule.name = f"Unnamed Rule #{i}"
+        return self
+
+    @model_validator(mode="after")
+    def resolve_device_references(self) -> "AppSettings":
+        for rule in self.automations:
+            for action in rule.then_block:
+                if isinstance(action, SwitchBotCommandAction):
+                    if action.device:
+                        device_settings = self.devices.get(action.device)
+                        if not device_settings:
+                            raise ValueError(
+                                f"Device '{action.device}' not found "
+                                f"in devices section."
+                            )
+                        action.address = device_settings.address
+                        # Device-level config is merged with action-level config,
+                        # with action-level taking precedence.
+                        action.config = {
+                            **device_settings.config,
+                            **action.config,
+                        }
+            if rule.if_block.device:
+                device_name = rule.if_block.device
+                device_settings = self.devices.get(device_name)
+                if not device_settings:
+                    raise ValueError(
+                        f"Device '{device_name}' not found in devices section "
+                        f"for if_block."
+                    )
+                rule.if_block.conditions["address"] = device_settings.address
         return self

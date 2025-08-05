@@ -6,34 +6,7 @@ A powerful, configurable automation engine for SwitchBot BLE devices, with an op
 
 At its core, `switchbot-actions` monitors various input sources and, based on your rules, triggers different actions. The overall architecture can be visualized as follows:
 
-```mermaid
-graph TD
-    subgraph "Inputs (Triggers)"
-        A["SwitchBot<br>Sensors"]
-        B["MQTT<br>Subscriptions"]
-    end
-
-    subgraph "Application"
-        S["switchbot-actions"]
-    end
-
-    subgraph "Outputs (Actions)"
-        W["SwitchBot<br>Commands"]
-        X["MQTT<br>Publishing"]
-        Y["Webhooks"]
-        Z["Shell<br>Commands"]
-        V["Prometheus<br>Metrics"]
-    end
-
-    A --> S
-    B --> S
-
-    S --> W
-    S --> X
-    S --> Y
-    S --> Z
-    S --> V
-```
+![Architecture Diagram](https://raw.githubusercontent.com/hnw/switchbot-actions/main/docs/images/architecture.svg)
 
 ## Key Features
 
@@ -225,6 +198,35 @@ automations:
 ### Detailed Reference & More Examples
 
 For a complete reference of all configuration options--including advanced automations, time-based triggers, MQTT settings, the Prometheus exporter, and logging--please see the [**Project Specification**](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).
+
+#### Using Device Aliases in `if` Blocks
+
+You can now use device aliases, defined in the top-level `devices` section, directly within the `if` block of your automations. This improves readability and maintainability by allowing you to refer to devices by a friendly name instead of their MAC address.
+
+**Example:**
+
+```yaml
+devices:
+  my-meter:
+    address: "11:22:33:44:55:66"
+    config: { model: "meter" }
+
+automations:
+  - name: "Monitor Living Room Meter"
+    if:
+      source: "switchbot"
+      # Reference a device alias defined in the `devices` section.
+      # The `address` from `my-meter` will be automatically injected into `conditions.address`.
+      device: "my-meter"
+      conditions:
+        # If `address` is also specified here, the `device` alias's address
+        # will take precedence and overwrite it.
+        temperature: "> 25.0"
+        humidity: "< 60.0"
+    then:
+      type: "shell_command"
+      command: "echo 'Living room is hot and humid! ({temperature}C, {humidity}%)' >&2"
+```
 
 ### Command-Line Options
 
