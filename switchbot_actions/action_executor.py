@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
 import httpx
+from switchbot import SwitchBotAdvertisement
 
 from .config import (
     AutomationAction,
@@ -26,7 +27,7 @@ class ActionExecutor(ABC, Generic[T_Action]):
     """Abstract base class for action executors."""
 
     def __init__(self, action: T_Action):
-        self.action: T_Action = action
+        self._action_config: T_Action = action
 
     @abstractmethod
     async def execute(self, state: StateObject) -> None:
@@ -38,7 +39,7 @@ class ShellCommandExecutor(ActionExecutor):
     """Executes a shell command."""
 
     async def execute(self, state: StateObject) -> None:
-        command = state.format(self.action.command)
+        command = state.format(self._action_config.command)
         logger.debug(f"Executing shell command: {command}")
         process = await asyncio.create_subprocess_shell(
             command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -56,10 +57,10 @@ class WebhookExecutor(ActionExecutor):
     """Sends a webhook."""
 
     async def execute(self, state: StateObject) -> None:
-        url = state.format(self.action.url)
-        method = self.action.method
-        payload = state.format(self.action.payload)
-        headers = state.format(self.action.headers)
+        url = state.format(self._action_config.url)
+        method = self._action_config.method
+        payload = state.format(self._action_config.payload)
+        headers = state.format(self._action_config.headers)
 
         logger.debug(
             f"Sending webhook: {method} {url} with payload {payload} "
@@ -105,11 +106,11 @@ class MqttPublishExecutor(ActionExecutor):
     """Publishes an MQTT message."""
 
     async def execute(self, state: StateObject) -> None:
-        topic = state.format(self.action.topic)
-        qos = self.action.qos
-        retain = self.action.retain
+        topic = state.format(self._action_config.topic)
+        qos = self._action_config.qos
+        retain = self._action_config.retain
 
-        payload = state.format(self.action.payload)
+        payload = state.format(self._action_config.payload)
 
         logger.debug(
             f"Publishing MQTT message to topic '{topic}' with payload '{payload}' "
@@ -127,7 +128,7 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
 
     async def execute(self, state: StateObject) -> None:
         # The address should be resolved by Pydantic validation before execution.
-        address = self.action.address
+        address = self._action_config.address
         if not address:
             logger.error(
                 "SwitchBotCommandAction is missing a target device address. "
@@ -135,13 +136,19 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
             )
             return
 
-        command = self.action.command
-        constructor_args = self.action.config
-        method_args = self.action.params
+        command = self._action_config.command
+        constructor_args = self._action_config.config
+        method_args = self._action_config.params
 
-        advertisement = self._state_store.get_state(address)
+        advertisement = await self._state_store.get_state(address)
         if not advertisement:
             logger.error(f"Device with address {address} not found in StateStore.")
+            return
+        if not isinstance(advertisement, SwitchBotAdvertisement):
+            logger.error(
+                f"Retrieved state for {address} is not a SwitchBotAdvertisement. "
+                f"Type: {type(advertisement).__name__}. Skipping command execution."
+            )
             return
 
         device = create_switchbot_device(advertisement, **constructor_args)

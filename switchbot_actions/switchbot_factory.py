@@ -39,11 +39,12 @@ DEVICE_CLASS_MAP = {
 }
 
 
-def create_switchbot_device(adv: switchbot.SwitchBotAdvertisement, **kwargs):
+def create_switchbot_device(
+    adv: switchbot.SwitchBotAdvertisement, **kwargs
+) -> switchbot.SwitchbotDevice | None:
     model = adv.data.get("modelName")
     if model:
         device_class = DEVICE_CLASS_MAP.get(model)
         if device_class:
-            logger.info(f"kwargs={kwargs}")
             return device_class(device=adv.device, **kwargs)
     return None

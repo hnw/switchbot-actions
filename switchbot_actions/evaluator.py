@@ -2,12 +2,13 @@ import json
 import logging
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, TypeAlias, TypeVar, Union, overload
+from typing import Any, Dict, Generic, Optional, TypeVar, Union, overload
 
 import aiomqtt
 from switchbot import SwitchBotAdvertisement
 
-RawStateEvent: TypeAlias = Union[SwitchBotAdvertisement, aiomqtt.Message]
+from .store import RawStateEvent
+
 T_State = TypeVar("T_State", bound=RawStateEvent)
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,10 @@ class MqttFormatter(string.Formatter):
 
 
 class StateObject(ABC, Generic[T_State]):
-    def __init__(self, raw_event: T_State):
+    def __init__(self, raw_event: T_State, previous: Optional["StateObject"] = None):
         self._raw_event: T_State = raw_event
         self._cached_values: Dict[str, Any] | None = None
+        self.previous: Optional["StateObject"] = previous
 
     @property
     @abstractmethod
@@ -107,9 +109,32 @@ class MqttState(StateObject[aiomqtt.Message]):
         return format_data
 
 
-def create_state_object(raw_event: RawStateEvent) -> StateObject:
+def create_state_object(
+    raw_event: RawStateEvent, previous: Optional[StateObject] = None
+) -> StateObject:
     if isinstance(raw_event, SwitchBotAdvertisement):
-        return SwitchBotState(raw_event)
+        return SwitchBotState(raw_event, previous=previous)
     elif isinstance(raw_event, aiomqtt.Message):
-        return MqttState(raw_event)
+        return MqttState(raw_event, previous=previous)
     raise TypeError(f"Unsupported event type: {type(raw_event)}")
+
+
+def _get_key_from_raw_event(raw_event: RawStateEvent) -> str:
+    if isinstance(raw_event, SwitchBotAdvertisement):
+        return raw_event.address
+    elif isinstance(raw_event, aiomqtt.Message):
+        return str(raw_event.topic)
+    raise TypeError(f"Unsupported event type for key extraction: {type(raw_event)}")
+
+
+def create_state_object_with_previous(
+    new_raw_event: RawStateEvent, previous_raw_event: Optional[RawStateEvent]
+) -> StateObject:
+    previous_state_object: Optional[StateObject] = None
+    if previous_raw_event:
+        previous_state_object = create_state_object(previous_raw_event)
+
+    new_state_object = create_state_object(
+        new_raw_event, previous=previous_state_object
+    )
+    return new_state_object

@@ -1,11 +1,12 @@
 # switchbot_actions/store.py
 import logging
-from threading import Lock
+from asyncio import Lock
+from typing import TypeAlias, Union
 
+import aiomqtt
 from switchbot import SwitchBotAdvertisement
 
-from . import evaluator
-from .signals import switchbot_advertisement_received
+RawStateEvent: TypeAlias = Union[SwitchBotAdvertisement, aiomqtt.Message]
 
 logger = logging.getLogger(__name__)
 
@@ -16,34 +17,43 @@ class StateStore:
     """
 
     def __init__(self):
-        self._states: dict[str, SwitchBotAdvertisement] = {}
+        self._states: dict[str, RawStateEvent] = {}
         self._lock = Lock()
-        # Connect to the signal to receive updates
-        switchbot_advertisement_received.connect(self.handle_state_change)
 
-    def handle_state_change(self, sender, **kwargs):
-        """Receives state object from the signal and updates the store."""
-        new_state = kwargs.get("new_state")
-        if not new_state:
-            return
-
-        state_obj = evaluator.create_state_object(new_state)
-        key = state_obj.id
-        with self._lock:
-            self._states[key] = new_state
+    async def update_state(self, key: str, new_raw_event: RawStateEvent):
+        """
+        Updates the latest raw event for a specific key.
+        """
+        async with self._lock:
+            self._states[key] = new_raw_event
         logger.debug(f"State updated for key {key}")
 
-    def get_state(self, key: str) -> SwitchBotAdvertisement | None:
+    async def get_state(self, key: str) -> RawStateEvent | None:
         """
-        Retrieves the latest state for a specific key.
+        Retrieves the latest raw event for a specific key.
         Returns None if no state is associated with the key.
         """
-        with self._lock:
+        async with self._lock:
             return self._states.get(key)
 
-    def get_all_states(self) -> dict[str, SwitchBotAdvertisement]:
+    async def get_and_update(
+        self, key: str, new_raw_event: RawStateEvent
+    ) -> RawStateEvent | None:
         """
-        Retrieves a copy of the states of all entities.
+        Atomically retrieves the old raw event for a specific key and updates it with
+        the new raw event.
+        Returns the old raw event, or None if no state was previously associated with
+        the key.
         """
-        with self._lock:
+        async with self._lock:
+            old_raw_event = self._states.get(key)
+            self._states[key] = new_raw_event
+            logger.debug(f"State atomically retrieved and updated for key {key}")
+            return old_raw_event
+
+    async def get_all_states(self) -> dict[str, RawStateEvent]:
+        """
+        Retrieves a copy of the raw events of all entities.
+        """
+        async with self._lock:
             return self._states.copy()

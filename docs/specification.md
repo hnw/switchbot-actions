@@ -15,86 +15,96 @@ These signals are consumed by the `AutomationHandler`, which acts as a central d
 
 Each `ActionRunner` instance encapsulates the logic for its trigger type, including condition evaluation, cooldown management, and action execution. When an action is triggered, it delegates the execution to the `action_executor` module, which handles the specifics of running shell commands, webhooks, etc.
 
-The core of the condition evaluation logic is encapsulated within the StateObject class, defined in the evaluator module. When the AutomationHandler receives a raw event (e.g., from SwitchbotClient or MqttClient), it uses a factory function (create_state_object) to wrap the event in a corresponding StateObject subclass (e.g., SwitchBotState). This unified StateObject is then passed to the appropriate ActionRunner, which uses the object's methods to check conditions and format action parameters, making the system extensible to new event sources.
+The core of the condition evaluation logic is encapsulated within the StateObject class, defined in the evaluator module. When the AutomationHandler receives a raw event (e.g., from SwitchbotClient or MqttClient), it uses a factory function (create_state_object_with_previous) to wrap the event in a corresponding StateObject subclass (e.g., SwitchBotState), along with its previous state. This unified StateObject is then passed to the appropriate ActionRunner, which uses the object's methods to check conditions and format action parameters, making the system extensible to new event sources.
 
 ### Mermaid Class Diagram
 
 ```mermaid
 classDiagram
-    direction LR
+    direction TB
 
-    subgraph Inputs
-        SwitchbotClient
-        MqttClient
-    end
+    class Application {
+        +start()
+        +stop()
+        +reload_settings()
+    }
 
-    subgraph State_Representation
-        class StateObject {
-            <<Abstract>>
-            +id: str
-            +format(template_data)
-        }
-        StateObject <|-- SwitchBotState
-        StateObject <|-- MqttState
-        class factory {
-            <<Factory>>
-            +create_state_object()
-        }
-        factory ..> StateObject
-    end
+    class SwitchbotClient {
+        +start_scan()
+    }
 
-    subgraph Core_Automation_Logic
-        AutomationHandler
-        class ActionRunner {
-            #_trigger: Trigger
-            #_executors: List[ActionExecutor]
-            +run(state)
-            +execute_actions(state)
-        }
-        class Trigger {
-            <<Abstract>>
-            #_if_config
-            +set_callback(callback)
-            +process_state(state)
-        }
-        Trigger <|-- EdgeTrigger
-        Trigger <|-- DurationTrigger
-    end
+    class MqttClient {
+        +run()
+        +publish()
+    }
 
-    subgraph Output_Actions
-        class ActionExecutor {
-            <<Abstract>>
-            +execute(state)
-        }
-        ActionExecutor <|-- ShellCommandExecutor
-        ActionExecutor <|-- WebhookExecutor
-        ActionExecutor <|-- MqttPublishExecutor
-        class factory {
-            <<Factory>>
-            +create_action_executor()
-        }
-        factory ..> ActionExecutor
-    end
+    class AutomationHandler {
+        +handle_switchbot_event(state)
+        +handle_mqtt_event(state)
+    }
 
-    subgraph Storage_and_Metrics
-        StateStore
-        PrometheusExporter
-    end
+    class ActionRunner {
+        +run(state: StateObject)
+    }
 
-    %% --- Relationships ---
+    class Trigger {
+        <<Abstract>>
+        #if_config: AutomationIf
+        #callback: Callable
+        +set_callback(callback)
+        +process_state(state)
+    }
 
-    %% Automation Flow
-    SwitchbotClient ..> AutomationHandler : notifies via signal
-    MqttClient ..> AutomationHandler : notifies via signal
-    AutomationHandler ..> factory
-    AutomationHandler "1" --* "N" ActionRunner : creates & holds
-    ActionRunner "1" o-- "1" Trigger : uses
-    ActionRunner --> StateObject : uses
-    ActionRunner "1" --* "N" ActionExecutor : holds & uses
+    class ActionExecutor {
+        <<Abstract>>
+        #action_config: AutomationAction
+        +execute(state: StateObject)
+    }
 
-    %% Storage & Metrics Flow
-    SwitchbotClient ..> StateStore : notifies via signal
-    SwitchbotClient ..> PrometheusExporter : notifies via signal
+    class StateStore {
+        +get_state(key)
+        +get_and_update(key, event)
+    }
+
+    class StateObject {
+        <<Abstract>>
+        +id: str
+        +previous: StateObject
+        +format(template)
+    }
+
+    class PrometheusExporter {
+        +start()
+        +stop()
+    }
+
+    %% --- Aggregation/Composition (has-a) relationships ---
+    Application o-- SwitchbotClient
+    Application o-- MqttClient
+    Application o-- PrometheusExporter
+    Application o-- AutomationHandler
+    Application o-- StateStore
+
+    AutomationHandler "1" *-- "N" ActionRunner
+    ActionRunner "1" o-- "1" Trigger
+    ActionRunner "1" *-- "N" ActionExecutor
+
+    %% --- Self-reference relationship for state history ---
+
+    %% --- Dependency (uses-a) relationships ---
+    ActionRunner ..> StateObject
+    Trigger ..> StateObject
+    ActionExecutor ..> StateObject
+    ActionExecutor ..> StateStore
+    AutomationHandler ..> StateStore
+    PrometheusExporter ..> StateObject
+
+    %% --- Signal-based communication, represented as dependencies ---
+    SwitchbotClient ..> AutomationHandler : signal
+    SwitchbotClient ..> PrometheusExporter : signal
+    MqttClient ..> AutomationHandler : signal
+    ActionExecutor ..> Application : signal<br>(for MQTT publish)
+    Application ..> MqttClient
 ```
 
 ## 3. Components
@@ -112,7 +122,7 @@ classDiagram
 ### 3.3. `StateStore`
 
   - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed entity. It is the single source of truth for the current state.
-  - **Functionality**: Subscribes to the `switchbot_advertisement_received` signal and immediately updates its internal state upon receiving a new advertisement.
+  - **Functionality**: Provides atomic operations for retrieving and updating state, ensuring data consistency in asynchronous environments. It also subscribes to the `switchbot_advertisement_received` signal and immediately updates its internal state upon receiving a new advertisement.
 
 ### 3.4. `PrometheusExporter`
 
@@ -196,23 +206,28 @@ devices:
 A list of automation rules. Each rule is a map with the following structure:
 
   - **`name`**: (string, optional) A human-readable name for the automation.
+
   - **`cooldown`**: (string, optional) A duration (e.g., "5s") during which this automation will not be re-triggered for the same device after it has fired. Cooldowns are managed independently for each unique state key (e.g., per MAC address).
+
   - **`if`**: (map, required) Defines the trigger source and conditions.
+
       - **`source`**: (string, required) Must be one of:
+
           - `"switchbot"`: Triggers immediately when a device's state changes to meet the conditions (edge-triggered).
           - `"switchbot_timer"`: Triggers when a device's state has been continuously met for `duration`.
           - `"mqtt"`: Triggers immediately when an MQTT message is received that meets the conditions.
           - `"mqtt_timer"`: Triggers when an MQTT message's state has been continuously met for `duration`.
+
       - **`duration`**: (string, required for `_timer` sources) The period the state must be continuously met.
+
       - **`topic`**: (string, required for `mqtt` sources) The MQTT topic to subscribe to. Wildcards (`+`, `#`) are supported.
+
       - **`conditions`**: (map, optional) Defines the conditions that must be met. This single block is used to filter by device attributes (like `modelName` or `address`) and device state values (like `temperature: "> 25.0"`).
 
       - **`device`**: (string, optional) A reference to a device defined in the top-level `devices` section. If specified, the `address` from the referenced device will be automatically injected into `conditions.address`. If `conditions.address` is also explicitly defined, the `device` reference will take precedence and overwrite it.
 
-      > [!NOTE]
-      > **Backward Compatibility**:
-      > For backward compatibility, the legacy `device` and `state` keys are still supported. If they are found in the configuration, their contents will be automatically merged into the `conditions` block, and a `DeprecationWarning` will be logged. Users are encouraged to adopt the unified `conditions` block for new automations.
   - **`then`**: (list or map, required) Defines the action(s) to perform. Can be a single action (map) or a list of actions.
+
       - `type`: (string, required) The action type, e.g., `shell_command`, `webhook`, `mqtt_publish`.
       - Other parameters depend on the `type`. Values support placeholders (e.g., `{temperature}`, `{address}`). Refer to Section 5, "State Object Structure," for available placeholders.
 

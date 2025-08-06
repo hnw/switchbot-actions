@@ -2,8 +2,52 @@ import aiomqtt
 import pytest
 
 from switchbot_actions.config import AutomationIf
-from switchbot_actions.evaluator import StateObject, create_state_object
+from switchbot_actions.evaluator import (
+    StateObject,
+    create_state_object,
+    create_state_object_with_previous,
+)
 from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
+
+
+@pytest.fixture
+def mock_raw_event(mock_switchbot_advertisement):
+    return mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:00:01",
+        data={
+            "modelName": "WoSensorTH",
+            "data": {"temperature": 25.5, "humidity": 50, "battery": 99},
+        },
+    )
+
+
+@pytest.fixture
+def mock_previous_raw_event(mock_switchbot_advertisement):
+    return mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:00:01",
+        data={
+            "modelName": "WoSensorTH",
+            "data": {"temperature": 25.0, "humidity": 49, "battery": 98},
+        },
+    )
+
+
+def test_create_state_object_with_previous(mock_raw_event, mock_previous_raw_event):
+    state_object = create_state_object_with_previous(
+        mock_raw_event, mock_previous_raw_event
+    )
+    assert state_object.id == mock_raw_event.address
+    assert state_object.previous is not None
+    assert state_object.previous.id == mock_previous_raw_event.address
+    assert state_object.get_values_dict()["temperature"] == 25.5
+    assert state_object.previous.get_values_dict()["temperature"] == 25.0
+
+
+def test_create_state_object_with_no_previous(mock_raw_event):
+    state_object = create_state_object_with_previous(mock_raw_event, None)
+    assert state_object.id == mock_raw_event.address
+    assert state_object.previous is None
+    assert state_object.get_values_dict()["temperature"] == 25.5
 
 
 @pytest.mark.parametrize(

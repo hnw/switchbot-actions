@@ -1,9 +1,6 @@
 # tests/test_store.py
-from unittest.mock import patch
-
 import pytest
 
-from switchbot_actions.signals import switchbot_advertisement_received
 from switchbot_actions.store import StateStore
 
 
@@ -26,51 +23,52 @@ def mock_state(mock_switchbot_advertisement):
     return state
 
 
-def test_storage_initialization(storage):
+@pytest.mark.asyncio
+async def test_storage_initialization(storage):
     """Test that the storage is initialized empty."""
-    assert storage.get_all_states() == {}
+    assert await storage.get_all_states() == {}
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.handlers.AutomationHandler")
-async def test_handle_state_change(mock_automation_handler, storage, mock_state):
+async def test_update_and_get_state(storage, mock_state):
     """
-    Test that the store correctly handles a new switchbot_advertisement_received signal.
+    Test that the store correctly updates and retrieves state.
     """
-    switchbot_advertisement_received.send(None, new_state=mock_state)
+    key = "DE:AD:BE:EF:00:01"
+    await storage.update_state(key, mock_state)
 
-    assert len(storage.get_all_states()) == 1
-    stored_state = storage.get_state("DE:AD:BE:EF:00:01")
+    assert len(await storage.get_all_states()) == 1
+    stored_state = await storage.get_state(key)
     assert stored_state is not None
     assert stored_state.address == "DE:AD:BE:EF:00:01"
     assert stored_state.data["data"]["temperature"] == 25.5
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.handlers.AutomationHandler")
-async def test_get_state(mock_automation_handler, storage, mock_state):
-    """Test retrieving a specific state by key."""
-    assert storage.get_state("DE:AD:BE:EF:00:01") is None
-    switchbot_advertisement_received.send(None, new_state=mock_state)
-    assert storage.get_state("DE:AD:BE:EF:00:01") == mock_state
+async def test_get_state_non_existent(storage):
+    """Test retrieving a non-existent state by key."""
+    assert await storage.get_state("NON_EXISTENT_KEY") is None
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.handlers.AutomationHandler")
-async def test_get_all_states(mock_automation_handler, storage, mock_state):
-    """Test retrieving all states."""
-    assert storage.get_all_states() == {}
-    switchbot_advertisement_received.send(None, new_state=mock_state)
-    assert storage.get_all_states() == {"DE:AD:BE:EF:00:01": mock_state}
+async def test_get_all_states_empty(storage):
+    """Test retrieving all states when empty."""
+    assert await storage.get_all_states() == {}
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.handlers.AutomationHandler")
-async def test_state_overwrite(
-    mock_automation_handler, storage, mock_state, mock_switchbot_advertisement
-):
+async def test_get_all_states_with_data(storage, mock_state):
+    """Test retrieving all states with data."""
+    key = "DE:AD:BE:EF:00:01"
+    await storage.update_state(key, mock_state)
+    assert await storage.get_all_states() == {key: mock_state}
+
+
+@pytest.mark.asyncio
+async def test_state_overwrite(storage, mock_state, mock_switchbot_advertisement):
     """Test that a new state for the same key overwrites the old state."""
-    switchbot_advertisement_received.send(None, new_state=mock_state)
+    key = "DE:AD:BE:EF:00:01"
+    await storage.update_state(key, mock_state)
 
     updated_state = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:00:01",
@@ -84,9 +82,37 @@ async def test_state_overwrite(
         },
     )
 
-    switchbot_advertisement_received.send(None, new_state=updated_state)
+    await storage.update_state(key, updated_state)
 
-    assert len(storage.get_all_states()) == 1
-    new_state = storage.get_state("DE:AD:BE:EF:00:01")
+    assert len(await storage.get_all_states()) == 1
+    new_state = await storage.get_state(key)
     assert new_state.data["data"]["temperature"] == 26.0
     assert new_state.data["data"]["battery"] == 98
+
+
+@pytest.mark.asyncio
+async def test_get_and_update_state(storage, mock_state, mock_switchbot_advertisement):
+    """Test that get_and_update atomically retrieves the old state and updates with
+    the new."""
+    key = "DE:AD:BE:EF:00:02"
+    initial_state = mock_state
+
+    # First call: key does not exist, should return None and set the state
+    old_state = await storage.get_and_update(key, initial_state)
+    assert old_state is None
+    assert await storage.get_state(key) == initial_state
+
+    # Second call: key exists, should return the initial_state and set the updated_state
+    updated_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:00:02",
+        data={
+            "modelName": "WoSensorTH",
+            "data": {"temperature": 27.0, "humidity": 55, "battery": 90},
+        },
+    )
+    old_state = await storage.get_and_update(key, updated_state)
+    assert old_state == initial_state
+    assert await storage.get_state(key) == updated_state
+
+    # Verify that other keys are unaffected
+    assert len(await storage.get_all_states()) == 1
