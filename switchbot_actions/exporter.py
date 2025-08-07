@@ -6,8 +6,8 @@ from typing import Dict
 from prometheus_client import REGISTRY, Gauge, start_http_server
 
 from .config import PrometheusExporterSettings
-from .evaluator import SwitchBotState, create_state_object
 from .signals import switchbot_advertisement_received
+from .state import SwitchBotState, create_state_object
 
 logger = logging.getLogger(__name__)
 

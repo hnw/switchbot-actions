@@ -64,6 +64,6 @@ def sample_state(mock_switchbot_advertisement):
         },
         rssi=-50,
     )
-    from switchbot_actions.evaluator import create_state_object
+    from switchbot_actions.state import create_state_object
 
     return create_state_object(raw_state)

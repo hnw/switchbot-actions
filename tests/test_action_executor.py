@@ -18,7 +18,7 @@ from switchbot_actions.config import (
     SwitchBotCommandAction,
     WebhookAction,
 )
-from switchbot_actions.evaluator import create_state_object
+from switchbot_actions.state import create_state_object
 from switchbot_actions.store import StateStore
 
 
@@ -165,7 +165,7 @@ async def test_switchbot_command_executor_success(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = advertisement
+    state_store.get.return_value = advertisement
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command", address=address, command="turn_on"
@@ -173,7 +173,7 @@ async def test_switchbot_command_executor_success(
     executor = SwitchBotCommandExecutor(action_config, state_store)
     await executor.execute(state_object)
 
-    state_store.get_state.assert_called_once_with(address)
+    state_store.get.assert_called_once_with(address)
 
     mock_create_device.assert_called_once_with(advertisement)
     mock_device_instance.update_from_advertisement.assert_called_once_with(
@@ -195,7 +195,7 @@ async def test_switchbot_command_executor_device_not_found(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = None
+    state_store.get.return_value = None
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command", address=address, command="turn_on"
@@ -229,7 +229,7 @@ async def test_switchbot_command_executor_unsupported_device(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = advertisement
+    state_store.get.return_value = advertisement
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command",
@@ -271,7 +271,7 @@ async def test_switchbot_command_executor_invalid_command(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = advertisement
+    state_store.get.return_value = advertisement
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command", address=address, command="invalid_command"
@@ -303,7 +303,7 @@ async def test_switchbot_command_executor_invalid_arguments(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = advertisement
+    state_store.get.return_value = advertisement
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command",
@@ -338,7 +338,7 @@ async def test_switchbot_command_executor_execution_exception(
     state_object = create_state_object(advertisement)
 
     state_store = MagicMock(spec=StateStore)
-    state_store.get_state.return_value = advertisement
+    state_store.get.return_value = advertisement
 
     action_config = SwitchBotCommandAction(
         type="switchbot_command",

@@ -5,7 +5,7 @@ import pytest
 
 from switchbot_actions.action_runner import ActionRunner
 from switchbot_actions.config import AutomationRule
-from switchbot_actions.evaluator import create_state_object
+from switchbot_actions.state import create_state_object
 from switchbot_actions.triggers import EdgeTrigger
 
 

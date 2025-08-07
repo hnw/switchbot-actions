@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from switchbot_actions.config import AutomationRule
-from switchbot_actions.evaluator import (
+from switchbot_actions.handlers import AutomationHandler
+from switchbot_actions.state import (
     create_state_object_with_previous,
 )
-from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.store import StateStore
 from switchbot_actions.triggers import DurationTrigger, EdgeTrigger
 
@@ -20,7 +20,7 @@ from switchbot_actions.triggers import DurationTrigger, EdgeTrigger
 def state_store():
     """Returns a mock StateStore object."""
     mock_store = AsyncMock(spec=StateStore)
-    mock_store.get_state.return_value = None  # Default for build_state_with_previous
+    mock_store.get.return_value = None  # Default for build_state_with_previous
     mock_store.get_and_update.return_value = None  # Ensure previous_raw_event is None
     return mock_store
 

@@ -2,7 +2,7 @@ import aiomqtt
 import pytest
 
 from switchbot_actions.config import AutomationIf
-from switchbot_actions.evaluator import (
+from switchbot_actions.state import (
     StateObject,
     create_state_object,
     create_state_object_with_previous,

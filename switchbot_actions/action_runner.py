@@ -6,7 +6,7 @@ from pytimeparse2 import parse
 
 from .action_executor import ActionExecutor
 from .config import AutomationRule
-from .evaluator import StateObject
+from .state import StateObject
 from .triggers import Trigger
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class ActionRunner(Generic[T]):
         self._executors = executors
         self._trigger = trigger
         self._last_run_timestamp: dict[str, float] = {}
-        self._trigger.set_callback(self.execute_actions)
+        self._trigger.on_triggered(self.execute_actions)
 
     async def run(self, state: T) -> None:
         await self._trigger.process_state(state)

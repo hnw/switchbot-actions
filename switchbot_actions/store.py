@@ -20,15 +20,7 @@ class StateStore:
         self._states: dict[str, RawStateEvent] = {}
         self._lock = Lock()
 
-    async def update_state(self, key: str, new_raw_event: RawStateEvent):
-        """
-        Updates the latest raw event for a specific key.
-        """
-        async with self._lock:
-            self._states[key] = new_raw_event
-        logger.debug(f"State updated for key {key}")
-
-    async def get_state(self, key: str) -> RawStateEvent | None:
+    async def get(self, key: str) -> RawStateEvent | None:
         """
         Retrieves the latest raw event for a specific key.
         Returns None if no state is associated with the key.

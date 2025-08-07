@@ -13,8 +13,8 @@ from .config import (
     SwitchBotCommandAction,
     WebhookAction,
 )
-from .evaluator import StateObject
 from .signals import publish_mqtt_message_request
+from .state import StateObject
 from .store import StateStore
 from .switchbot_factory import create_switchbot_device
 
@@ -140,7 +140,7 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
         constructor_args = self._action_config.config
         method_args = self._action_config.params
 
-        advertisement = await self._state_store.get_state(address)
+        advertisement = await self._state_store.get(address)
         if not advertisement:
             logger.error(f"Device with address {address} not found in StateStore.")
             return

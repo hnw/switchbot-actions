@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Generic, Optional, TypeVar
 
 from .config import AutomationIf
-from .evaluator import StateObject
+from .state import StateObject
 from .timers import Timer
 
 logger = logging.getLogger(__name__)
@@ -52,11 +52,11 @@ T = TypeVar("T", bound=StateObject)
 class Trigger(ABC, Generic[T]):
     def __init__(self, if_config: AutomationIf):
         self._if_config = if_config
-        self._callback: Callable[[T], Any] | None = None
         self._rule_conditions_met: dict[str, bool] = {}
+        self._action: Callable[[T], Any] | None = None
 
-    def set_callback(self, callback: Callable[[T], Any]):
-        self._callback = callback
+    def on_triggered(self, action: Callable[[T], Any]):
+        self._action = action
 
     def _check_all_conditions(self, state: T) -> Optional[bool]:
         """
@@ -92,8 +92,8 @@ class EdgeTrigger(Trigger[T]):
         if conditions_now_met and not rule_conditions_previously_met:
             # Conditions just became true (edge trigger)
             self._rule_conditions_met[state.id] = True
-            if self._callback:
-                await self._callback(state)
+            if self._action:
+                await self._action(state)
         elif not conditions_now_met and rule_conditions_previously_met:
             # Conditions just became false
             self._rule_conditions_met[state.id] = False
@@ -142,8 +142,8 @@ class DurationTrigger(Trigger[T]):
     async def _timer_callback(self, state: T) -> None:
         """Called when the timer completes."""
         try:
-            if self._callback:
-                await self._callback(state)
+            if self._action:
+                await self._action(state)
         finally:
             if state.id in self._active_timers:
                 del self._active_timers[state.id]  # Clear the timer after execution

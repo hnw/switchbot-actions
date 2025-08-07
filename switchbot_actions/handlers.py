@@ -5,14 +5,14 @@ from typing import Any
 from .action_executor import create_action_executor
 from .action_runner import ActionRunner
 from .config import AutomationRule
-from .evaluator import (
+from .signals import mqtt_message_received, switchbot_advertisement_received
+from .state import (
     MqttState,
     RawStateEvent,
     SwitchBotState,
     _get_key_from_raw_event,
     create_state_object_with_previous,
 )
-from .signals import mqtt_message_received, switchbot_advertisement_received
 from .store import StateStore
 from .triggers import DurationTrigger, EdgeTrigger
 
