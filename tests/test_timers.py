@@ -90,3 +90,12 @@ class TestTimer:
         mock_callback.assert_not_called()
         assert timer._task is not None
         assert timer._task.done()
+
+    def test_timer_raises_value_error_for_invalid_duration(self):
+        """Test that Timer constructor raises ValueError for non-numeric duration."""
+        mock_callback = MagicMock()
+
+        with pytest.raises(
+            ValueError, match="Invalid duration_sec value: not_a_number"
+        ):
+            Timer("not_a_number", mock_callback, name="invalid_timer")  # type: ignore[arg-type]

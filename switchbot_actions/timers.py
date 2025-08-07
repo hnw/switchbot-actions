@@ -11,7 +11,12 @@ class Timer:
     def __init__(
         self, duration_sec: float, callback: Callable, name: str = ""
     ):  # Added name for logging
-        self._duration_sec = duration_sec
+        try:
+            self._duration_sec = float(duration_sec)
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid duration_sec value: {duration_sec}. Must be a number."
+            ) from e
         self._callback = callback
         self._name = name
         self._task: asyncio.Task | None = None
