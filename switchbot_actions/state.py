@@ -2,7 +2,17 @@ import json
 import logging
 import string
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generic, Optional, TypeVar, Union, overload
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Mapping,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    overload,
+)
 
 import aiomqtt
 from switchbot import SwitchBotAdvertisement
@@ -14,21 +24,43 @@ T_State = TypeVar("T_State", bound=RawStateEvent)
 logger = logging.getLogger(__name__)
 
 
-class MqttFormatter(string.Formatter):
-    def get_field(self, field_name, args, kwargs):
-        # Handle dot notation for nested access
-        obj = kwargs
-        for part in field_name.split("."):
-            if isinstance(obj, dict):
-                obj = obj.get(part)
-            elif hasattr(obj, part):
-                obj = getattr(obj, part)
+class TemplateFormatter(string.Formatter):
+    def get_field(
+        self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]
+    ) -> tuple[Any, str]:
+        """
+        Implements a prioritized lookup for template variables.
+
+        - Dotted names (e.g., 'previous.temperature') are resolved as attributes.
+        - Top-level names (e.g., 'temperature') are first resolved as attributes
+          on a special '__current_data__' object, falling back to the main context.
+        """
+        if "." in field_name:
+            value, key = super().get_field(field_name, args, kwargs)
+        else:
+            current_data = kwargs.get("__current_data__")
+            if current_data and hasattr(current_data, field_name):
+                value = getattr(current_data, field_name)
+            elif field_name in kwargs:
+                value = kwargs[field_name]
             else:
-                return (
-                    None,
-                    field_name,
-                )  # Return None if not found, and original field_name
-        return obj, field_name
+                raise KeyError(field_name)
+            key = field_name
+
+        if callable(value):
+            raise AttributeError(f"method access is not allowed: {field_name}")
+
+        return value, key
+
+
+class _EmptyState:
+    """A placeholder for a non-existent previous state."""
+
+    def __getattr__(self, name: str) -> str:
+        return ""
+
+
+_empty_state_instance = _EmptyState()
 
 
 class StateObject(ABC, Generic[T_State]):
@@ -36,6 +68,14 @@ class StateObject(ABC, Generic[T_State]):
         self._raw_event: T_State = raw_event
         self._cached_values: Dict[str, Any] | None = None
         self.previous: Optional["StateObject"] = previous
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self.get_values_dict()[name]
+        except KeyError:
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            )
 
     @property
     @abstractmethod
@@ -60,13 +100,27 @@ class StateObject(ABC, Generic[T_State]):
     def format(
         self, template_data: Union[str, Dict[str, Any]]
     ) -> Union[str, Dict[str, Any]]:
-        all_values = self.get_values_dict()
-        formatter = MqttFormatter()
+        context = {
+            "__current_data__": self,
+            "previous": self.previous if self.previous else _empty_state_instance,
+        }
+        formatter = TemplateFormatter()
 
         if isinstance(template_data, dict):
             return {k: self.format(str(v)) for k, v in template_data.items()}
         else:
-            return formatter.format(str(template_data), **all_values)
+            try:
+                return formatter.format(str(template_data), **context)
+            except AttributeError as e:
+                # {previous.temprature} や {previous.format} のようなケース
+                raise ValueError(f"Invalid attribute access in placeholder: {e}") from e
+            except KeyError as e:
+                # {temprature} のようなケース
+                key_name = e.args[0]
+                raise ValueError(
+                    f"Placeholder '{key_name}' could not be resolved. The key name is"
+                    " likely incorrect."
+                ) from e
 
 
 class SwitchBotState(StateObject[SwitchBotAdvertisement]):

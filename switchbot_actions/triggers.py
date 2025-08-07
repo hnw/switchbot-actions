@@ -2,7 +2,7 @@ import asyncio
 import logging
 import operator
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Generic, Optional, TypeVar
+from typing import Any, Callable, Generic, Optional, TypeVar, cast
 
 from .config import AutomationIf
 from .state import StateObject
@@ -52,7 +52,6 @@ T = TypeVar("T", bound=StateObject)
 class Trigger(ABC, Generic[T]):
     def __init__(self, if_config: AutomationIf):
         self._if_config = if_config
-        self._rule_conditions_met: dict[str, bool] = {}
         self._action: Callable[[T], Any] | None = None
 
     def on_triggered(self, action: Callable[[T], Any]):
@@ -64,15 +63,29 @@ class Trigger(ABC, Generic[T]):
         Returns True if all conditions are met, False if any condition is not met,
         and None if the state does not match the expected source or topic.
         """
-        all_values = state.get_values_dict()
+        for key, condition_value in self._if_config.conditions.items():
+            target_obj = state
+            attr_name = key
 
-        # Evaluate conditions
-        for key, condition in self._if_config.conditions.items():
-            if key not in all_values:
-                return None  # Return None if the key is not found in state data
-            value_to_check = all_values.get(key)
-            if not _evaluate_single_condition(str(condition), value_to_check):
+            if key.startswith("previous."):
+                if state.previous is None:
+                    return False  # previous state required but not available
+                target_obj = state.previous
+                attr_name = key.split(".", 1)[1]
+
+            try:
+                value_to_check = getattr(target_obj, attr_name)
+            except AttributeError:
+                return None  # Attribute not found on state or previous state
+
+            # Format the condition value string (RHS) using the current state
+            formatted_condition_value = state.format(str(condition_value))
+
+            if not _evaluate_single_condition(
+                formatted_condition_value, value_to_check
+            ):
                 return False
+
         return True
 
     @abstractmethod
@@ -82,27 +95,24 @@ class Trigger(ABC, Generic[T]):
 
 class EdgeTrigger(Trigger[T]):
     async def process_state(self, state: T) -> None:
-        conditions_now_met = self._check_all_conditions(state)
-
-        if conditions_now_met is None:
+        if state.previous is None:
+            # No previous state, cannot detect an edge
             return
 
-        rule_conditions_previously_met = self._rule_conditions_met.get(state.id, False)
+        conditions_met_now = self._check_all_conditions(state)
+        conditions_met_before = self._check_all_conditions(cast(T, state.previous))
 
-        if conditions_now_met and not rule_conditions_previously_met:
-            # Conditions just became true (edge trigger)
-            self._rule_conditions_met[state.id] = True
+        if conditions_met_now and not conditions_met_before:
+            # Conditions just became true (rising edge)
             if self._action:
                 await self._action(state)
-        elif not conditions_now_met and rule_conditions_previously_met:
-            # Conditions just became false
-            self._rule_conditions_met[state.id] = False
 
 
 class DurationTrigger(Trigger[T]):
     def __init__(self, if_config: AutomationIf):
         super().__init__(if_config)
         self._active_timers: dict[str, Timer] = {}
+        self._rule_conditions_met: dict[str, bool] = {}
 
     async def process_state(self, state: T) -> None:
         name = self._if_config.name

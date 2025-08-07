@@ -32,22 +32,116 @@ def mock_previous_raw_event(mock_switchbot_advertisement):
     )
 
 
-def test_create_state_object_with_previous(mock_raw_event, mock_previous_raw_event):
-    state_object = create_state_object_with_previous(
-        mock_raw_event, mock_previous_raw_event
-    )
-    assert state_object.id == mock_raw_event.address
-    assert state_object.previous is not None
-    assert state_object.previous.id == mock_previous_raw_event.address
-    assert state_object.get_values_dict()["temperature"] == 25.5
-    assert state_object.previous.get_values_dict()["temperature"] == 25.0
+@pytest.fixture
+def state_with_previous(mock_raw_event, mock_previous_raw_event):
+    return create_state_object_with_previous(mock_raw_event, mock_previous_raw_event)
+
+
+def test_create_state_object_with_previous(state_with_previous):
+    assert state_with_previous.id == "DE:AD:BE:EF:00:01"
+    assert state_with_previous.previous is not None
+    assert state_with_previous.previous.id == "DE:AD:BE:EF:00:01"
+    assert state_with_previous.temperature == 25.5
+    assert state_with_previous.previous.temperature == 25.0
 
 
 def test_create_state_object_with_no_previous(mock_raw_event):
     state_object = create_state_object_with_previous(mock_raw_event, None)
     assert state_object.id == mock_raw_event.address
     assert state_object.previous is None
-    assert state_object.get_values_dict()["temperature"] == 25.5
+    assert state_object.temperature == 25.5
+
+
+def test_state_object_attribute_access(state_with_previous):
+    assert state_with_previous.temperature == 25.5
+    assert state_with_previous.humidity == 50
+    assert state_with_previous.previous.temperature == 25.0
+    with pytest.raises(AttributeError):
+        _ = state_with_previous.non_existent_attribute
+
+
+def test_state_object_format_simple(state_with_previous):
+    template = "Temp: {temperature}, Hum: {humidity}"
+    expected = "Temp: 25.5, Hum: 50"
+    assert state_with_previous.format(template) == expected
+
+
+def test_state_object_format_with_previous(state_with_previous):
+    template = "Temp changed from {previous.temperature} to {temperature}."
+    expected = "Temp changed from 25.0 to 25.5."
+    assert state_with_previous.format(template) == expected
+
+
+def test_state_object_format_dict(state_with_previous):
+    template_dict = {
+        "current": "{temperature}",
+        "previous": "{previous.temperature}",
+    }
+    expected_dict = {"current": "25.5", "previous": "25.0"}
+    assert state_with_previous.format(template_dict) == expected_dict
+
+
+def test_state_object_format_invalid_key(state_with_previous):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Placeholder 'invalid_key' could not be resolved. The key name is"
+            " likely incorrect."
+        ),
+    ):
+        state_with_previous.format("This is an {invalid_key}.")
+
+
+def test_state_object_format_typo_previous_attribute(state_with_previous):
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Invalid attribute access in placeholder: 'SwitchBotState' object"
+            r" has no attribute 'temprature'"
+        ),
+    ):
+        state_with_previous.format("Temp: {previous.temprature}")
+
+
+def test_state_object_format_typo_top_level_key(state_with_previous):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Placeholder 'temprature' could not be resolved. The key name is"
+            " likely incorrect."
+        ),
+    ):
+        state_with_previous.format("Temp: {temprature}")
+
+
+def test_state_object_format_method_access_denied(state_with_previous):
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Invalid attribute access in placeholder: method access is not"
+            r" allowed: previous.format"
+        ),
+    ):
+        state_with_previous.format("Do not call {previous.format}.")
+
+
+def test_state_object_format_previous_missing(mock_raw_event):
+    state = create_state_object_with_previous(mock_raw_event, None)
+    assert state.format("Previous temp: {previous.temperature}") == "Previous temp: "
+    assert state.format("Previous hum: {previous.humidity}") == "Previous hum: "
+    assert (
+        state.format("Previous non_existent: {previous.non_existent}")
+        == "Previous non_existent: "
+    )
+
+
+def test_state_object_format_access_previous_object(state_with_previous):
+    # Accessing the 'previous' object should work if not followed by an attribute
+    # The formatter will call `str()` on the object.
+    result = state_with_previous.format("Previous state: {previous}")
+    assert result.startswith(
+        "Previous state: <switchbot_actions.state.SwitchBotState object"
+    )
 
 
 @pytest.mark.parametrize(

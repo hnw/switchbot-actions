@@ -221,7 +221,9 @@ A list of automation rules. Each rule is a map with the following structure:
 
       - **`topic`**: (string, required for `mqtt` sources) The MQTT topic to subscribe to. Wildcards (`+`, `#`) are supported.
 
-      - **`conditions`**: (map, optional) Defines the conditions that must be met. This single block is used to filter by device attributes (like `modelName` or `address`) and device state values (like `temperature: "> 25.0"`).
+      - **`conditions`**: (map, optional) Defines the conditions that must be met. This single block is used to filter by device attributes (like `modelName`) and state values.
+          - **Left-Hand Side (LHS)**: You can reference the previous state's attributes using the `previous.` prefix. For example: `previous.temperature: "> 20.0"`.
+          - **Right-Hand Side (RHS)**: You can use placeholders to compare the current state against the previous state. For example: `temperature: "> {previous.temperature}"`.
 
       - **`device`**: (string, optional) A reference to a device defined in the top-level `devices` section. If specified, the `address` from the referenced device will be automatically injected into `conditions.address`. If `conditions.address` is also explicitly defined, the `device` reference will take precedence and overwrite it.
 
@@ -344,11 +346,22 @@ automations:
         position: 100
 ```
 
-## 6. State Object Structure
+## 6. State Object Structure and Context
 
 Automation rules operate on **State Objects**. These objects contain the event data that triggered a rule and are used for both evaluating `if` conditions and populating placeholders in `then` actions.
 
-### 6.1. SwitchBot Device State (`source: "switchbot"`, `"switchbot_timer"`)
+A crucial feature is the inclusion of the **previous state**, which allows for creating dynamic, comparative automations.
+
+### 6.1. Available Contexts
+
+When evaluating conditions or formatting action parameters, two primary objects are available:
+
+  * **Current State**: Top-level keys (e.g., `{temperature}`) are automatically resolved from the current `StateObject`.
+  * **Previous State**: By using the `previous.` prefix (e.g., `{previous.temperature}`), you can access the last known state of the same entity.
+
+If a previous state does not exist (e.g., on the first event from a device), any placeholder referencing `previous.` will be resolved to an empty string.
+
+### 6.2. SwitchBot Device State (`source: "switchbot"`, `"switchbot_timer"`)
 
 This object contains flattened data from a SwitchBot device's BLE advertisement.
 
@@ -372,7 +385,7 @@ This object contains flattened data from a SwitchBot device's BLE advertisement.
     }
     ```
 
-### 6.2. MQTT Message State (`source: "mqtt"`, `"mqtt_timer"`)
+### 6.3. MQTT Message State (`source: "mqtt"`, `"mqtt_timer"`)
 
 This object represents a received MQTT message.
 

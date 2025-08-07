@@ -136,6 +136,25 @@ automations:
       qos: 1
       retain: true
 
+  - name: "Detect Button Press via State Change"
+    # This automation demonstrates how to use the 'previous' state to detect an
+    # event, like a button press. It triggers when a value changes from its
+    # last known state.
+    cooldown: "2s" # A short cooldown to prevent accidental double-presses.
+    if:
+      source: "switchbot"
+      conditions:
+        # Target a device that has a button, like a Contact Sensor or Bot.
+        modelName: "WoContact"
+        # The condition checks if the current 'button_count' is different from
+        # the 'previous.button_count'. This is a reliable way to detect a press.
+        button_count: "!= {previous.button_count}"
+    then:
+      type: "webhook"
+      url: "https://example.com/notify"
+      payload:
+        message: "Button on device {address} was pressed!"
+
   - name: "Notify if MQTT sensor is offline for 5 minutes"
     if:
       source: "mqtt_timer"

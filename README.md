@@ -195,6 +195,32 @@ automations:
       command: "press"
 ```
 
+
+#### Advanced Example: Comparing Against the Previous State
+
+`switchbot-actions` can create automations based not just on the current state, but by comparing it against the **immediately preceding state**. This is enabled by the `previous` context, allowing for more dynamic and powerful scenarios.
+
+A great practical use case for this is detecting a button press on devices like the SwitchBot Contact Sensor or Bot. These devices expose a `button_count` attribute that increments each time the button is pressed. By checking if the current count is different from the previous one, you can reliably trigger an action on the press event itself.
+
+**Example: Turn on a light when the Contact Sensor's button is pressed**
+
+```yaml
+automations:
+  - name: "Turn on light when sensor button is pressed"
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoContact"
+        # Trigger if the current button_count is not equal to the previous one.
+        button_count: "!= {previous.button_count}"
+    then:
+      type: "shell_command"
+      command: "echo 'Button on {address} was pressed. Turning on light.' >&2"
+```
+
+This pattern allows you to react to discrete **events** (a state *change*), rather than just static states (a door is open/closed), making your automations more intelligent.
+
+
 ### Detailed Reference & More Examples
 
 For a complete reference of all configuration options--including advanced automations, time-based triggers, MQTT settings, the Prometheus exporter, and logging--please see the [**Project Specification**](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).
@@ -207,17 +233,16 @@ You can now use device aliases, defined in the top-level `devices` section, dire
 
 ```yaml
 devices:
-  my-meter:
+  livingroom-meter:
     address: "11:22:33:44:55:66"
-    config: { model: "meter" }
 
 automations:
   - name: "Monitor Living Room Meter"
     if:
       source: "switchbot"
       # Reference a device alias defined in the `devices` section.
-      # The `address` from `my-meter` will be automatically injected into `conditions.address`.
-      device: "my-meter"
+      # The `address` from `ivingroom-meter` will be automatically injected into `conditions.address`.
+      device: "livingroom-meter"
       conditions:
         # If `address` is also specified here, the `device` alias's address
         # will take precedence and overwrite it.
