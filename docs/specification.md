@@ -17,7 +17,7 @@ Each `ActionRunner` instance encapsulates the logic for its trigger type, includ
 
 The core of the condition evaluation logic is encapsulated within the StateObject class, defined in the evaluator module. When the AutomationHandler receives a raw event (e.g., from SwitchbotClient or MqttClient), it uses a factory function (create_state_object_with_previous) to wrap the event in a corresponding StateObject subclass (e.g., SwitchBotState), along with its previous state. This unified StateObject is then passed to the appropriate ActionRunner, which uses the object's methods to check conditions and format action parameters, making the system extensible to new event sources.
 
-### Mermaid Class Diagram
+### Class Diagram
 
 ```mermaid
 classDiagram
@@ -50,8 +50,8 @@ classDiagram
     class Trigger {
         <<Abstract>>
         #if_config: AutomationIf
-        #callback: Callable
-        +set_callback(callback)
+        #action: Callable
+        +on_triggered(action)
         +process_state(state)
     }
 
@@ -62,7 +62,7 @@ classDiagram
     }
 
     class StateStore {
-        +get_state(key)
+        +get(key)
         +get_and_update(key, event)
     }
 
@@ -90,6 +90,7 @@ classDiagram
     ActionRunner "1" *-- "N" ActionExecutor
 
     %% --- Self-reference relationship for state history ---
+    StateObject o-- StateObject : previous
 
     %% --- Dependency (uses-a) relationships ---
     ActionRunner ..> StateObject
@@ -122,50 +123,48 @@ classDiagram
 ### 3.3. `StateStore`
 
   - **Responsibility**: Acts as an in-memory cache for the latest known state of every observed entity. It is the single source of truth for the current state.
-  - **Functionality**: Provides atomic operations for retrieving and updating state, ensuring data consistency in asynchronous environments. It also subscribes to the `switchbot_advertisement_received` signal and immediately updates its internal state upon receiving a new advertisement.
+  - **Functionality**: Provides atomic operations for retrieving and updating state using `get` and `get_and_update` methods, ensuring data consistency in asynchronous environments.
 
 ### 3.4. `PrometheusExporter`
 
   - **Responsibility**: Exposes device states from `StateStore` as Prometheus metrics.
   - **Functionality**: Starts an HTTP server. When scraped, it fetches the latest data for all entities and formats it into Prometheus metrics.
 
-### 3.5. `evaluator` (State Object Encapsulation)
+### 3.5. `state` (Module)
 
   - **Responsibility**: Encapsulates event data and its associated logic into a unified `StateObject` interface. This abstracts away the differences between various event sources (e.g., SwitchBot vs. MQTT).
   - **Functionality**:
-      - **`StateObject` (Abstract Class)**: The core abstraction that defines the common interface for all state events. It provides methods like `.id` to get a unique identifier, `.check_conditions(if_config)` to evaluate rules, and `.format(template)` to populate placeholders in actions.
+      - **`StateObject` (Abstract Class)**: The core abstraction that defines the common interface for all state events. It provides methods like `.id` to get a unique identifier and `.format(template)` to populate placeholders in actions.
       - **`SwitchBotState` & `MqttState` (Concrete Classes)**: Implement the `StateObject` interface for SwitchBot BLE advertisements and MQTT messages, respectively.
-      - **`create_state_object(raw_event)` (Factory Function)**: A factory that takes a raw event object and returns the appropriate, fully initialized `StateObject` instance.
+      - **`create_state_object_with_previous` (Factory Function)**: A factory that takes a new raw event and its preceding raw event, then returns the appropriate, fully initialized `StateObject` instance with its historical context.
 
-### 3.6. `action_executor` (Module)
+### 3.6. `ActionExecutor` (Abstract Class) and its Subclasses
 
-  - **Responsibility**: Executes the actions (e.g., shell commands, webhooks) defined in the `then` block of an automation rule.
-  - **Functionality**: Executes a single action based on its `type` (`shell_command`, `webhook`, `mqtt_publish`).
+  - **Responsibility**: Defines a common interface for executing all types of actions and encapsulates the specific logic for each one.
+  - **Functionality**: The abstract `ActionExecutor` class declares an `execute` method. Concrete subclasses like `ShellCommandExecutor`, `WebhookExecutor`, and `SwitchBotCommandExecutor` implement this method to perform their specific tasks. This design allows the `ActionRunner` to treat all actions uniformly.
 
 ### 3.7. `AutomationHandler`
 
   - **Responsibility**: Acts as the central dispatcher for automation rules. It receives signals and delegates processing to the appropriate `ActionRunner`.
   - **Functionality**: Initializes `ActionRunner` instances based on the automation configurations and calls their `run` method when a relevant signal is received.
 
-### 3.8. `ActionRunnerBase` (Abstract Class)
+### 3.8. `Trigger` (Abstract Class) and its Subclasses
 
-  - **Responsibility**: Defines the common interface and implements shared logic (e.g., cooldowns) for all `ActionRunner` implementations.
-  - **Functionality**: Manages an automation rule's configuration and provides a common `_execute_actions` method to run the defined actions via `action_executor`.
+  - **Responsibility**: Defines *when* an action should be triggered based on state changes. This component encapsulates the core triggering logic, separating it from the action execution flow.
+  - **`EdgeTrigger`**:
+    - **Functionality**: Triggers actions when the conditions transition from `False` to `True` (a rising edge). This is used for event-driven sources like `source: "switchbot"` and `source: "mqtt"`.
+  - **`DurationTrigger`**:
+    - **Functionality**: Triggers actions only when the conditions have been continuously met for a specified `duration`. It manages internal timers to achieve this. This is used for time-based sources like `source: "switchbot_timer"` and `source: "mqtt_timer"`.
 
-### 3.9. `EventActionRunner`
+### 3.9. `ActionRunner`
 
-  - **Responsibility**: Handles event-driven triggers (`source: "switchbot"` or `"mqtt"`).
-  - **Functionality**: Implements the `run` method to detect edge triggers (i.e., when conditions transition from false to true) and executes actions accordingly.
+  - **Responsibility**: Manages a single automation rule, connecting the trigger logic (`Trigger`) with the actions to be performed (`ActionExecutor`) and handling cooldowns.
+  - **Functionality**: Holds a `Trigger` instance. When the `Trigger` fires, the `ActionRunner` executes the list of configured actions via their respective `ActionExecutor`s, respecting any defined `cooldown` period.
 
-### 3.10. `TimerActionRunner`
+### 3.10. `Timer`
 
-  - **Responsibility**: Handles time-based triggers (`source: "switchbot_timer"` or `"mqtt_timer"`).
-  - **Functionality**: Implements the `run` method to manage internal timers, executing actions only when conditions have been continuously met for a specified `duration`.
-
-### 3.11. `Timer`
-
-  - **Responsibility**: Provides a simple, cancellable timer for use by `TimerActionRunner`.
-  - **Functionality**: When started, it waits for a specified duration and then executes a given callback function. It can be cancelled before completion.
+  - **Responsibility**: Provides a simple, cancellable timer.
+  - **Functionality**: When started, it waits for a specified duration and then executes a given callback function. It can be cancelled before completion. It is used by the `DurationTrigger`.
 
 ## 4. Configuration Reference (`config.yaml`)
 
@@ -413,7 +412,7 @@ To add a new source (e.g., a webhook listener):
 1.  **Create a new `StateObject` subclass** in `evaluator.py` to encapsulate the data and logic for the new event type.
 2.  **Update the `create_state_object` factory** in `evaluator.py` to handle the new raw event type and return your new class.
 3.  **Create a component** that monitors the new source (e.g., a webhook listener) and emits a new, uniquely named signal with the *raw event data* as its payload.
-4.  **Update `AutomationHandler`** to subscribe to this new signal. Its handler function will use the `create_state_object` factory to create the `StateObject` and pass it to the runners.
+4.  **Update `AutomationHandler`** to subscribe to this new signal. In the new handler method, you must first call `state_store.get_and_update(key, raw_event)` to retrieve the previous state and update the store. Then, use the `create_state_object_with_previous` factory to create a new `StateObject` with its historical context before passing it to the runners.
 5.  **Create a new `ActionRunner` subclass** if the trigger logic (e.g., event-based vs. timer-based) differs from existing ones.
 6.  **Update `config.py`** to validate the new `source` and any associated parameters.
 7.  **Document** the new source, its State Object structure, and configuration options in this specification.
