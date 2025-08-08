@@ -5,6 +5,7 @@ from switchbot_actions.config import (
     AppSettings,
     AutomationIf,
     AutomationRule,
+    LogAction,
     LoggingSettings,
     MqttPublishAction,
     MqttSettings,
@@ -79,6 +80,38 @@ def test_logging_settings_invalid_level():
         LoggingSettings(level="INVALID_LEVEL")  # type: ignore
 
 
+def test_log_action_valid_message_and_level():
+    action = LogAction(type="log", message="Hello, world!", level="DEBUG")
+    assert action.message == "Hello, world!"
+    assert action.level == "DEBUG"
+
+
+def test_log_action_default_level():
+    action = LogAction(type="log", message="Default level message")
+    assert action.message == "Default level message"
+    assert action.level == "INFO"
+
+
+@pytest.mark.parametrize(
+    "level_in, level_out",
+    [
+        ("debug", "DEBUG"),
+        ("info", "INFO"),
+        ("warning", "WARNING"),
+        ("error", "ERROR"),
+        ("critical", "CRITICAL"),
+    ],
+)
+def test_log_action_level_case_insensitivity(level_in, level_out):
+    action = LogAction(type="log", message="Test message", level=level_in)
+    assert action.level == level_out
+
+
+def test_log_action_invalid_level():
+    with pytest.raises(ValidationError):
+        LogAction(type="log", message="Invalid level", level="UNKNOWN")  # type: ignore
+
+
 def test_automation_if_timer_source_requires_duration():
     # Valid case
     AutomationIf(source="switchbot_timer", duration=10)
@@ -90,6 +123,10 @@ def test_automation_if_timer_source_requires_duration():
         ValidationError, match="'duration' is required for source 'switchbot_timer'"
     ):
         AutomationIf(source="switchbot_timer")
+    with pytest.raises(
+        ValidationError, match="'duration' is required for source 'mqtt_timer'"
+    ):
+        AutomationIf(source="mqtt_timer", topic="a/b")
     with pytest.raises(
         ValidationError, match="'duration' is required for source 'mqtt_timer'"
     ):

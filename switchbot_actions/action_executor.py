@@ -8,6 +8,7 @@ from switchbot import SwitchBotAdvertisement
 
 from .config import (
     AutomationAction,
+    LogAction,
     MqttPublishAction,
     ShellCommandAction,
     SwitchBotCommandAction,
@@ -184,6 +185,36 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
             logger.error(f"Failed to execute command on {address}: {e}")
 
 
+class LogExecutor(ActionExecutor[LogAction]):
+    """Logs a message to the console."""
+
+    def __init__(self, action: LogAction):
+        super().__init__(action)
+        self._automation_logger = logging.getLogger("switchbot_actions.automation")
+
+    async def execute(self, state: StateObject) -> None:
+        message = state.format(self._action_config.message)
+        level = self._action_config.level.lower()
+
+        if level == "debug":
+            self._automation_logger.debug(message)
+        elif level == "info":
+            self._automation_logger.info(message)
+        elif level == "warning":
+            self._automation_logger.warning(message)
+        elif level == "error":
+            self._automation_logger.error(message)
+        elif level == "critical":
+            self._automation_logger.critical(message)
+        else:
+            # This case should ideally be caught by Pydantic validation,
+            # but as a fallback, log at info level.
+            self._automation_logger.info(
+                f"Unknown log level '{self._action_config.level}'. "
+                f"Logging as INFO: {message}"
+            )
+
+
 def create_action_executor(
     action: AutomationAction, state_store: StateStore
 ) -> ActionExecutor:
@@ -195,5 +226,7 @@ def create_action_executor(
         return MqttPublishExecutor(action)
     elif isinstance(action, SwitchBotCommandAction):
         return SwitchBotCommandExecutor(action, state_store)
+    elif isinstance(action, LogAction):
+        return LogExecutor(action)
     else:
         raise ValueError(f"Unknown action type: {action.type}")

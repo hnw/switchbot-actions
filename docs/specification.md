@@ -291,7 +291,14 @@ Executes a shell command.
 
   - `command`: (string, required) The shell command to execute.
 
-### 5.4. `switchbot_command` Action
+### 5.4. `log` Action
+
+Outputs a message to the application's log at a specified level.
+
+  - `message`: (string, required) The message to log. Supports placeholders.
+  - `level`: (string, optional, default: `"INFO"`) The log level. Supported values are `"DEBUG"`, `"INFO"`, `"WARNING"`, `"ERROR"`, and `"CRITICAL"` (case-insensitive).
+
+### 5.5. `switchbot_command` Action
 
 Directly controls a SwitchBot device. This action has two mutually exclusive ways to specify the target device:
 

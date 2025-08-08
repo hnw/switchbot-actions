@@ -6,6 +6,7 @@ import pytest
 from switchbot import Switchbot, SwitchbotModel
 
 from switchbot_actions.action_executor import (
+    LogExecutor,
     MqttPublishExecutor,
     ShellCommandExecutor,
     SwitchBotCommandExecutor,
@@ -13,6 +14,7 @@ from switchbot_actions.action_executor import (
     create_action_executor,
 )
 from switchbot_actions.config import (
+    LogAction,
     MqttPublishAction,
     ShellCommandAction,
     SwitchBotCommandAction,
@@ -20,6 +22,49 @@ from switchbot_actions.config import (
 )
 from switchbot_actions.state import create_state_object
 from switchbot_actions.store import StateStore
+
+
+# --- Tests for LogExecutor ---
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "log_level, expected_log_method",
+    [
+        ("DEBUG", "debug"),
+        ("INFO", "info"),
+        ("WARNING", "warning"),
+        ("ERROR", "error"),
+        ("CRITICAL", "critical"),
+    ],
+)
+async def test_log_executor_logs_message_at_correct_level(
+    log_level, expected_log_method, caplog, mock_switchbot_advertisement
+):
+    caplog.set_level(logging.DEBUG)  # Capture all levels
+
+    raw_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:11:11",
+        data={"data": {"temperature": 29.0}},
+    )
+    state_object = create_state_object(raw_state)
+
+    message_template = "Current temperature is {temperature} at {address}"
+    action_config = LogAction(type="log", message=message_template, level=log_level)
+    executor = LogExecutor(action_config)
+    await executor.execute(state_object)
+
+    expected_message = "Current temperature is 29.0 at DE:AD:BE:EF:11:11"
+
+    # Check if the log record exists and has the correct level and message
+    found = False
+    for record in caplog.records:
+        if (
+            record.name == "switchbot_actions.automation"
+            and record.msg == expected_message
+        ):
+            assert record.levelname == log_level
+            found = True
+            break
+    assert found, f"Log message '{expected_message}' not found with level '{log_level}'"
 
 
 # --- Tests for ShellCommandExecutor ---

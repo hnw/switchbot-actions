@@ -116,7 +116,7 @@ sudo systemctl status switchbot-actions.service
 > After modifying `/etc/switchbot-actions/config.yaml`, you can apply the changes without restarting the service by sending a `SIGHUP` signal.
 >
 > ```bash
-> sudo kill -HUP $(systemctl show --value --property MainPID switchbot-actions.service)
+> sudo systemctl kill -s HUP switchbot-actions.service
 > ```
 
 ## Usage
@@ -168,11 +168,11 @@ automations:
         modelName: "WoSensorTH"
         temperature: "> 28.0"
     then:
-      type: "shell_command"
-      # We redirect to stderr (>&2) so the application logs the output
-      # as an ERROR, making it visible by default without needing to
-      # enable DEBUG level logging.
-      command: "echo 'High temperature detected: {temperature}℃' >&2"
+      # Use the 'log' action for clean, level-controlled logging.
+      type: "log"
+      message: "High temperature detected: {temperature}℃"
+      # Set the level to WARNING to ensure it's visible by default.
+      level: "WARNING"
 ```
 
 ### Advanced Example: Inter-Device Automation
@@ -211,11 +211,16 @@ automations:
       source: "switchbot"
       conditions:
         modelName: "WoContact"
-        # Trigger if the current button_count is not equal to the previous one.
         button_count: "!= {previous.button_count}"
     then:
-      type: "shell_command"
-      command: "echo 'Button on {address} was pressed. Turning on light.' >&2"
+      # In a real scenario, you would control a light here.
+      # This example sends a webhook to a smart home hub like Home Assistant.
+      type: "webhook"
+      url: "https://your-smarthome-hub/api/webhook/button_pressed"
+      method: "POST"
+      payload:
+        entity_id: "light.office_light"
+        device_address: "{address}"
 ```
 
 This pattern allows you to react to discrete **events** (a state *change*), rather than just static states (a door is open/closed), making your automations more intelligent.
@@ -233,7 +238,7 @@ You can now use device aliases, defined in the top-level `devices` section, dire
 
 ```yaml
 devices:
-  livingroom-meter:
+  living-room-meter:
     address: "11:22:33:44:55:66"
 
 automations:
@@ -242,15 +247,16 @@ automations:
       source: "switchbot"
       # Reference a device alias defined in the `devices` section.
       # The `address` from `ivingroom-meter` will be automatically injected into `conditions.address`.
-      device: "livingroom-meter"
+      device: "living-room-meter"
       conditions:
         # If `address` is also specified here, the `device` alias's address
         # will take precedence and overwrite it.
         temperature: "> 25.0"
         humidity: "< 60.0"
     then:
-      type: "shell_command"
-      command: "echo 'Living room is hot and humid! ({temperature}C, {humidity}%)' >&2"
+      type: "log"
+      level: "WARNING"
+      message: "Living room is hot and humid! ({temperature}C, {humidity}%)"
 ```
 
 ### Command-Line Options
@@ -273,5 +279,5 @@ Command-line options provide a convenient way to override settings in your `conf
 
 `switchbot-actions` is designed with reliability in mind, ensuring stable operation even in the face of certain issues.
 
-  - **Fail-Fast Startup**: The application performs critical resource checks at startup. If a required resource (e.g., the configured Prometheus port) is unavailable, the application will fail immediately with a clear error message. This prevents silent failures and ensures that operational issues are identified and addressed promptly.
-  - **Configuration Reload with Rollback**: The application supports dynamic configuration reloading by sending a `SIGHUP` signal to its process. If a new configuration contains errors or leads to a failed reload, the application will automatically attempt to roll back to the last known good configuration. This prevents service interruptions due to misconfigurations and enhances overall system stability.
+  - **Fail-Fast Startup**: The application performs critical resource checks at startup. If a required resource (e.g., the configured Prometheus port) is unavailable, the application will fail immediately with a clear error message. This prevents silent failures and ensures that any setup problems are identified immediately.
+  - **Configuration Reload with Rollback**: The application supports dynamic configuration reloading by sending a `SIGHUP` signal to its process. If a new configuration contains errors or causes the reload to fail, the application will automatically attempt to roll back to the last known good configuration. This prevents service interruptions due to misconfigurations and enhances overall system stability.

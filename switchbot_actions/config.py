@@ -150,8 +150,20 @@ class SwitchBotCommandAction(BaseConfigModel):
         return self
 
 
+class LogAction(BaseConfigModel):
+    type: Literal["log"]
+    message: str
+    level: CaseInsensitiveLogLevel = "INFO"
+
+
 AutomationAction = Annotated[
-    Union[ShellCommandAction, WebhookAction, MqttPublishAction, SwitchBotCommandAction],
+    Union[
+        ShellCommandAction,
+        WebhookAction,
+        MqttPublishAction,
+        SwitchBotCommandAction,
+        LogAction,
+    ],
     Field(discriminator="type"),
 ]
 

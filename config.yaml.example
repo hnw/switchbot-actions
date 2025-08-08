@@ -29,6 +29,7 @@ devices:
   front-door-lock:
     address: "aa:bb:cc:dd:ee:ff"
     # `config` specifies constructor arguments for the device.
+    # which are passed to the underlying pySwitchbot library.
     config:
       key_id: "xxx"
       encryption_key: "xxx"
@@ -58,6 +59,20 @@ automations:
       # your error logs. It's better to use actions like 'webhook' or
       # 'mqtt_publish' to send notifications to a proper system.
       command: "echo 'High temperature detected ({temperature}℃), turning on fan...' >&2"
+
+  - name: "Log Temperature Info"
+    # This automation demonstrates the new 'log' action.
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoSensorTH"
+        temperature: "> 25.0"
+    then:
+      type: "log"
+      # The message supports placeholders, just like other actions.
+      message: "Current temperature is {temperature}C, humidity is {humidity}%"
+      # Optional: Specify the log level. Defaults to INFO.
+      level: "INFO"
 
   - name: "Button Press Notification"
     # Mute for 2 seconds to prevent bouncing/chattering effects.
