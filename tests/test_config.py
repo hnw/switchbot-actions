@@ -240,25 +240,38 @@ def test_app_settings_from_dict():
     )
 
 
-def test_automation_rule_if_block_name_assignment():
-    # Test with rule name provided
-    rule_with_name = AutomationRule.model_validate(
-        {
-            "name": "MyRule",
-            "if": {"source": "switchbot"},
-            "then": [{"type": "shell_command", "command": "echo hello"}],
-        }
-    )
-    assert rule_with_name.if_block.name == "MyRule:switchbot"
+# tests/test_config.py
 
-    # Test with rule name as None
-    rule_without_name = AutomationRule.model_validate(
+
+def test_if_block_name_is_unified_with_rule_name():
+    """
+    Tests that the if_block's name is correctly and consistently set
+    from the parent rule's name after AppSettings validation.
+    """
+    settings = AppSettings.model_validate(
         {
-            "if": {"source": "mqtt_timer", "duration": 10, "topic": "test/topic"},
-            "then": [{"type": "shell_command", "command": "echo hello"}],
+            "automations": [
+                {
+                    "name": "MyRule",  # Rule with an explicit name
+                    "if": {"source": "switchbot"},
+                    "then": [{"type": "shell_command", "command": "echo hello"}],
+                },
+                {
+                    # Rule with no name, should get a default name
+                    "if": {"source": "mqtt", "topic": "test"},
+                    "then": [{"type": "shell_command", "command": "echo world"}],
+                },
+            ]
         }
     )
-    assert rule_without_name.if_block.name == "Unnamed Rule:mqtt_timer"
+
+    rule_with_name = settings.automations[0]
+    assert rule_with_name.name == "MyRule"
+    assert rule_with_name.if_block.name == "MyRule"
+
+    rule_without_name = settings.automations[1]
+    assert rule_without_name.name == "Automation #1"
+    assert rule_without_name.if_block.name == "Automation #1"
 
 
 def test_app_settings_invalid_config_data():

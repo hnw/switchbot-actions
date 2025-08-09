@@ -187,13 +187,6 @@ class AutomationRule(BaseConfigModel):
             return seq
         return v
 
-    @model_validator(mode="after")
-    def _assign_descriptive_name_to_if_block(self) -> "AutomationRule":
-        if self.if_block:
-            rule_name = self.name or "Unnamed Rule"
-            self.if_block._name = f"{rule_name}:{self.if_block.source}"
-        return self
-
 
 class AppSettings(BaseConfigModel):
     config_path: str = "config.yaml"
@@ -211,7 +204,9 @@ class AppSettings(BaseConfigModel):
     def set_default_automation_names(self) -> "AppSettings":
         for i, rule in enumerate(self.automations):
             if rule.name is None:
-                rule.name = f"Unnamed Rule #{i}"
+                rule.name = f"Automation #{i}"
+            if rule.if_block:
+                rule.if_block._name = rule.name
         return self
 
     @model_validator(mode="after")

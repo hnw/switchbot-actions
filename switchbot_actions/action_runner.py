@@ -9,7 +9,7 @@ from .config import AutomationRule
 from .state import StateObject
 from .triggers import Trigger
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("switchbot_actions.automation")
 
 T = TypeVar("T", bound=StateObject)
 
@@ -32,7 +32,9 @@ class ActionRunner(Generic[T]):
 
     async def execute_actions(self, state: T) -> None:
         name = self._config.name
-        logger.debug(f"Trigger '{name}' actions started for {state.id}")
+        logger.debug(
+            f"Rule '{name}' triggered. Executing actions for device {state.id}"
+        )
 
         cooldown_str = self._config.cooldown
         if cooldown_str:

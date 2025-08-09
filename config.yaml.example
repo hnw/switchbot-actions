@@ -300,5 +300,6 @@ logging:
     bleak: "WARNING"
     # Example: Set bleak to DEBUG for in-depth BLE troubleshooting
     # bleak: "DEBUG"
-    # Example: Enable trigger execution logs for debugging automations
-    # switchbot_actions.triggers: "DEBUG"
+    # Example: To trace the entire execution of your automation rules
+    # (trigger, cooldown, actions), set the 'automation' logger to DEBUG.
+    # switchbot_actions.automation: "DEBUG"

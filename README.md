@@ -259,6 +259,21 @@ automations:
       message: "Living room is hot and humid! ({temperature}C, {humidity}%)"
 ```
 
+### Debugging Tip
+
+If your automation rules aren't working as expected, you can view detailed execution process by setting specific loggers to the DEBUG level in config.yaml.
+
+In particular, setting the **`switchbot_actions.automation`** logger to `DEBUG` will log the entire process, including the rule trigger, cooldown check, and execution of each action, which can be extremely helpful in troubleshooting.
+
+```yaml
+# config.yaml
+logging:
+  # ...
+  loggers:
+    # Adding this setting enables detailed debug logging for automations.
+    switchbot_actions.automation: "DEBUG"
+```
+
 ### Command-Line Options
 
 Command-line options provide a convenient way to override settings in your `config.yaml` for testing or temporary changes.

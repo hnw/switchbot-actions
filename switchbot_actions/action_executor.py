@@ -21,7 +21,7 @@ from .switchbot_factory import create_switchbot_device
 
 T_Action = TypeVar("T_Action", bound=AutomationAction)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("switchbot_actions.automation")
 
 
 class ActionExecutor(ABC, Generic[T_Action]):
@@ -63,10 +63,12 @@ class WebhookExecutor(ActionExecutor):
         payload = state.format(self._action_config.payload)
         headers = state.format(self._action_config.headers)
 
-        logger.debug(
-            f"Sending webhook: {method} {url} with payload {payload} "
-            f"and headers {headers}"
-        )
+        message = f"Sending webhook: {method} {url}. Headers: {headers}."
+        if payload:
+            message += f"Payload: {payload}."
+
+        logger.debug(message)
+
         await self._send_request(url, method, payload, headers)
 
     async def _send_request(
@@ -190,26 +192,17 @@ class LogExecutor(ActionExecutor[LogAction]):
 
     def __init__(self, action: LogAction):
         super().__init__(action)
-        self._automation_logger = logging.getLogger("switchbot_actions.automation")
 
     async def execute(self, state: StateObject) -> None:
         message = state.format(self._action_config.message)
         level = self._action_config.level.lower()
-
-        if level == "debug":
-            self._automation_logger.debug(message)
-        elif level == "info":
-            self._automation_logger.info(message)
-        elif level == "warning":
-            self._automation_logger.warning(message)
-        elif level == "error":
-            self._automation_logger.error(message)
-        elif level == "critical":
-            self._automation_logger.critical(message)
+        log_method = getattr(logger, level, None)
+        if log_method:
+            log_method(message)
         else:
             # This case should ideally be caught by Pydantic validation,
             # but as a fallback, log at info level.
-            self._automation_logger.info(
+            logger.info(
                 f"Unknown log level '{self._action_config.level}'. "
                 f"Logging as INFO: {message}"
             )

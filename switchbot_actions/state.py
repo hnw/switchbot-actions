@@ -60,6 +60,7 @@ class _EmptyState:
         return ""
 
 
+_template_formatter = TemplateFormatter()
 _empty_state_instance = _EmptyState()
 
 
@@ -104,13 +105,11 @@ class StateObject(ABC, Generic[T_State]):
             "__current_data__": self,
             "previous": self.previous if self.previous else _empty_state_instance,
         }
-        formatter = TemplateFormatter()
-
         if isinstance(template_data, dict):
             return {k: self.format(str(v)) for k, v in template_data.items()}
         else:
             try:
-                return formatter.format(str(template_data), **context)
+                return _template_formatter.format(str(template_data), **context)
             except AttributeError as e:
                 # {previous.temprature} や {previous.format} のようなケース
                 raise ValueError(f"Invalid attribute access in placeholder: {e}") from e

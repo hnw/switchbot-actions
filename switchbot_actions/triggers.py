@@ -8,7 +8,7 @@ from .config import AutomationIf
 from .state import StateObject
 from .timers import Timer
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("switchbot_actions.automation")
 
 OPERATORS = {
     "==": operator.eq,
@@ -133,12 +133,13 @@ class DurationTrigger(Trigger[T]):
             timer = Timer(
                 duration,
                 lambda: asyncio.create_task(self._timer_callback(state)),
-                name=f"Rule {name} Timer for {state.id}",
+                name=f"Rule '{name}' Timer for {state.id}",
             )
             self._active_timers[state.id] = timer
             timer.start()
             logger.debug(
-                f"Timer started for rule {name} for {duration} seconds on {state.id}."
+                f"Timer started for rule '{name}'. "
+                f"Duration: {duration}s. Device ID: {state.id}."
             )
 
         elif not conditions_now_met and rule_conditions_previously_met:
@@ -147,7 +148,7 @@ class DurationTrigger(Trigger[T]):
             if state.id in self._active_timers:
                 self._active_timers[state.id].stop()
                 del self._active_timers[state.id]
-                logger.debug(f"Timer cancelled for rule {name} on {state.id}.")
+                logger.debug(f"Timer cancelled for rule '{name}' on {state.id}.")
 
     async def _timer_callback(self, state: T) -> None:
         """Called when the timer completes."""

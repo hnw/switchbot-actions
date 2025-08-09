@@ -17,6 +17,7 @@ from .store import StateStore
 from .triggers import DurationTrigger, EdgeTrigger
 
 logger = logging.getLogger(__name__)
+automation_logger = logging.getLogger("switchbot_actions.automation")
 
 
 class AutomationHandler:
@@ -118,7 +119,7 @@ class AutomationHandler:
         )
         for result in results:
             if isinstance(result, Exception):
-                logger.error(
+                automation_logger.error(
                     f"An action runner failed with an exception: {result}",
                     exc_info=True,
                 )
@@ -130,7 +131,7 @@ class AutomationHandler:
         )
         for result in results:
             if isinstance(result, Exception):
-                logger.error(
+                automation_logger.error(
                     f"An action runner failed with an exception: {result}",
                     exc_info=True,
                 )

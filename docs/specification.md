@@ -257,7 +257,7 @@ Configures the application's logging behavior.
 
   - `level`: (string, optional, default: "INFO") Default log level. Valid values are "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL".
   - `format`: (string, optional) Log format string, using Python's `logging` module syntax.
-  - `loggers`: (map, optional) Allows setting specific log levels for individual loggers (e.g., `bleak: "WARNING"`). Ignored if the `--debug` flag is used.
+  - `loggers`: (map, optional) Allows setting specific log levels for individual loggers (e.g., `bleak: "WARNING"`). To see detailed traces of your automation rules, set `switchbot_actions.automation: "DEBUG"`. Ignored if the `--debug` flag is used.
 
 ## 5. Action Reference
 
