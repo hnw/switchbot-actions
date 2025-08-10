@@ -83,3 +83,7 @@ reportMissingImports = true
 reportMissingTypeStubs = false
 venvPath = "."
 venv = ".venv"
+
+[tool.codespell]
+# Words intentionally misspelled for testing purposes.
+ignore-words-list = "temprature"

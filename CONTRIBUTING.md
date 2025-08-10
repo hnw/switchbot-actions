@@ -4,7 +4,7 @@ First off, thank you for considering contributing to this project! We welcome al
 
 To ensure a smooth process for everyone, please take a moment to review these guidelines.
 
------
+---
 
 ## Development Setup
 
@@ -59,7 +59,7 @@ Now, whenever you run `git commit`, the defined hooks will be executed on your s
 
 You are now all set up for development. Your environment is isolated, and any packages you install will not affect your global Python installation.
 
------
+---
 
 ## Contribution Guidelines
 
@@ -82,9 +82,8 @@ When you are ready to submit your changes, please follow these steps:
 4.  **Ensure CI Checks Pass**: All code must pass our CI checks, which include running tests and linting with `ruff`. The `pre-commit` hooks you installed will help you catch most issues locally before you push.
 
 5.  **Write a Clear Pull Request**:
-
-      * Use a clear and descriptive title.
-      * In the description, explain the problem you are solving and the changes you have made.
-      * If your PR addresses an existing issue, please link to it in the description (e.g., `Fixes #123`).
+    - Use a clear and descriptive title.
+    - In the description, explain the problem you are solving and the changes you have made.
+    - If your PR addresses an existing issue, please link to it in the description (e.g., `Fixes #123`).
 
 We will review your pull request as soon as possible. Thank you for your contribution!

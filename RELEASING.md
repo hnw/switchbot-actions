@@ -18,11 +18,11 @@ Before publishing to the official PyPI registry, it is crucial to verify the pac
     ```
 
 3.  **Verify on TestPyPI**: Pushing the tag will automatically trigger the `publish-to-testpypi.yml` workflow. Once the action completes, verify the new version on TestPyPI:
-    -   Check the project page: [https://test.pypi.org/p/switchbot-actions](https://test.pypi.org/p/switchbot-actions)
-    -   Install the package from TestPyPI to confirm it works as expected:
-        ```bash
-        pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple switchbot-actions
-        ```
+    - Check the project page: [https://test.pypi.org/p/switchbot-actions](https://test.pypi.org/p/switchbot-actions)
+    - Install the package from TestPyPI to confirm it works as expected:
+      ```bash
+      pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple switchbot-actions
+      ```
 
 ## Step 2: Release on PyPI
 
@@ -37,8 +37,8 @@ Once the package has been verified on TestPyPI, you can proceed with the officia
 4.  **Publish Release**: Click "Publish release". This will trigger the `publish-to-pypi.yml` workflow, which builds and publishes the package to the official PyPI registry.
 
 5.  **Verify on PyPI**: Once the action completes, verify the new version on PyPI:
-    -   Check the project page: [https://pypi.org/p/switchbot-actions](https://pypi.org/p/switchbot-actions)
-    -   Install the package from PyPI:
-        ```bash
-        pip install switchbot-actions
-        ```
+    - Check the project page: [https://pypi.org/p/switchbot-actions](https://pypi.org/p/switchbot-actions)
+    - Install the package from PyPI:
+      ```bash
+      pip install switchbot-actions
+      ```

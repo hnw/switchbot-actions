@@ -10,20 +10,20 @@ At its core, `switchbot-actions` monitors various input sources and, based on yo
 
 ## Key Features
 
-  - **Direct Device Control**: A new `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations without external scripts.
-  - **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
-  - **Full MQTT Integration**: Use MQTT messages as triggers for automations, and publish messages as an action.
-  - **Prometheus Exporter**: Exposes metrics at a configurable `/metrics` endpoint.
-  - **Powerful Automation Rules**: Define complex automations with a unified `if/then` structure.
-  - **Flexible Conditions**: Build rules based on device model, address, sensor values, and even signal strength (`rssi`).
-  - **Highly Configurable**: Control every aspect of the application from a single configuration file.
+- **Direct Device Control**: A new `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations without external scripts.
+- **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
+- **Full MQTT Integration**: Use MQTT messages as triggers for automations, and publish messages as an action.
+- **Prometheus Exporter**: Exposes metrics at a configurable `/metrics` endpoint.
+- **Powerful Automation Rules**: Define complex automations with a unified `if/then` structure.
+- **Flexible Conditions**: Build rules based on device model, address, sensor values, and even signal strength (`rssi`).
+- **Highly Configurable**: Control every aspect of the application from a single configuration file.
 
 ## Getting Started
 
 ### 1. Prerequisites
 
-  - Python 3.11+
-  - A Linux-based system with a Bluetooth adapter that supports BLE (e.g., a Raspberry Pi).
+- Python 3.11+
+- A Linux-based system with a Bluetooth adapter that supports BLE (e.g., a Raspberry Pi).
 
 ### 2. Installation (Recommended)
 
@@ -38,7 +38,7 @@ pipx ensurepath
 pipx install switchbot-actions
 ```
 
-*(You may need to restart your terminal after the `pipx ensurepath` step for the changes to take effect.)*
+_(You may need to restart your terminal after the `pipx ensurepath` step for the changes to take effect.)_
 
 ## Running as a Systemd Service
 
@@ -195,7 +195,6 @@ automations:
       command: "press"
 ```
 
-
 #### Advanced Example: Comparing Against the Previous State
 
 `switchbot-actions` can create automations based not just on the current state, but by comparing it against the **immediately preceding state**. This is enabled by the `previous` context, allowing for more dynamic and powerful scenarios.
@@ -223,8 +222,7 @@ automations:
         device_address: "{address}"
 ```
 
-This pattern allows you to react to discrete **events** (a state *change*), rather than just static states (a door is open/closed), making your automations more intelligent.
-
+This pattern allows you to react to discrete **events** (a state _change_), rather than just static states (a door is open/closed), making your automations more intelligent.
 
 ### Detailed Reference & More Examples
 
@@ -278,14 +276,15 @@ logging:
 
 Command-line options provide a convenient way to override settings in your `config.yaml` for testing or temporary changes.
 
-  - `--config <path>` or `-c <path>`: Path to the configuration file (default: `config.yaml`).
-  - `--debug` or `-d`: Enables `DEBUG` level logging.
-  - `--scan-cycle <seconds>`: Overrides the scan cycle time.
-  - `--scan-duration <seconds>`: Overrides the scan duration time.
-  - **Boolean Flags**: For any boolean flag like `--prometheus-exporter-enabled`, a corresponding `--no-` version is available to explicitly disable the feature, overriding any `true` setting in the configuration file.
-  - And many more for MQTT, Prometheus, etc. Run `switchbot-actions --help` for a full list.
+- `--config <path>` or `-c <path>`: Path to the configuration file (default: `config.yaml`).
+- `--debug` or `-d`: Enables `DEBUG` level logging.
+- `--scan-cycle <seconds>`: Overrides the scan cycle time.
+- `--scan-duration <seconds>`: Overrides the scan duration time.
+- **Boolean Flags**: For any boolean flag like `--prometheus-exporter-enabled`, a corresponding `--no-` version is available to explicitly disable the feature, overriding any `true` setting in the configuration file.
+- And many more for MQTT, Prometheus, etc. Run `switchbot-actions --help` for a full list.
 
 **Configuration Precedence**: Settings are applied in the following order of priority (later items override earlier ones):
+
 1.  Application defaults.
 2.  `config.yaml` settings.
 3.  Command-line flags.
@@ -294,5 +293,5 @@ Command-line options provide a convenient way to override settings in your `conf
 
 `switchbot-actions` is designed with reliability in mind, ensuring stable operation even in the face of certain issues.
 
-  - **Fail-Fast Startup**: The application performs critical resource checks at startup. If a required resource (e.g., the configured Prometheus port) is unavailable, the application will fail immediately with a clear error message. This prevents silent failures and ensures that any setup problems are identified immediately.
-  - **Configuration Reload with Rollback**: The application supports dynamic configuration reloading by sending a `SIGHUP` signal to its process. If a new configuration contains errors or causes the reload to fail, the application will automatically attempt to roll back to the last known good configuration. This prevents service interruptions due to misconfigurations and enhances overall system stability.
+- **Fail-Fast Startup**: The application performs critical resource checks at startup. If a required resource (e.g., the configured Prometheus port) is unavailable, the application will fail immediately with a clear error message. This prevents silent failures and ensures that any setup problems are identified immediately.
+- **Configuration Reload with Rollback**: The application supports dynamic configuration reloading by sending a `SIGHUP` signal to its process. If a new configuration contains errors or causes the reload to fail, the application will automatically attempt to roll back to the last known good configuration. This prevents service interruptions due to misconfigurations and enhances overall system stability.
