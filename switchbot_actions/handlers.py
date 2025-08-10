@@ -63,8 +63,16 @@ class AutomationHandler:
             f"{len(self._switchbot_runners)} switchbot and "
             f"{len(self._mqtt_runners)} mqtt action runner(s)."
         )
+
+    async def start(self) -> None:
+        logger.info("AutomationHandler starting: connecting to signals.")
         switchbot_advertisement_received.connect(self.handle_switchbot_event)
         mqtt_message_received.connect(self.handle_mqtt_event)
+
+    async def stop(self) -> None:
+        logger.info("AutomationHandler stopping: disconnecting from signals.")
+        switchbot_advertisement_received.disconnect(self.handle_switchbot_event)
+        mqtt_message_received.disconnect(self.handle_mqtt_event)
 
     def handle_switchbot_event(self, sender: Any, **kwargs: Any) -> None:
         """Receives SwitchBot state and dispatches it to appropriate ActionRunners."""

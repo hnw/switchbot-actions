@@ -196,31 +196,80 @@ async def test_handle_mqtt_message_does_nothing_if_no_message(
 
     mock_create_task.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_run_switchbot_runners_concurrently(
-        automation_handler_factory, mock_switchbot_advertisement, state_store
+
+@pytest.mark.asyncio
+async def test_automation_handler_lifecycle_connects_and_disconnects_signals(
+    automation_handler_factory,
+):
+    """
+    Test that AutomationHandler's start/stop methods correctly connect/disconnect
+    signals.
+    """
+    with (
+        patch(
+            "switchbot_actions.handlers.switchbot_advertisement_received"
+        ) as mock_switchbot_signal,
+        patch("switchbot_actions.handlers.mqtt_message_received") as mock_mqtt_signal,
     ):
-        """
-        Test that switchbot runners are executed concurrently.
-        """
+        # Create a handler with some dummy configs to ensure it initializes runners
         configs = [
             AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
-            AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+            AutomationRule.model_validate(
+                {"if": {"source": "mqtt", "topic": "#"}, "then": []}
+            ),
         ]
         handler = automation_handler_factory(configs)
 
-        # Mock the run method of each runner
-        mock_run_1 = AsyncMock()
-        mock_run_2 = AsyncMock()
-        handler._switchbot_runners[0].run = mock_run_1
-        handler._switchbot_runners[1].run = mock_run_2
+        # Test start(): signals should be connected
+        await handler.start()
+        mock_switchbot_signal.connect.assert_called_once_with(
+            handler.handle_switchbot_event
+        )
+        mock_mqtt_signal.connect.assert_called_once_with(handler.handle_mqtt_event)
 
-        raw_state = mock_switchbot_advertisement()
-        state_object = create_state_object_with_previous(raw_state, None)
-        await handler._run_switchbot_runners(state_object)
+        # Reset mocks for stop() assertions
+        mock_switchbot_signal.connect.reset_mock()
+        mock_mqtt_signal.connect.reset_mock()
+        mock_switchbot_signal.disconnect.reset_mock()
+        mock_mqtt_signal.disconnect.reset_mock()
 
-        mock_run_1.assert_awaited_once_with(state_object)
-        mock_run_2.assert_awaited_once_with(state_object)
+        # Test stop(): signals should be disconnected
+        await handler.stop()
+        mock_switchbot_signal.disconnect.assert_called_once_with(
+            handler.handle_switchbot_event
+        )
+        mock_mqtt_signal.disconnect.assert_called_once_with(handler.handle_mqtt_event)
+
+        # Ensure connect was not called again during stop
+        mock_switchbot_signal.connect.assert_not_called()
+        mock_mqtt_signal.connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_switchbot_runners_concurrently(
+    automation_handler_factory, mock_switchbot_advertisement, state_store
+):
+    """
+    Test that switchbot runners are executed concurrently.
+    """
+    configs = [
+        AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+        AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
+    ]
+    handler = automation_handler_factory(configs)
+
+    # Mock the run method of each runner
+    mock_run_1 = AsyncMock()
+    mock_run_2 = AsyncMock()
+    handler._switchbot_runners[0].run = mock_run_1
+    handler._switchbot_runners[1].run = mock_run_2
+
+    raw_state = mock_switchbot_advertisement()
+    state_object = create_state_object_with_previous(raw_state, None)
+    await handler._run_switchbot_runners(state_object)
+
+    mock_run_1.assert_awaited_once_with(state_object)
+    mock_run_2.assert_awaited_once_with(state_object)
 
 
 @pytest.mark.asyncio

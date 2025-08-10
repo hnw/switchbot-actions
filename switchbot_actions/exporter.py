@@ -1,4 +1,3 @@
-# switchbot_actions/exporter.py
 import logging
 from http.server import HTTPServer
 from typing import Dict
@@ -13,15 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class PrometheusExporter:
-    def __init__(self, settings: PrometheusExporterSettings):
+    def __init__(self, settings: PrometheusExporterSettings, registry=REGISTRY):
         self.settings = settings
         self._gauges: Dict[str, Gauge] = {}
         self._label_names = ["address", "model"]
         self.server: HTTPServer | None = None
-
-        for coll in list(REGISTRY._collector_to_names.keys()):
-            if coll is not self:
-                REGISTRY.unregister(coll)
+        self.registry = registry
 
     def handle_advertisement(self, sender, **kwargs):
         raw_state = kwargs.get("new_state")
@@ -56,12 +52,15 @@ class PrometheusExporter:
             if metric_name not in self._gauges:
                 logger.info(f"Dynamically creating new gauge: {metric_name}")
                 self._gauges[metric_name] = Gauge(
-                    metric_name, f"SwitchBot metric for {key}", self._label_names
+                    metric_name,
+                    f"SwitchBot metric for {key}",
+                    self._label_names,
+                    registry=self.registry,
                 )
 
             self._gauges[metric_name].labels(**label_values).set(float(value))
 
-    def start(self):
+    async def start(self):
         """Connects to signals and starts the Prometheus HTTP server."""
         switchbot_advertisement_received.connect(self.handle_advertisement)
         logger.info("PrometheusExporter connected to signals.")
@@ -70,7 +69,9 @@ class PrometheusExporter:
             logger.warning("Prometheus server already running.")
             return
         try:
-            self.server, _ = start_http_server(self.settings.port)
+            self.server, _ = start_http_server(
+                self.settings.port, registry=self.registry
+            )
             logger.info(
                 f"Prometheus exporter server started on port {self.settings.port}"
             )
@@ -80,10 +81,20 @@ class PrometheusExporter:
             )
             raise
 
-    def stop(self):
+    async def stop(self):
         """Stops the server and disconnects from signals for a clean shutdown."""
         switchbot_advertisement_received.disconnect(self.handle_advertisement)
         logger.info("PrometheusExporter disconnected from signals.")
+
+        for gauge in self._gauges.values():
+            try:
+                self.registry.unregister(gauge)
+            except KeyError:
+                logger.debug(
+                    f"Gauge {gauge} was not found in registry during unregister."
+                )
+        self._gauges.clear()
+        logger.info("All Prometheus gauges have been unregistered.")
 
         if self.server:
             if hasattr(self.server, "shutdown"):

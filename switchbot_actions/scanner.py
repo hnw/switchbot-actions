@@ -1,4 +1,3 @@
-# switchbot_actions/scanner.py
 import asyncio
 import logging
 
@@ -31,10 +30,33 @@ class SwitchbotClient:
         self._cycle = cycle
         self._duration = duration
         self._running = False
+        self.task: asyncio.Task | None = None
 
-    async def start_scan(self):
-        """Starts the continuous scanning loop for SwitchBot devices."""
+    async def start(self) -> None:
+        """Starts the scanner component and its background task."""
+        if self._running:
+            logger.warning("Scanner is already running.")
+            return
+        logger.info("Starting SwitchBot BLE scanner...")
         self._running = True
+        self.task = asyncio.create_task(self._scan_loop())
+
+    async def stop(self) -> None:
+        """Stops the scanner component and its background task."""
+        if not self._running or not self.task:
+            logger.warning("Scanner is not running.")
+            return
+        logger.info("Stopping SwitchBot BLE scanner...")
+        self._running = False
+        self.task.cancel()
+        try:
+            await self.task
+        except asyncio.CancelledError:
+            logger.info("Scanner task successfully cancelled.")
+        self.task = None
+
+    async def _scan_loop(self) -> None:
+        """The continuous scanning loop for SwitchBot devices."""
         while self._running:
             try:
                 logger.debug(f"Starting BLE scan for {self._duration} seconds...")
@@ -58,10 +80,6 @@ class SwitchbotClient:
                 # In case of error, wait for the full cycle time to avoid spamming
                 if self._running:
                     await asyncio.sleep(self._cycle)
-
-    def stop_scan(self):
-        """Stops the scanning loop."""
-        self._running = False
 
     def _format_ble_error_message(self, exception: Exception) -> tuple[str, bool]:
         """Generates a user-friendly error message for BLE scan exceptions."""
@@ -98,7 +116,7 @@ class SwitchbotClient:
             is_known_error = False
         return message, is_known_error
 
-    def _process_advertisement(self, new_state: SwitchBotAdvertisement):
+    def _process_advertisement(self, new_state: SwitchBotAdvertisement) -> None:
         """
         Processes a new advertisement and
         emits a switchbot_advertisement_received signal.

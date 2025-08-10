@@ -22,6 +22,7 @@ class MqttClient:
             password=self.settings.password,
         )
         self._stop_event = asyncio.Event()
+        self._mqtt_loop_task: asyncio.Task | None = None
 
     async def __aenter__(self):
         return self.client
@@ -29,8 +30,11 @@ class MqttClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    async def run(self):
+    async def start(self):
         logger.info("Starting MQTT client.")
+        self._mqtt_loop_task = asyncio.create_task(self._run_mqtt_loop())
+
+    async def _run_mqtt_loop(self):
         while not self._stop_event.is_set():
             try:
                 async with self as client:
@@ -45,7 +49,7 @@ class MqttClient:
                 )
                 await asyncio.sleep(self.settings.reconnect_interval)
             except asyncio.CancelledError:
-                logger.info("MQTT client task cancelled.")
+                logger.info("MQTT client loop task successfully cancelled.")
                 break
             finally:
                 logger.info("MQTT client disconnected.")
@@ -53,8 +57,15 @@ class MqttClient:
     async def stop(self):
         logger.info("Stopping MQTT client.")
         self._stop_event.set()
-        # Wait for the run loop to finish
-        await asyncio.sleep(0)
+        if self._mqtt_loop_task and not self._mqtt_loop_task.done():
+            self._mqtt_loop_task.cancel()
+            try:
+                await self._mqtt_loop_task
+            except asyncio.CancelledError:
+                logger.info(
+                    "MQTT client loop task successfully awaited after cancellation."
+                )
+        self._mqtt_loop_task = None
 
     async def _subscribe_to_topics(self, client: aiomqtt.Client):
         # At the moment, we subscribe to all topics.

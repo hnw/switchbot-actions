@@ -30,11 +30,11 @@ classDiagram
     }
 
     class SwitchbotClient {
-        +start_scan()
+        +start()
     }
 
     class MqttClient {
-        +run()
+        +start()
         +publish()
     }
 
@@ -239,7 +239,7 @@ Configures the MQTT client connection.
   - `host`: (string, required) Hostname or IP address of the MQTT broker.
   - `port`: (integer, optional, default: 1883) Port for the MQTT broker.
   - `username` / `password`: (string, optional) Credentials for authentication.
-  - `reconnect_interval`: (integer, optional, default: 10) Seconds to wait before attempting to reconnect.
+  - `reconnect_interval`: (float, optional, default: 10) Seconds to wait before attempting to reconnect.
 
 ### 4.5. `prometheus_exporter`
 

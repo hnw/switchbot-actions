@@ -2,11 +2,16 @@
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from prometheus_client import REGISTRY
+from prometheus_client import REGISTRY, CollectorRegistry
 
 from switchbot_actions.config import PrometheusExporterSettings
 from switchbot_actions.exporter import PrometheusExporter
 from switchbot_actions.signals import switchbot_advertisement_received
+
+
+@pytest.fixture
+def test_registry():
+    return CollectorRegistry()
 
 
 @pytest.fixture(autouse=True)
@@ -52,53 +57,59 @@ def mock_state_2(mock_switchbot_advertisement):
     )
 
 
+@pytest.mark.asyncio
 @patch("switchbot_actions.exporter.start_http_server")
-def test_exporter_handle_advertisement(mock_start_http_server, mock_state_1):
+async def test_exporter_handle_advertisement(
+    mock_start_http_server, mock_state_1, test_registry
+):
     """Test that the exporter correctly handles an advertisement and updates gauges."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
 
     settings = PrometheusExporterSettings(enabled=True)  # type: ignore[call-arg]
-    exporter = PrometheusExporter(settings=settings)
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
-    exporter.start()
+    await exporter.start()  # Await the start method
 
     # Send a signal to trigger `handle_advertisement`
     switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
 
     # Verify the value directly from the REGISTRY
-    temp_value = REGISTRY.get_sample_value(
+    temp_value = test_registry.get_sample_value(
         "switchbot_temperature",
         labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
     )
     assert temp_value == 22.5
 
-    rssi_value = REGISTRY.get_sample_value(
+    rssi_value = test_registry.get_sample_value(
         "switchbot_rssi",
         labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
     )
     assert rssi_value == -55
 
     # Verify that non-numeric data does not create a gauge
-    assert REGISTRY.get_sample_value("switchbot_some_non_numeric") is None
+    assert test_registry.get_sample_value("switchbot_some_non_numeric") is None
+
+    await exporter.stop()  # Await the stop method
 
 
+@pytest.mark.asyncio
 @patch("switchbot_actions.exporter.start_http_server")
-def test_metric_filtering(mock_start_http_server, mock_state_1):
+async def test_metric_filtering(mock_start_http_server, mock_state_1, test_registry):
     """Test that metrics are filtered based on the target config."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
 
     settings = PrometheusExporterSettings(
         enabled=True, target={"metrics": ["temperature", "battery"]}
     )  # type: ignore[call-arg]
-    exporter = PrometheusExporter(settings=settings)
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
-    exporter.start()
+    await exporter.start()  # Await the start method
 
     switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
 
     # Metric that should exist
     assert (
-        REGISTRY.get_sample_value(
+        test_registry.get_sample_value(
             "switchbot_temperature",
             labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
         )
@@ -106,16 +117,21 @@ def test_metric_filtering(mock_start_http_server, mock_state_1):
     )
     # Filtered metric should be None
     assert (
-        REGISTRY.get_sample_value(
+        test_registry.get_sample_value(
             "switchbot_humidity",
             labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
         )
         is None
     )
 
+    await exporter.stop()  # Await the stop method
 
+
+@pytest.mark.asyncio
 @patch("switchbot_actions.exporter.start_http_server")
-def test_address_filtering(mock_start_http_server, mock_state_1, mock_state_2):
+async def test_address_filtering(
+    mock_start_http_server, mock_state_1, mock_state_2, test_registry
+):
     """Test that devices are filtered based on the target addresses."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
 
@@ -123,11 +139,13 @@ def test_address_filtering(mock_start_http_server, mock_state_1, mock_state_2):
         enabled=True,
         target={"addresses": ["DE:AD:BE:EF:44:44"]},  # only mock_state_2
     )  # type: ignore[call-arg]
-    exporter = PrometheusExporter(settings=settings)
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
-    exporter.start()
+    await exporter.start()  # Await the start method
 
-    mock_start_http_server.assert_called_once_with(settings.port)
+    mock_start_http_server.assert_called_once_with(
+        settings.port, registry=test_registry
+    )
 
     # Send signals for both devices
     switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
@@ -135,7 +153,7 @@ def test_address_filtering(mock_start_http_server, mock_state_1, mock_state_2):
 
     # Metric for mock_state_1 should be None
     assert (
-        REGISTRY.get_sample_value(
+        test_registry.get_sample_value(
             "switchbot_temperature",
             labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
         )
@@ -143,9 +161,11 @@ def test_address_filtering(mock_start_http_server, mock_state_1, mock_state_2):
     )
     # Metric for mock_state_2 should exist
     assert (
-        REGISTRY.get_sample_value(
+        test_registry.get_sample_value(
             "switchbot_isOn",
             labels={"address": "DE:AD:BE:EF:44:44", "model": "WoHand"},
         )
         == 1.0
     )
+
+    await exporter.stop()  # Await the stop method

@@ -33,7 +33,7 @@ class MqttSettings(BaseConfigModel):
     port: int = Field(1883, ge=1, le=65535)
     username: Optional[str] = None
     password: Optional[str] = None
-    reconnect_interval: int = 10
+    reconnect_interval: float = 10.0
 
 
 class PrometheusExporterSettings(BaseConfigModel):

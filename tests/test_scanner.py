@@ -42,8 +42,8 @@ def scanner(mock_ble_scanner, mock_storage):
 
 
 @pytest.mark.asyncio
-async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
-    """Test that the scanner starts, processes an advertisement, and sends a signal."""
+async def test_scanner_start_and_stop_succeeds(scanner, mock_ble_scanner):
+    """Test that the scanner starts, sends a signal, and stops gracefully."""
     received_signal = []
 
     def on_switchbot_advertisement_received(sender, **kwargs):
@@ -51,8 +51,12 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
 
     switchbot_advertisement_received.connect(on_switchbot_advertisement_received)
 
-    with pytest.raises(asyncio.CancelledError):
-        await scanner.start_scan()
+    # Start the scanner
+    await scanner.start()
+    assert scanner.task is not None
+
+    # Give the background task a moment to run one loop
+    await asyncio.sleep(0.1)
 
     # Assert that discover was called
     mock_ble_scanner.discover.assert_called_with(scan_timeout=1)
@@ -62,7 +66,11 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
     signal_data = received_signal[0]
     new_state = signal_data["new_state"]
     assert new_state.address == "DE:AD:BE:EF:44:44"
-    assert new_state.data["data"]["isOn"] is True
+
+    # Stop the scanner and ensure it logs the cancellation correctly
+    with patch("logging.Logger.info") as mock_logger_info:
+        await scanner.stop()
+        mock_logger_info.assert_any_call("Scanner task successfully cancelled.")
 
     switchbot_advertisement_received.disconnect(on_switchbot_advertisement_received)
 
@@ -76,9 +84,7 @@ async def test_scanner_start_scan_sends_signal(scanner, mock_ble_scanner):
 )
 @pytest.mark.asyncio
 @patch("logging.Logger.error")
-@patch("asyncio.sleep", new_callable=AsyncMock)
 async def test_scanner_error_handling(
-    mock_sleep,
     mock_log_error,
     scanner,
     mock_ble_scanner,
@@ -86,25 +92,30 @@ async def test_scanner_error_handling(
     expected_exc_info,
 ):
     """
-    Test that the scanner handles BLE scan errors gracefully
-    and logs with/without exc_info.
+    Test that the scanner's background task handles BLE errors gracefully.
     """
-    mock_ble_scanner.discover.side_effect = [
-        error_exception,
-        asyncio.CancelledError,
-    ]
+    # Configure the mock scanner to raise the test exception
+    mock_ble_scanner.discover.side_effect = error_exception
 
-    with pytest.raises(asyncio.CancelledError):
-        await scanner.start_scan()
+    # Start the scanner, which starts the _scan_loop in the background
+    await scanner.start()
+    assert scanner.task is not None
 
+    # Give the background task a moment to run, encounter the error, and log it.
+    await asyncio.sleep(0.1)
+
+    # Verify that the error was logged correctly
     mock_log_error.assert_called_once()
-    assert str(error_exception) in mock_log_error.call_args[0][0]
+    args, kwargs = mock_log_error.call_args
+
+    assert str(error_exception) in args[0]
     if expected_exc_info:
-        assert mock_log_error.call_args[1]["exc_info"] is True
+        assert kwargs.get("exc_info") is True
     else:
-        assert "exc_info" not in mock_log_error.call_args[1]
-    # In case of error, it should sleep for the full cycle time
-    mock_sleep.assert_called_with(1)
+        assert not kwargs.get("exc_info")
+
+    # Clean up by stopping the scanner
+    await scanner.stop()
 
 
 @pytest.mark.parametrize(
