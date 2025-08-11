@@ -188,21 +188,38 @@ class AutomationRule(BaseConfigModel):
         return v
 
 
+class AutomationSettings(BaseConfigModel):
+    rules: List[AutomationRule] = Field(default_factory=list)
+    devices: Dict[str, DeviceSettings] = Field(default_factory=dict)
+
+
 class AppSettings(BaseConfigModel):
     config_path: str = "config.yaml"
     debug: bool = False
-    devices: Dict[str, DeviceSettings] = Field(default_factory=dict)
     scanner: ScannerSettings = Field(default_factory=ScannerSettings)
     prometheus_exporter: PrometheusExporterSettings = Field(
         default_factory=PrometheusExporterSettings  # type: ignore[arg-type]
     )
-    automations: List[AutomationRule] = Field(default_factory=list)
+    automations: AutomationSettings = Field(default_factory=AutomationSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     mqtt: Optional[MqttSettings] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def transform_automation_settings(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            automations_data = {}
+            if "automations" in data:
+                automations_data["rules"] = data.pop("automations")
+            if "devices" in data:
+                automations_data["devices"] = data.pop("devices")
+            if automations_data:
+                data["automations"] = automations_data
+        return data
+
     @model_validator(mode="after")
     def set_default_automation_names(self) -> "AppSettings":
-        for i, rule in enumerate(self.automations):
+        for i, rule in enumerate(self.automations.rules):
             if rule.name is None:
                 rule.name = f"Automation #{i}"
             if rule.if_block:
@@ -211,11 +228,11 @@ class AppSettings(BaseConfigModel):
 
     @model_validator(mode="after")
     def resolve_device_references(self) -> "AppSettings":
-        for rule in self.automations:
+        for rule in self.automations.rules:
             for action in rule.then_block:
                 if isinstance(action, SwitchBotCommandAction):
                     if action.device:
-                        device_settings = self.devices.get(action.device)
+                        device_settings = self.automations.devices.get(action.device)
                         if not device_settings:
                             raise ValueError(
                                 f"Device '{action.device}' not found "
@@ -230,7 +247,7 @@ class AppSettings(BaseConfigModel):
                         }
             if rule.if_block.device:
                 device_name = rule.if_block.device
-                device_settings = self.devices.get(device_name)
+                device_settings = self.automations.devices.get(device_name)
                 if not device_settings:
                     raise ValueError(
                         f"Device '{device_name}' not found in devices section "

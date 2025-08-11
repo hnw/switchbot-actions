@@ -74,7 +74,7 @@ def format_validation_error(
         node_with_line_info = error.get("input")
         error_lc = get_lc(node_with_line_info)
         if error_lc is None:
-            path = error.get("loc")
+            path = list(error.get("loc", []))  # Convert tuple to list for mutability
             if path:
                 parent_path = path[:-1]
                 parent_node = config_data

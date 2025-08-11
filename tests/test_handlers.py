@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from switchbot_actions.config import AutomationRule
+from switchbot_actions.config import AutomationRule, AutomationSettings
 from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.state import (
     create_state_object_with_previous,
@@ -31,8 +31,8 @@ def automation_handler_factory(state_store):
     A factory fixture to create isolated AutomationHandler instances for each test.
     """
 
-    def factory(configs: list[AutomationRule]) -> AutomationHandler:
-        handler = AutomationHandler(configs=configs, state_store=state_store)
+    def factory(settings: AutomationSettings) -> AutomationHandler:
+        handler = AutomationHandler(settings=settings, state_store=state_store)
         return handler
 
     yield factory
@@ -70,7 +70,9 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
             ),
         ]
 
-        handler = automation_handler_factory(configs)
+        # Modified line
+        settings = AutomationSettings(rules=configs)
+        handler = automation_handler_factory(settings)
 
         assert len(handler._switchbot_runners) == 2
         assert len(handler._mqtt_runners) == 2
@@ -95,7 +97,9 @@ async def test_handle_switchbot_event_schedules_runner_task(
     configs = [
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []})
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Ensure get_and_update returns None to prevent TypeError
     handler._state_store.get_and_update.return_value = None
@@ -132,7 +136,9 @@ async def test_handle_mqtt_message_schedules_runner_task(
             {"if": {"source": "mqtt", "topic": "#"}, "then": []}
         )
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Ensure get_and_update returns None to prevent TypeError
     handler._state_store.get_and_update.return_value = None
@@ -167,7 +173,9 @@ async def test_handle_state_change_does_nothing_if_no_new_state(
     configs = [
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []})
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     handler.handle_switchbot_event(None, new_state=None)
     handler.handle_switchbot_event(None)  # no kwargs
@@ -189,7 +197,9 @@ async def test_handle_mqtt_message_does_nothing_if_no_message(
             {"if": {"source": "mqtt", "topic": "#"}, "then": []}
         )
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     handler.handle_mqtt_event(None, message=None)
     handler.handle_mqtt_event(None)  # no kwargs
@@ -218,7 +228,9 @@ async def test_automation_handler_lifecycle_connects_and_disconnects_signals(
                 {"if": {"source": "mqtt", "topic": "#"}, "then": []}
             ),
         ]
-        handler = automation_handler_factory(configs)
+        # Modified line
+        settings = AutomationSettings(rules=configs)
+        handler = automation_handler_factory(settings)
 
         # Test start(): signals should be connected
         await handler.start()
@@ -256,7 +268,9 @@ async def test_run_switchbot_runners_concurrently(
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Mock the run method of each runner
     mock_run_1 = AsyncMock()
@@ -287,7 +301,9 @@ async def test_run_mqtt_runners_concurrently(
             {"if": {"source": "mqtt", "topic": "#"}, "then": []}
         ),
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Mock the run method of each runner
     mock_run_1 = AsyncMock()
@@ -316,7 +332,9 @@ async def test_run_switchbot_runners_handles_exceptions(
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
         AutomationRule.model_validate({"if": {"source": "switchbot"}, "then": []}),
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Mock the run method of each runner
     mock_run_1 = AsyncMock()
@@ -369,7 +387,9 @@ async def test_run_mqtt_runners_handles_exceptions(
             {"if": {"source": "mqtt", "topic": "#"}, "then": []}
         ),
     ]
-    handler = automation_handler_factory(configs)
+    # Modified line
+    settings = AutomationSettings(rules=configs)
+    handler = automation_handler_factory(settings)
 
     # Mock the run method of each runner
     mock_run_1 = AsyncMock()

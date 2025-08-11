@@ -4,7 +4,7 @@ from typing import Any
 
 from .action_executor import create_action_executor
 from .action_runner import ActionRunner
-from .config import AutomationRule
+from .config import AutomationSettings
 from .signals import mqtt_message_received, switchbot_advertisement_received
 from .state import (
     MqttState,
@@ -26,12 +26,12 @@ class AutomationHandler:
     ActionRunner instances.
     """
 
-    def __init__(self, configs: list[AutomationRule], state_store: StateStore):
+    def __init__(self, settings: AutomationSettings, state_store: StateStore):
         self._switchbot_runners: list[ActionRunner[SwitchBotState]] = []
         self._mqtt_runners: list[ActionRunner[MqttState]] = []
         self._state_store = state_store
 
-        for config in configs:
+        for config in settings.rules:
             executors = [
                 create_action_executor(action, state_store)
                 for action in config.then_block

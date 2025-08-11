@@ -207,7 +207,8 @@ def test_app_settings_defaults():
     assert settings.debug is False
     assert isinstance(settings.scanner, ScannerSettings)
     assert isinstance(settings.prometheus_exporter, PrometheusExporterSettings)
-    assert settings.automations == []
+    assert settings.automations.rules == []
+    assert settings.automations.devices == {}
     assert isinstance(settings.logging, LoggingSettings)
     assert settings.mqtt is None
 
@@ -231,12 +232,13 @@ def test_app_settings_from_dict():
     assert settings.scanner.duration == 5
     assert settings.mqtt is not None
     assert settings.mqtt.host == "test.mqtt.org"
-    assert len(settings.automations) == 1
-    assert settings.automations[0].if_block.source == "switchbot_timer"
-    assert settings.automations[0].if_block.duration == 60
-    assert isinstance(settings.automations[0].then_block[0], WebhookAction)
+    assert len(settings.automations.rules) == 1
+    assert settings.automations.rules[0].if_block.source == "switchbot_timer"
+    assert settings.automations.rules[0].if_block.duration == 60
+    assert isinstance(settings.automations.rules[0].then_block[0], WebhookAction)
     assert (
-        str(settings.automations[0].then_block[0].url) == "http://example.com/turn_on"
+        str(settings.automations.rules[0].then_block[0].url)
+        == "http://example.com/turn_on"
     )
 
 
@@ -265,11 +267,11 @@ def test_if_block_name_is_unified_with_rule_name():
         }
     )
 
-    rule_with_name = settings.automations[0]
+    rule_with_name = settings.automations.rules[0]
     assert rule_with_name.name == "MyRule"
     assert rule_with_name.if_block.name == "MyRule"
 
-    rule_without_name = settings.automations[1]
+    rule_without_name = settings.automations.rules[1]
     assert rule_without_name.name == "Automation #1"
     assert rule_without_name.if_block.name == "Automation #1"
 
@@ -327,14 +329,15 @@ def test_app_settings_with_multiple_automations():
         ]
     }
     settings = AppSettings.model_validate(config_data)
-    assert len(settings.automations) == 2
-    assert settings.automations[0].if_block.source == "switchbot_timer"
-    assert settings.automations[1].if_block.source == "mqtt"
-    assert settings.automations[1].if_block.topic == "home/light/status"
-    assert isinstance(settings.automations[0].then_block[0], WebhookAction)
-    assert isinstance(settings.automations[1].then_block[0], ShellCommandAction)
+    assert len(settings.automations.rules) == 2
+    assert settings.automations.rules[0].if_block.source == "switchbot_timer"
+    assert settings.automations.rules[1].if_block.source == "mqtt"
+    assert settings.automations.rules[1].if_block.topic == "home/light/status"
+    assert isinstance(settings.automations.rules[0].then_block[0], WebhookAction)
+    assert isinstance(settings.automations.rules[1].then_block[0], ShellCommandAction)
     assert (
-        settings.automations[1].then_block[0].command == "echo 'Light status changed'"
+        settings.automations.rules[1].then_block[0].command
+        == "echo 'Light status changed'"
     )
 
 
@@ -360,7 +363,7 @@ def test_switchbot_command_device_reference_success():
         ],
     }
     settings = AppSettings.model_validate(config)
-    action = settings.automations[0].then_block[0]
+    action = settings.automations.rules[0].then_block[0]
     assert isinstance(action, SwitchBotCommandAction)
     assert action.address == "aa:bb:cc:dd:ee:ff"
     assert action.config == {"password": "pass", "retry_count": 5}
@@ -383,7 +386,7 @@ def test_switchbot_command_self_contained_success():
         ]
     }
     settings = AppSettings.model_validate(config)
-    action = settings.automations[0].then_block[0]
+    action = settings.automations.rules[0].then_block[0]
     assert isinstance(action, SwitchBotCommandAction)
     assert action.address == "11:22:33:44:55:66"
     assert action.config == {"retry_count": 3}
@@ -472,7 +475,7 @@ def test_switchbot_command_config_merge_logic():
         ],
     }
     settings = AppSettings.model_validate(config)
-    action = settings.automations[0].then_block[0]
+    action = settings.automations.rules[0].then_block[0]
     assert isinstance(action, SwitchBotCommandAction)
     assert action.config == {
         "password": "device-pass",
@@ -502,7 +505,7 @@ def test_if_block_device_reference_success():
         ],
     }
     settings = AppSettings.model_validate(config)
-    if_block = settings.automations[0].if_block
+    if_block = settings.automations.rules[0].if_block
     assert if_block.conditions["address"] == "11:22:33:44:55:66"
     assert if_block.conditions["temperature"] == {"gt": 25}
 
@@ -531,10 +534,10 @@ def test_if_block_device_reference_overwrites_address():
         ],
     }
     settings = AppSettings.model_validate(config)
-    if_block = settings.automations[0].if_block
+    if_block = settings.automations.rules[0].if_block
     assert (
-        if_block.conditions["address"] == "11:22:33:44:55:66"
-    )  # Should be overwritten
+        if_block.conditions["address"] == "11:22:33:44:55:66"  # Should be overwritten
+    )
     assert if_block.conditions["temperature"] == {"gt": 25}
 
 
@@ -577,7 +580,7 @@ def test_if_block_device_reference_no_impact_on_existing_rules():
         ],
     }
     settings = AppSettings.model_validate(config)
-    if_block = settings.automations[0].if_block
+    if_block = settings.automations.rules[0].if_block
     assert if_block.conditions["address"] == "aa:bb:cc:dd:ee:ff"
     assert if_block.conditions["temperature"] == {"gt": 25}
     assert if_block.device is None

@@ -86,7 +86,7 @@ class Application:
 
         if settings.automations:
             components["automations"] = AutomationHandler(
-                configs=settings.automations, state_store=self.storage
+                settings=settings.automations, state_store=self.storage
             )
 
         return components

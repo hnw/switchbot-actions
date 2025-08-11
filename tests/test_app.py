@@ -10,11 +10,8 @@ import pytest
 from switchbot_actions.app import Application, run_app
 from switchbot_actions.config import (
     AppSettings,
-    AutomationRule,
-    DeviceSettings,
     MqttSettings,
     PrometheusExporterSettings,
-    ScannerSettings,
 )
 from switchbot_actions.error import ConfigError
 
@@ -30,21 +27,19 @@ def cli_args():
 @pytest.fixture
 def initial_settings():
     """Provides a default AppSettings instance for tests."""
-    mock_rule = MagicMock(spec=AutomationRule)
-    mock_rule.name = "mock rule"
-
-    mock_if_block = MagicMock()
-    mock_if_block.device = "test_device"  # Give it a name
-    mock_rule.if_block = mock_if_block
-    mock_rule.then_block = []
-
-    return AppSettings(
-        scanner=ScannerSettings(),
-        mqtt=MqttSettings(host="localhost", port=1883),
-        prometheus_exporter=PrometheusExporterSettings(enabled=True, port=8000),
-        automations=[mock_rule],
-        devices={"test_device": DeviceSettings(address="xx:xx:xx:xx:xx:xx")},
-    )
+    mock_rule = {
+        "if": {"source": "switchbot", "device": "test_device"},
+        "then": {"type": "log", "message": "test"},
+        "name": "mock rule",
+    }
+    settings_dict = {
+        "scanner": {"cycle": 10, "duration": 3, "interface": 0},
+        "mqtt": {"host": "localhost", "port": 1883},
+        "prometheus_exporter": {"enabled": True, "port": 8000},
+        "automations": [mock_rule],
+        "devices": {"test_device": {"address": "xx:xx:xx:xx:xx:xx"}},
+    }
+    return AppSettings.model_validate(settings_dict)
 
 
 @pytest.fixture
