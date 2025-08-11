@@ -23,6 +23,8 @@ T_State = TypeVar("T_State", bound=RawStateEvent)
 
 logger = logging.getLogger(__name__)
 
+_empty_state_instance: "StateObject"
+
 
 class TemplateFormatter(string.Formatter):
     def get_field(
@@ -53,22 +55,11 @@ class TemplateFormatter(string.Formatter):
         return value, key
 
 
-class _EmptyState:
-    """A placeholder for a non-existent previous state."""
-
-    def __getattr__(self, name: str) -> str:
-        return ""
-
-
-_template_formatter = TemplateFormatter()
-_empty_state_instance = _EmptyState()
-
-
 class StateObject(ABC, Generic[T_State]):
     def __init__(self, raw_event: T_State, previous: Optional["StateObject"] = None):
-        self._raw_event: T_State = raw_event
-        self._cached_values: Dict[str, Any] | None = None
-        self.previous: Optional["StateObject"] = previous
+        self._raw_event = raw_event
+        self._cached_values = None
+        self.previous = previous if previous else _empty_state_instance
 
     def __getattr__(self, name: str) -> Any:
         try:
@@ -101,10 +92,7 @@ class StateObject(ABC, Generic[T_State]):
     def format(
         self, template_data: Union[str, Dict[str, Any]]
     ) -> Union[str, Dict[str, Any]]:
-        context = {
-            "__current_data__": self,
-            "previous": self.previous if self.previous else _empty_state_instance,
-        }
+        context = {"__current_data__": self, "previous": self.previous}
         if isinstance(template_data, dict):
             return {k: self.format(str(v)) for k, v in template_data.items()}
         else:
@@ -120,6 +108,28 @@ class StateObject(ABC, Generic[T_State]):
                     f"Placeholder '{key_name}' could not be resolved. The key name is"
                     " likely incorrect."
                 ) from e
+
+
+class _EmptyState(StateObject):
+    """A placeholder for a non-existent previous state."""
+
+    def __init__(self):
+        self._raw_event = None
+        self.previous = self
+
+    @property
+    def id(self) -> str:
+        return ""
+
+    def _get_values_as_dict(self) -> Dict[str, Any]:
+        return {}
+
+    def __getattr__(self, name: str) -> Any:
+        return ""
+
+
+_template_formatter = TemplateFormatter()
+_empty_state_instance = _EmptyState()
 
 
 class SwitchBotState(StateObject[SwitchBotAdvertisement]):
@@ -163,8 +173,10 @@ class MqttState(StateObject[aiomqtt.Message]):
 
 
 def create_state_object(
-    raw_event: RawStateEvent, previous: Optional[StateObject] = None
+    raw_event: Optional[RawStateEvent], previous: Optional[StateObject] = None
 ) -> StateObject:
+    if raw_event is None:
+        return _empty_state_instance
     if isinstance(raw_event, SwitchBotAdvertisement):
         return SwitchBotState(raw_event, previous=previous)
     elif isinstance(raw_event, aiomqtt.Message):
@@ -178,16 +190,3 @@ def _get_key_from_raw_event(raw_event: RawStateEvent) -> str:
     elif isinstance(raw_event, aiomqtt.Message):
         return str(raw_event.topic)
     raise TypeError(f"Unsupported event type for key extraction: {type(raw_event)}")
-
-
-def create_state_object_with_previous(
-    new_raw_event: RawStateEvent, previous_raw_event: Optional[RawStateEvent]
-) -> StateObject:
-    previous_state_object: Optional[StateObject] = None
-    if previous_raw_event:
-        previous_state_object = create_state_object(previous_raw_event)
-
-    new_state_object = create_state_object(
-        new_raw_event, previous=previous_state_object
-    )
-    return new_state_object

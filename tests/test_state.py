@@ -5,7 +5,6 @@ from switchbot_actions.config import AutomationIf
 from switchbot_actions.state import (
     StateObject,
     create_state_object,
-    create_state_object_with_previous,
 )
 from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
 
@@ -32,56 +31,59 @@ def mock_previous_raw_event(mock_switchbot_advertisement):
     )
 
 
-@pytest.fixture
-def state_with_previous(mock_raw_event, mock_previous_raw_event):
-    return create_state_object_with_previous(mock_raw_event, mock_previous_raw_event)
-
-
-def test_create_state_object_with_previous(state_with_previous):
-    assert state_with_previous.id == "DE:AD:BE:EF:00:01"
-    assert state_with_previous.previous is not None
-    assert state_with_previous.previous.id == "DE:AD:BE:EF:00:01"
-    assert state_with_previous.temperature == 25.5
-    assert state_with_previous.previous.temperature == 25.0
-
-
-def test_create_state_object_with_no_previous(mock_raw_event):
-    state_object = create_state_object_with_previous(mock_raw_event, None)
-    assert state_object.id == mock_raw_event.address
-    assert state_object.previous is None
+def test_state_object_attribute_access(mock_raw_event, mock_previous_raw_event):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     assert state_object.temperature == 25.5
-
-
-def test_state_object_attribute_access(state_with_previous):
-    assert state_with_previous.temperature == 25.5
-    assert state_with_previous.humidity == 50
-    assert state_with_previous.previous.temperature == 25.0
+    assert state_object.humidity == 50
+    assert state_object.previous.temperature == 25.0
     with pytest.raises(AttributeError):
-        _ = state_with_previous.non_existent_attribute
+        _ = state_object.non_existent_attribute
 
 
-def test_state_object_format_simple(state_with_previous):
+def test_create_state_object_with_previous_argument(
+    mock_raw_event, mock_previous_raw_event
+):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
+
+    assert state_object.id == mock_raw_event.address
+    assert state_object.previous is not None
+    assert state_object.previous.id == mock_previous_raw_event.address
+    assert state_object.temperature == 25.5
+    assert state_object.previous.temperature == 25.0
+
+
+def test_state_object_format_simple(mock_raw_event, mock_previous_raw_event):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     template = "Temp: {temperature}, Hum: {humidity}"
     expected = "Temp: 25.5, Hum: 50"
-    assert state_with_previous.format(template) == expected
+    assert state_object.format(template) == expected
 
 
-def test_state_object_format_with_previous(state_with_previous):
+def test_state_object_format_with_previous(mock_raw_event, mock_previous_raw_event):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     template = "Temp changed from {previous.temperature} to {temperature}."
     expected = "Temp changed from 25.0 to 25.5."
-    assert state_with_previous.format(template) == expected
+    assert state_object.format(template) == expected
 
 
-def test_state_object_format_dict(state_with_previous):
+def test_state_object_format_dict(mock_raw_event, mock_previous_raw_event):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     template_dict = {
         "current": "{temperature}",
         "previous": "{previous.temperature}",
     }
     expected_dict = {"current": "25.5", "previous": "25.0"}
-    assert state_with_previous.format(template_dict) == expected_dict
+    assert state_object.format(template_dict) == expected_dict
 
 
-def test_state_object_format_invalid_key(state_with_previous):
+def test_state_object_format_invalid_key(mock_raw_event, mock_previous_raw_event):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     with pytest.raises(
         ValueError,
         match=(
@@ -89,10 +91,14 @@ def test_state_object_format_invalid_key(state_with_previous):
             " likely incorrect."
         ),
     ):
-        state_with_previous.format("This is an {invalid_key}.")
+        state_object.format("This is an {invalid_key}.")
 
 
-def test_state_object_format_typo_previous_attribute(state_with_previous):
+def test_state_object_format_typo_previous_attribute(
+    mock_raw_event, mock_previous_raw_event
+):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     with pytest.raises(
         ValueError,
         match=(
@@ -100,10 +106,14 @@ def test_state_object_format_typo_previous_attribute(state_with_previous):
             r" has no attribute 'temprature'"
         ),
     ):
-        state_with_previous.format("Temp: {previous.temprature}")
+        state_object.format("Temp: {previous.temprature}")
 
 
-def test_state_object_format_typo_top_level_key(state_with_previous):
+def test_state_object_format_typo_top_level_key(
+    mock_raw_event, mock_previous_raw_event
+):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     with pytest.raises(
         ValueError,
         match=(
@@ -111,10 +121,14 @@ def test_state_object_format_typo_top_level_key(state_with_previous):
             " likely incorrect."
         ),
     ):
-        state_with_previous.format("Temp: {temprature}")
+        state_object.format("Temp: {temprature}")
 
 
-def test_state_object_format_method_access_denied(state_with_previous):
+def test_state_object_format_method_access_denied(
+    mock_raw_event, mock_previous_raw_event
+):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     with pytest.raises(
         ValueError,
         match=(
@@ -122,11 +136,11 @@ def test_state_object_format_method_access_denied(state_with_previous):
             r" allowed: previous.format"
         ),
     ):
-        state_with_previous.format("Do not call {previous.format}.")
+        state_object.format("Do not call {previous.format}.")
 
 
 def test_state_object_format_previous_missing(mock_raw_event):
-    state = create_state_object_with_previous(mock_raw_event, None)
+    state = create_state_object(mock_raw_event, previous=None)
     assert state.format("Previous temp: {previous.temperature}") == "Previous temp: "
     assert state.format("Previous hum: {previous.humidity}") == "Previous hum: "
     assert (
@@ -135,10 +149,14 @@ def test_state_object_format_previous_missing(mock_raw_event):
     )
 
 
-def test_state_object_format_access_previous_object(state_with_previous):
+def test_state_object_format_access_previous_object(
+    mock_raw_event, mock_previous_raw_event
+):
+    previous_state_object = create_state_object(mock_previous_raw_event)
+    state_object = create_state_object(mock_raw_event, previous=previous_state_object)
     # Accessing the 'previous' object should work if not followed by an attribute
     # The formatter will call `str()` on the object.
-    result = state_with_previous.format("Previous state: {previous}")
+    result = state_object.format("Previous state: {previous}")
     assert result.startswith(
         "Previous state: <switchbot_actions.state.SwitchBotState object"
     )

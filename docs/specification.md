@@ -136,7 +136,7 @@ classDiagram
 - **Functionality**:
   - **`StateObject` (Abstract Class)**: The core abstraction that defines the common interface for all state events. It provides methods like `.id` to get a unique identifier and `.format(template)` to populate placeholders in actions.
   - **`SwitchBotState` & `MqttState` (Concrete Classes)**: Implement the `StateObject` interface for SwitchBot BLE advertisements and MQTT messages, respectively.
-  - **`create_state_object_with_previous` (Factory Function)**: A factory that takes a new raw event and its preceding raw event, then returns the appropriate, fully initialized `StateObject` instance with its historical context.
+  - **`create_state_object` (Factory Function)**: A factory that takes a raw event and an optional `previous` state object. It returns the appropriate, fully initialized `StateObject` instance, linking it to its historical context if provided.
 
 ### 3.6. `ActionExecutor` (Abstract Class) and its Subclasses
 
@@ -424,10 +424,10 @@ The application uses the following signals for internal communication between co
 
 To add a new source (e.g., a webhook listener):
 
-1.  **Create a new `StateObject` subclass** in `evaluator.py` to encapsulate the data and logic for the new event type.
-2.  **Update the `create_state_object` factory** in `evaluator.py` to handle the new raw event type and return your new class.
+1.  **Create a new `StateObject` subclass** in `state.py` to encapsulate the data and logic for the new event type.
+2.  **Update the `create_state_object` factory** in `state.py` to handle the new raw event type and return your new class.
 3.  **Create a component** that monitors the new source (e.g., a webhook listener) and emits a new, uniquely named signal with the _raw event data_ as its payload.
-4.  **Update `AutomationHandler`** to subscribe to this new signal. In the new handler method, you must first call `state_store.get_and_update(key, raw_event)` to retrieve the previous state and update the store. Then, use the `create_state_object_with_previous` factory to create a new `StateObject` with its historical context before passing it to the runners.
+4.  **Update `AutomationHandler`** to subscribe to this new signal. In the new handler method, you must first call `state_store.get_and_update(key, raw_event)` to retrieve the previous state and update the store. Then, use the `create_state_object` factory to create a new `StateObject` with its historical context before passing it to the runners.
 5.  **Create a new `ActionRunner` subclass** if the trigger logic (e.g., event-based vs. timer-based) differs from existing ones.
 6.  **Update `config.py`** to validate the new `source` and any associated parameters.
 7.  **Document** the new source, its State Object structure, and configuration options in this specification.
@@ -451,7 +451,7 @@ To add a new source (e.g., a webhook listener):
 │   ├── action_runner.py    # ActionRunnerBase and concrete implementations
 │   ├── cli.py              # Command-line interface entry point
 │   ├── config.py           # Pydantic models for configuration
-│   ├── evaluator.py        # StateObject class hierarchy for event data encapsulation
+│   ├── state.py            # StateObject class hierarchy for event data encapsulation
 │   ├── exporter.py         # PrometheusExporter
 │   ├── handlers.py         # AutomationHandler
 │   ├── logging.py          # Logging setup

@@ -11,7 +11,7 @@ from .state import (
     RawStateEvent,
     SwitchBotState,
     _get_key_from_raw_event,
-    create_state_object_with_previous,
+    create_state_object,
 )
 from .store import StateStore
 from .triggers import DurationTrigger, EdgeTrigger
@@ -96,7 +96,8 @@ class AutomationHandler:
 
         key = _get_key_from_raw_event(raw_state)
         previous_raw_event = await self._state_store.get_and_update(key, raw_state)
-        state = create_state_object_with_previous(raw_state, previous_raw_event)
+        previous_state_object = create_state_object(previous_raw_event)
+        state = create_state_object(raw_state, previous=previous_state_object)
 
         if isinstance(state, SwitchBotState):
             await self._run_switchbot_runners(state)
@@ -113,7 +114,8 @@ class AutomationHandler:
 
         key = _get_key_from_raw_event(raw_message)
         previous_raw_message = await self._state_store.get_and_update(key, raw_message)
-        state = create_state_object_with_previous(raw_message, previous_raw_message)
+        previous_state_object = create_state_object(previous_raw_message)
+        state = create_state_object(raw_message, previous=previous_state_object)
 
         if isinstance(state, MqttState):
             await self._run_mqtt_runners(state)

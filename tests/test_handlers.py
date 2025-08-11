@@ -8,7 +8,7 @@ import pytest
 from switchbot_actions.config import AutomationRule, AutomationSettings
 from switchbot_actions.handlers import AutomationHandler
 from switchbot_actions.state import (
-    create_state_object_with_previous,
+    create_state_object,
 )
 from switchbot_actions.store import StateStore
 from switchbot_actions.triggers import DurationTrigger, EdgeTrigger
@@ -114,7 +114,7 @@ async def test_handle_switchbot_event_schedules_runner_task(
     await asyncio.sleep(0)
 
     # Assert that the internal method was called with the correct state object
-    expected_state_object = create_state_object_with_previous(raw_state, None)
+    expected_state_object = create_state_object(raw_state, previous=None)
     handler._run_switchbot_runners.assert_awaited_once()
     actual_state_object = handler._run_switchbot_runners.call_args[0][0]
     assert (
@@ -153,7 +153,7 @@ async def test_handle_mqtt_message_schedules_runner_task(
     await asyncio.sleep(0)
 
     # Assert that the internal method was called with the correct state object
-    expected_state_object = create_state_object_with_previous(raw_message, None)
+    expected_state_object = create_state_object(raw_message, previous=None)
     handler._run_mqtt_runners.assert_awaited_once()
     actual_state_object = handler._run_mqtt_runners.call_args[0][0]
     assert (
@@ -279,7 +279,7 @@ async def test_run_switchbot_runners_concurrently(
     handler._switchbot_runners[1].run = mock_run_2
 
     raw_state = mock_switchbot_advertisement()
-    state_object = create_state_object_with_previous(raw_state, None)
+    state_object = create_state_object(raw_state, previous=None)
     await handler._run_switchbot_runners(state_object)
 
     mock_run_1.assert_awaited_once_with(state_object)
@@ -311,7 +311,7 @@ async def test_run_mqtt_runners_concurrently(
     handler._mqtt_runners[0].run = mock_run_1
     handler._mqtt_runners[1].run = mock_run_2
 
-    state_object = create_state_object_with_previous(mqtt_message_plain, None)
+    state_object = create_state_object(mqtt_message_plain, previous=None)
 
     await handler._run_mqtt_runners(state_object)
 
@@ -346,7 +346,7 @@ async def test_run_switchbot_runners_handles_exceptions(
     handler._switchbot_runners[2].run = mock_run_3
 
     raw_state = mock_switchbot_advertisement()
-    state_object = create_state_object_with_previous(raw_state, None)
+    state_object = create_state_object(raw_state, previous=None)
 
     with caplog.at_level(logging.ERROR):
         await handler._run_switchbot_runners(state_object)
@@ -400,7 +400,7 @@ async def test_run_mqtt_runners_handles_exceptions(
     handler._mqtt_runners[1].run = mock_run_2
     handler._mqtt_runners[2].run = mock_run_3
 
-    state_object = create_state_object_with_previous(mqtt_message_plain, None)
+    state_object = create_state_object(mqtt_message_plain, previous=None)
 
     with caplog.at_level(logging.ERROR):
         await handler._run_mqtt_runners(state_object)
