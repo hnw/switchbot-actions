@@ -26,7 +26,7 @@ def mock_state(mock_switchbot_advertisement):
 @pytest.mark.asyncio
 async def test_storage_initialization(storage):
     """Test that the storage is initialized empty."""
-    assert await storage.get_all_states() == {}
+    assert await storage.get_all() == {}
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_update_and_get_state(storage, mock_state):
     key = "DE:AD:BE:EF:00:01"
     await storage.get_and_update(key, mock_state)
 
-    assert len(await storage.get_all_states()) == 1
+    assert len(await storage.get_all()) == 1
     stored_state = await storage.get(key)
     assert stored_state is not None
     assert stored_state.address == "DE:AD:BE:EF:00:01"
@@ -51,17 +51,17 @@ async def test_get_state_non_existent(storage):
 
 
 @pytest.mark.asyncio
-async def test_get_all_states_empty(storage):
+async def test_get_all_empty(storage):
     """Test retrieving all states when empty."""
-    assert await storage.get_all_states() == {}
+    assert await storage.get_all() == {}
 
 
 @pytest.mark.asyncio
-async def test_get_all_states_with_data(storage, mock_state):
+async def test_get_all_with_data(storage, mock_state):
     """Test retrieving all states with data."""
     key = "DE:AD:BE:EF:00:01"
     await storage.get_and_update(key, mock_state)
-    assert await storage.get_all_states() == {key: mock_state}
+    assert await storage.get_all() == {key: mock_state}
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_state_overwrite(storage, mock_state, mock_switchbot_advertisement
 
     await storage.get_and_update(key, updated_state)
 
-    assert len(await storage.get_all_states()) == 1
+    assert len(await storage.get_all()) == 1
     new_state = await storage.get(key)
     assert new_state.data["data"]["temperature"] == 26.0
     assert new_state.data["data"]["battery"] == 98
@@ -115,4 +115,4 @@ async def test_get_and_update_state(storage, mock_state, mock_switchbot_advertis
     assert await storage.get(key) == updated_state
 
     # Verify that other keys are unaffected
-    assert len(await storage.get_all_states()) == 1
+    assert len(await storage.get_all()) == 1

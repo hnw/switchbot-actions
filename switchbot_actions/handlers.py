@@ -9,6 +9,7 @@ from .signals import mqtt_message_received, switchbot_advertisement_received
 from .state import (
     MqttState,
     RawStateEvent,
+    StateSnapshot,
     SwitchBotState,
     _get_key_from_raw_event,
     create_state_object,
@@ -30,6 +31,7 @@ class AutomationHandler:
         self._switchbot_runners: list[ActionRunner[SwitchBotState]] = []
         self._mqtt_runners: list[ActionRunner[MqttState]] = []
         self._state_store = state_store
+        self._settings = settings
 
         for config in settings.rules:
             executors = [
@@ -76,72 +78,67 @@ class AutomationHandler:
 
     def handle_switchbot_event(self, sender: Any, **kwargs: Any) -> None:
         """Receives SwitchBot state and dispatches it to appropriate ActionRunners."""
-        raw_state: RawStateEvent | None = kwargs.get("new_state")
-        if not raw_state:
+        raw_event: RawStateEvent | None = kwargs.get("new_state")
+        if not raw_event:
             return
-        asyncio.create_task(self._handle_switchbot_event_async(new_state=raw_state))
+        asyncio.create_task(self._handle_event_async(raw_event))
 
     def handle_mqtt_event(self, sender: Any, **kwargs: Any) -> None:
         """Receives MQTT message and dispatches it to appropriate ActionRunners."""
-        raw_message: RawStateEvent | None = kwargs.get("message")
-        if not raw_message:
+        raw_event: RawStateEvent | None = kwargs.get("message")
+        if not raw_event:
             return
-        asyncio.create_task(self._handle_mqtt_event_async(message=raw_message))
+        asyncio.create_task(self._handle_event_async(raw_event))
 
-    async def _handle_switchbot_event_async(self, **kwargs: Any) -> None:
-        """Receives SwitchBot state and dispatches it to appropriate ActionRunners."""
-        raw_state: RawStateEvent | None = kwargs.get("new_state")
-        if not raw_state:
-            return
+    async def _handle_event_async(self, raw_event: RawStateEvent) -> None:
+        """Generic event handler to create state and run actions."""
+        # Create a snapshot of all current device states.
+        all_raw_events = await self._state_store.get_all()
+        devices_config = self._settings.devices
+        snapshot = StateSnapshot(all_raw_events, devices_config)
 
-        key = _get_key_from_raw_event(raw_state)
-        previous_raw_event = await self._state_store.get_and_update(key, raw_state)
-        previous_state_object = create_state_object(previous_raw_event)
-        state = create_state_object(raw_state, previous=previous_state_object)
+        # Get the previous state for the triggering device and update the store.
+        key = _get_key_from_raw_event(raw_event)
+        previous_raw_event = await self._state_store.get_and_update(key, raw_event)
 
+        # Create state objects with the snapshot context.
+        previous_state_object = create_state_object(
+            previous_raw_event, snapshot=snapshot
+        )
+        state = create_state_object(
+            raw_event, previous=previous_state_object, snapshot=snapshot
+        )
+
+        # Dispatch to the appropriate runners.
         if isinstance(state, SwitchBotState):
             await self._run_switchbot_runners(state)
-        else:
-            logger.warning(
-                f"Received non-SwitchBotState for switchbot event: {type(state)}"
-            )
-
-    async def _handle_mqtt_event_async(self, **kwargs: Any) -> None:
-        """Receives MQTT message and dispatches it to appropriate ActionRunners."""
-        raw_message: RawStateEvent | None = kwargs.get("message")
-        if not raw_message:
-            return
-
-        key = _get_key_from_raw_event(raw_message)
-        previous_raw_message = await self._state_store.get_and_update(key, raw_message)
-        previous_state_object = create_state_object(previous_raw_message)
-        state = create_state_object(raw_message, previous=previous_state_object)
-
-        if isinstance(state, MqttState):
+        elif isinstance(state, MqttState):
             await self._run_mqtt_runners(state)
         else:
-            logger.warning(f"Received non-MqttState for MQTT event: {type(state)}")
+            logger.warning(f"Received unhandled state type: {type(state)}")
+
+    def _process_runner_results(self, results: list) -> None:
+        for result in results:
+            if isinstance(result, ValueError):
+                automation_logger.error(
+                    f"Failed to execute action due to a template error: {result}"
+                )
+            elif isinstance(result, Exception):
+                automation_logger.error(
+                    "An unexpected error occurred during action execution.",
+                    exc_info=result,
+                )
 
     async def _run_switchbot_runners(self, state: SwitchBotState) -> None:
         results = await asyncio.gather(
             *[runner.run(state) for runner in self._switchbot_runners],
             return_exceptions=True,
         )
-        for result in results:
-            if isinstance(result, Exception):
-                automation_logger.error(
-                    f"An action runner failed with an exception: {result}",
-                    exc_info=True,
-                )
+        self._process_runner_results(results)
 
     async def _run_mqtt_runners(self, state: MqttState) -> None:
         results = await asyncio.gather(
             *[runner.run(state) for runner in self._mqtt_runners],
             return_exceptions=True,
         )
-        for result in results:
-            if isinstance(result, Exception):
-                automation_logger.error(
-                    f"An action runner failed with an exception: {result}",
-                    exc_info=True,
-                )
+        self._process_runner_results(results)

@@ -1,35 +1,35 @@
-# SwitchBot Actions: A YAML-based Automation Engine
+# **SwitchBot Actions: A YAML-based Automation Engine**
 
-A powerful, configurable automation engine for SwitchBot BLE devices, with an optional Prometheus exporter.
+`switchbot-actions` is a lightweight, standalone automation engine that turns a single `config.yaml` file into a powerful local controller for your SwitchBot BLE devices. React to device states, create time-based triggers, and integrate with MQTT and Prometheus—all with a simple, configuration-driven approach.
 
-`switchbot-actions` is a lightweight, standalone automation engine for your SwitchBot BLE devices. It turns a single `config.yaml` file into a powerful local controller, allowing you to react to device states, create time-based triggers, and integrate with MQTT and Prometheus. Its efficiency makes it a great fit for resource-constrained hardware, running comfortably on a Raspberry Pi 3 and even on a Raspberry Pi Zero. It's ideal for those who prefer a simple, configuration-driven approach to home automation without needing a large, all-in-one platform.
+At its core, `switchbot-actions` monitors various input sources and, based on your rules, triggers a wide range of actions.
 
-At its core, `switchbot-actions` monitors various input sources and, based on your rules, triggers different actions. The overall architecture can be visualized as follows:
+![Conceptual Diagram](https://raw.githubusercontent.com/hnw/switchbot-actions/main/docs/images/conceptual-diagram.svg)
 
-![Architecture Diagram](https://raw.githubusercontent.com/hnw/switchbot-actions/main/docs/images/architecture.svg)
+Its efficiency makes it a great fit for resource-constrained hardware like a Raspberry Pi Zero, allowing you to build a sophisticated, private, and reliable home automation hub without needing a large, all-in-one platform.
 
-## Key Features
+## **Key Features**
 
-- **Direct Device Control**: A new `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations without external scripts.
-- **Real-time Monitoring**: Gathers data from all nearby SwitchBot devices.
-- **Full MQTT Integration**: Use MQTT messages as triggers for automations, and publish messages as an action.
-- **Prometheus Exporter**: Exposes metrics at a configurable `/metrics` endpoint.
-- **Powerful Automation Rules**: Define complex automations with a unified `if/then` structure.
-- **Flexible Conditions**: Build rules based on device model, address, sensor values, and even signal strength (`rssi`).
-- **Highly Configurable**: Control every aspect of the application from a single configuration file.
+- **Powerful Automation Rules**: Define complex automations with a unified `if`/`then` structure.
+- **Inter-Device Communication**: Create rules where one device's state triggers an action based on the state of another device.
+- **Direct Device Control**: A `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations.
+- **Event-Driven & Time-Based Triggers**: React to state changes instantly or trigger actions only when a condition has been met for a specific duration (e.g., "if a door has been open for 5 minutes").
+- **Full MQTT Integration**: Use MQTT messages as triggers and publish messages as an action.
+- **Prometheus Exporter**: Exposes device metrics at a configurable `/metrics` endpoint.
 
-## Getting Started
+## **Prerequisites**
 
-### 1. Prerequisites
+- **Python**: Version 3.11 or newer is required.
+- **Operating System**: The application is tested and supported on Linux. It is also expected to work on other platforms like macOS and Windows, but BLE functionality may vary depending on the system's Bluetooth support.
+- **Permissions (Linux)**: The application needs permissions to access the Bluetooth adapter. This can typically be achieved by running with sudo or by setting the necessary capabilities (see the [Deployment Guide](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md)).
 
-- Python 3.11+
-- A Linux-based system with a Bluetooth adapter that supports BLE (e.g., a Raspberry Pi).
+## **Quick Start**
 
-### 2. Installation (Recommended)
+### **1. Installation**
 
 We strongly recommend installing with `pipx` to keep your system clean and avoid dependency conflicts.
 
-```bash
+```
 # Install pipx
 pip install pipx
 pipx ensurepath
@@ -38,260 +38,91 @@ pipx ensurepath
 pipx install switchbot-actions
 ```
 
-_(You may need to restart your terminal after the `pipx ensurepath` step for the changes to take effect.)_
+### **2. Configuration**
 
-## Running as a Systemd Service
-
-For continuous, 24/7 monitoring, running this application as a background service is the ideal setup.
-
-#### Step 1: Create a Dedicated Virtual Environment
-
-```bash
-# Create a directory and a virtual environment for the application
-sudo mkdir -p /opt/switchbot-actions
-sudo python3 -m venv /opt/switchbot-actions
-```
-
-#### Step 2: Install the Application into the venv
-
-```bash
-# Use the pip from the new environment to install the package
-sudo /opt/switchbot-actions/bin/pip install switchbot-actions
-```
-
-#### Step 3: Place the Configuration File
-
-```bash
-# Create a dedicated directory for the config file
-sudo mkdir -p /etc/switchbot-actions
-
-# Download the example config to the new location
-sudo curl -o /etc/switchbot-actions/config.yaml https://raw.githubusercontent.com/hnw/switchbot-actions/main/config.yaml.example
-
-# Edit the configuration for your needs
-sudo nano /etc/switchbot-actions/config.yaml
-```
-
-#### Step 4: Create the systemd Service File
-
-Create a new file at `/etc/systemd/system/switchbot-actions.service` and paste the following content. Using `DynamicUser=yes` is a modern, secure way to run services without pre-existing users.
-
-```ini
-[Unit]
-Description=SwitchBot Actions Daemon
-After=network.target bluetooth.service
-
-[Service]
-# Run the service as its own minimal-privilege, dynamically-created user
-DynamicUser=yes
-
-# Use the absolute path to the executable and config file
-ExecStart=/opt/switchbot-actions/bin/switchbot-actions -c /etc/switchbot-actions/config.yaml
-
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### Step 5: Enable and Start the Service
-
-```bash
-# Reload systemd to recognize the new service
-sudo systemctl daemon-reload
-
-# Enable the service to start automatically on boot
-sudo systemctl enable switchbot-actions.service
-
-# Start the service immediately
-sudo systemctl start switchbot-actions.service
-
-# Check the status to ensure it's running correctly
-sudo systemctl status switchbot-actions.service
-```
-
-> [\!NOTE]
-> **Reloading Configuration without Downtime**
-> After modifying `/etc/switchbot-actions/config.yaml`, you can apply the changes without restarting the service by sending a `SIGHUP` signal.
->
-> ```bash
-> sudo systemctl kill -s HUP switchbot-actions.service
-> ```
-
-## Usage
-
-We recommend a two-step process to get started smoothly.
-
-### Step 1: Verify Hardware and Device Discovery
-
-First, run the application in debug mode to confirm that your Bluetooth adapter is working and can discover your SwitchBot devices.
-
-```bash
-switchbot-actions --debug
-```
-
-If you see log lines containing "Received advertisement from...", your hardware setup is correct.
-
-> [\!IMPORTANT]
-> **A Note on Permissions on Linux**
-> If you encounter errors related to "permission denied," you may need to run the command with `sudo`.
-
-### Step 2: Configure and Run
-
-Once discovery is confirmed, create your `config.yaml` file. You can download the example file as a starting point.
-
-```bash
-curl -o config.yaml https://raw.githubusercontent.com/hnw/switchbot-actions/main/config.yaml.example
-```
-
-Edit `config.yaml` to define your automations, then run the application with your configuration.
-
-```bash
-switchbot-actions -c config.yaml
-```
-
-## Configuration
-
-The application is controlled by `config.yaml`.
-
-### Quick Start Example
-
-To get started quickly, copy and paste the following into your `config.yaml`. This automation will log a message whenever a SwitchBot Meter's temperature rises above 28.0℃.
-
-```yaml
-automations:
-  - name: "High Temperature Alert"
-    if:
-      source: "switchbot"
-      conditions:
-        modelName: "WoSensorTH"
-        temperature: "> 28.0"
-    then:
-      # Use the 'log' action for clean, level-controlled logging.
-      type: "log"
-      message: "High temperature detected: {temperature}℃"
-      # Set the level to WARNING to ensure it's visible by default.
-      level: "WARNING"
-```
-
-### Advanced Example: Inter-Device Automation
-
-This example showcases the power of the new `switchbot_command` action. When a SwitchBot Contact Sensor on a door is opened, it triggers a SwitchBot Bot to press a button.
-
-```yaml
-automations:
-  - name: "Press Light Switch when Office Door Opens"
-    if:
-      source: "switchbot"
-      conditions:
-        modelName: "WoContact"
-        address: "XX:XX:XX:XX:XX:AA" # <-- Address of your Contact Sensor
-        contact_open: True
-    then:
-      # This action directly controls another SwitchBot device.
-      type: "switchbot_command"
-      address: "YY:YY:YY:YY:YY:BB" # <-- Address of your SwitchBot Bot
-      command: "press"
-```
-
-#### Advanced Example: Comparing Against the Previous State
-
-`switchbot-actions` can create automations based not just on the current state, but by comparing it against the **immediately preceding state**. This is enabled by the `previous` context, allowing for more dynamic and powerful scenarios.
-
-A great practical use case for this is detecting a button press on devices like the SwitchBot Contact Sensor or Bot. These devices expose a `button_count` attribute that increments each time the button is pressed. By checking if the current count is different from the previous one, you can reliably trigger an action on the press event itself.
-
-**Example: Turn on a light when the Contact Sensor's button is pressed**
-
-```yaml
-automations:
-  - name: "Turn on light when sensor button is pressed"
-    if:
-      source: "switchbot"
-      conditions:
-        modelName: "WoContact"
-        button_count: "!= {previous.button_count}"
-    then:
-      # In a real scenario, you would control a light here.
-      # This example sends a webhook to a smart home hub like Home Assistant.
-      type: "webhook"
-      url: "https://your-smarthome-hub/api/webhook/button_pressed"
-      method: "POST"
-      payload:
-        entity_id: "light.office_light"
-        device_address: "{address}"
-```
-
-This pattern allows you to react to discrete **events** (a state _change_), rather than just static states (a door is open/closed), making your automations more intelligent.
-
-### Detailed Reference & More Examples
-
-For a complete reference of all configuration options--including advanced automations, time-based triggers, MQTT settings, the Prometheus exporter, and logging--please see the [**Project Specification**](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).
-
-#### Using Device Aliases in `if` Blocks
-
-You can now use device aliases, defined in the top-level `devices` section, directly within the `if` block of your automations. This improves readability and maintainability by allowing you to refer to devices by a friendly name instead of their MAC address.
-
-**Example:**
-
-```yaml
-devices:
-  living-room-meter:
-    address: "11:22:33:44:55:66"
-
-automations:
-  - name: "Monitor Living Room Meter"
-    if:
-      source: "switchbot"
-      # Reference a device alias defined in the `devices` section.
-      # The `address` from `ivingroom-meter` will be automatically injected into `conditions.address`.
-      device: "living-room-meter"
-      conditions:
-        # If `address` is also specified here, the `device` alias's address
-        # will take precedence and overwrite it.
-        temperature: "> 25.0"
-        humidity: "< 60.0"
-    then:
-      type: "log"
-      level: "WARNING"
-      message: "Living room is hot and humid! ({temperature}C, {humidity}%)"
-```
-
-### Debugging Tip
-
-If your automation rules aren't working as expected, you can view detailed execution process by setting specific loggers to the DEBUG level in config.yaml.
-
-In particular, setting the **`switchbot_actions.automation`** logger to `DEBUG` will log the entire process, including the rule trigger, cooldown check, and execution of each action, which can be extremely helpful in troubleshooting.
+Create a config.yaml file. Start with this example that showcases inter-device automation: it turns on a fan only if the room is hot **and** the window is closed.
 
 ```yaml
 # config.yaml
-logging:
-  # ...
-  loggers:
-    # Adding this setting enables detailed debug logging for automations.
-    switchbot_actions.automation: "DEBUG"
+
+# 1. Define aliases for your devices for easy reference.
+devices:
+  office-meter:
+    address: "aa:bb:cc:dd:ee:ff" # Your temperature sensor's address
+  office-window:
+    address: "11:22:33:44:55:66" # Your contact sensor's address
+
+automations:
+  - name: "Turn on Fan when Hot and Window is Closed"
+    if:
+      # This rule triggers when the temperature goes above 28 degrees.
+      source: "switchbot"
+      device: "office-meter"
+      conditions:
+        temperature: "> 28.0"
+        # And at that moment, check the state of the window sensor.
+        office-window.contact_open: false
+    then:
+      # In a real scenario, you would control a fan here.
+      # This example just logs a message.
+      type: "log"
+      level: "WARNING"
+      message: "Room is hot and window is closed. Turning on fan..."
 ```
 
-### Command-Line Options
+### **3. Run**
 
-Command-line options provide a convenient way to override settings in your `config.yaml` for testing or temporary changes.
+Launch the application with your configuration. Use the --debug flag first to ensure your devices are discovered.
 
-- `--config <path>` or `-c <path>`: Path to the configuration file (default: `config.yaml`).
-- `--debug` or `-d`: Enables `DEBUG` level logging.
-- `--scan-cycle <seconds>`: Overrides the scan cycle time.
-- `--scan-duration <seconds>`: Overrides the scan duration time.
-- **Boolean Flags**: For any boolean flag like `--prometheus-exporter-enabled`, a corresponding `--no-` version is available to explicitly disable the feature, overriding any `true` setting in the configuration file.
-- And many more for MQTT, Prometheus, etc. Run `switchbot-actions --help` for a full list.
+```
+# Run with sudo if you encounter permission errors
+switchbot-actions --debug -c config.yaml
+```
 
-**Configuration Precedence**: Settings are applied in the following order of priority (later items override earlier ones):
+## **What's Possible? (More Examples)**
 
-1.  Application defaults.
-2.  `config.yaml` settings.
-3.  Command-line flags.
+switchbot-actions enables highly context-aware automations.
 
-## Robustness Features
+- **React to State Changes**: Trigger an action only when a state _changes_. This is perfect for detecting button presses.
 
-`switchbot-actions` is designed with reliability in mind, ensuring stable operation even in the face of certain issues.
+```yaml
+if:
+  source: "switchbot"
+  conditions:
+    # Triggers when the button_count is different from its previous value.
+    button_count: "!= {previous.button_count}"
+```
 
-- **Fail-Fast Startup**: The application performs critical resource checks at startup. If a required resource (e.g., the configured Prometheus port) is unavailable, the application will fail immediately with a clear error message. This prevents silent failures and ensures that any setup problems are identified immediately.
-- **Configuration Reload with Rollback**: The application supports dynamic configuration reloading by sending a `SIGHUP` signal to its process. If a new configuration contains errors or causes the reload to fail, the application will automatically attempt to roll back to the last known good configuration. This prevents service interruptions due to misconfigurations and enhances overall system stability.
+- **Time-Based Alerts**: Send a notification if a door has been left open for more than 10 minutes.
+
+```yaml
+if:
+  source: "switchbot_timer"
+  duration: "10m"
+  conditions:
+    contact_open: True
+```
+
+- **Full MQTT Integration**: Control your devices with MQTT messages from other systems.
+
+```yaml
+if:
+  source: "mqtt"
+  topic: "home/living/light/set"
+  conditions:
+    payload: "ON" # React to a simple string payload
+```
+
+**For a complete reference of all configuration options, please see the [Project Specification](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).**
+
+## **Advanced Usage**
+
+- **Running as a Service**: For continuous, 24/7 monitoring, we recommend running the application as a systemd service. View the [**Deployment Guide**](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md)).
+- **Command-Line Overrides**: You can temporarily override any setting in your config.yaml using command-line flags. Run switchbot-actions --help for a full list.
+
+## **Robustness Features**
+
+switchbot-actions is designed for reliability:
+
+- **Fail-Fast Startup**: The application performs critical resource checks at startup and exits with a clear error if a resource (e.g., a port) is unavailable.
+- **Configuration Reload with Rollback**: Send a SIGHUP signal (sudo systemctl kill -s HUP switchbot-actions.service) to reload your configuration without downtime. If the new configuration is invalid, the application automatically rolls back to the last known good state.

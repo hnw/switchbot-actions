@@ -1,9 +1,13 @@
+from unittest.mock import MagicMock, patch
+
 import aiomqtt
 import pytest
 
-from switchbot_actions.config import AutomationIf
+from switchbot_actions.config import AutomationIf, DeviceSettings
 from switchbot_actions.state import (
     StateObject,
+    StateSnapshot,
+    _EmptyState,
     create_state_object,
 )
 from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
@@ -11,6 +15,7 @@ from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
 
 @pytest.fixture
 def mock_raw_event(mock_switchbot_advertisement):
+    """Trigger device's event."""
     return mock_switchbot_advertisement(
         address="DE:AD:BE:EF:00:01",
         data={
@@ -22,6 +27,7 @@ def mock_raw_event(mock_switchbot_advertisement):
 
 @pytest.fixture
 def mock_previous_raw_event(mock_switchbot_advertisement):
+    """Trigger device's previous event."""
     return mock_switchbot_advertisement(
         address="DE:AD:BE:EF:00:01",
         data={
@@ -29,6 +35,147 @@ def mock_previous_raw_event(mock_switchbot_advertisement):
             "data": {"temperature": 25.0, "humidity": 49, "battery": 98},
         },
     )
+
+
+@pytest.fixture
+def devices_config() -> dict[str, DeviceSettings]:
+    """Fixture for device configurations with aliases."""
+    return {
+        "living_meter": DeviceSettings.model_validate({"address": "AA:BB:CC:DD:EE:FF"}),
+        "bedroom_meter": DeviceSettings.model_validate(
+            {"address": "11:22:33:44:55:66"}
+        ),
+        "unseen_meter": DeviceSettings.model_validate({"address": "66:77:88:99:AA:BB"}),
+        # This alias has the same name as a key in the trigger device's data
+        "temperature": DeviceSettings.model_validate({"address": "FF:FF:FF:FF:FF:FF"}),
+    }
+
+
+@pytest.fixture
+def raw_events(mock_switchbot_advertisement) -> dict[str, MagicMock]:
+    """Fixture for a dictionary of raw events from multiple devices."""
+    return {
+        "AA:BB:CC:DD:EE:FF": mock_switchbot_advertisement(
+            address="AA:BB:CC:DD:EE:FF",
+            data={
+                "modelName": "WoSensorTH",
+                "data": {"temperature": 22.0, "humidity": 45, "battery": 90},
+            },
+        ),
+        # Note: No event for bedroom_meter (11:22:33:44:55:66)
+        "FF:FF:FF:FF:FF:FF": mock_switchbot_advertisement(
+            address="FF:FF:FF:FF:FF:FF",
+            data={
+                "modelName": "WoSensorTH",
+                "data": {"temperature": 18.0, "humidity": 60, "battery": 80},
+            },
+        ),
+    }
+
+
+@pytest.fixture
+def snapshot(raw_events, devices_config) -> StateSnapshot:
+    """Fixture for a StateSnapshot instance."""
+    return StateSnapshot(raw_events=raw_events, devices_config=devices_config)
+
+
+class TestStateSnapshot:
+    @patch("switchbot_actions.state.create_state_object")
+    def test_getattr_lazy_loads_and_caches_state_object(
+        self, mock_create, snapshot, raw_events, devices_config
+    ):
+        """Test that getattr lazy-loads a StateObject and caches it."""
+        # First access: should create a new object
+        snapshot.living_meter
+        mock_create.assert_called_once_with(
+            raw_events[devices_config["living_meter"].address],
+            previous=None,
+            snapshot=snapshot,
+        )
+
+        # Second access: should not create a new object
+        mock_create.reset_mock()
+        snapshot.living_meter
+        mock_create.assert_not_called()
+
+    def test_getattr_raises_attribute_error_for_unknown_alias(self, snapshot):
+        """Test that accessing an unconfigured alias raises an AttributeError."""
+        with pytest.raises(
+            AttributeError,
+            match="^'StateSnapshot' object has no attribute 'unknown_device'$",
+        ):
+            _ = snapshot.unknown_device
+
+    def test_getattr_returns_empty_state_for_missing_raw_event(self, snapshot):
+        """Test that accessing a configured alias with no event returns EmptyState."""
+        result = snapshot.bedroom_meter
+        assert isinstance(result, _EmptyState)
+
+
+class TestStateObjectFormatting:
+    def test_format_cross_device_access(self, mock_raw_event, snapshot):
+        """Test formatting with placeholders for other devices."""
+        state_object = create_state_object(mock_raw_event, snapshot=snapshot)
+        template = (
+            "Trigger temp: {temperature}, Living temp: {living_meter.temperature}."
+        )
+        expected = "Trigger temp: 25.5, Living temp: 22.0."
+        assert state_object.format(template) == expected
+
+    def test_format_name_resolution_priority(
+        self, mock_raw_event, mock_previous_raw_event, snapshot
+    ):
+        """Test that placeholder resolution follows the specified priority."""
+        previous_state = create_state_object(mock_previous_raw_event, snapshot=snapshot)
+        state_object = create_state_object(
+            mock_raw_event, previous=previous_state, snapshot=snapshot
+        )
+
+        # 1. 'previous' keyword has top priority
+        template = "Temp changed from {previous.temperature}."
+        assert state_object.format(template) == "Temp changed from 25.0."
+
+        # 2. Trigger's own key is preferred over a device alias with the same name
+        template = "Current temperature is {temperature}."
+        assert state_object.format(template) == "Current temperature is 25.5."
+
+        # 3. Device alias is used when no other key matches
+        template = "Living room humidity is {living_meter.humidity}."
+        assert state_object.format(template) == "Living room humidity is 45."
+
+    def test_format_raises_value_error_for_non_existent_device_or_attribute(
+        self, mock_raw_event, snapshot
+    ):
+        """Test that accessing non-existent devices or attributes
+        raises a ValueError."""
+        state_object = create_state_object(mock_raw_event, snapshot=snapshot)
+
+        # Access a valid attribute of a non-existent device
+        template = "{non_existent_device.temperature}"
+        with pytest.raises(
+            ValueError,
+            match=(
+                "^Placeholder 'non_existent_device' could not be resolved. "
+                "The key name is likely incorrect.$"
+            ),
+        ):
+            state_object.format(template)
+
+        # Access a non-existent attribute of a valid device
+        template = "{living_meter.non_existent_attribute}"
+        with pytest.raises(
+            ValueError,
+            match=(
+                "^Invalid attribute access in placeholder: 'SwitchBotState' "
+                "object has no attribute 'non_existent_attribute'$"
+            ),
+        ):
+            state_object.format(template)
+
+        # Test accessing a configured device for which no data is yet available.
+        template = "{unseen_meter.temperature}"
+        # This case should return an empty string due to _EmptyState's behavior
+        assert state_object.format(template) == ""
 
 
 def test_state_object_attribute_access(mock_raw_event, mock_previous_raw_event):
@@ -387,3 +534,23 @@ def test_check_conditions_combined_conditions(sample_state: StateObject):
     )
     trigger = EdgeTrigger(if_config)
     assert trigger._check_all_conditions(sample_state) is None
+
+
+def test_check_conditions_invalid_operator(sample_state: StateObject):
+    """Test that an invalid operator returns False."""
+    sample_state._cached_values = {"temperature": 25.0}
+    if_config = AutomationIf(
+        source="switchbot", conditions={"temperature": "invalid_op 20"}
+    )
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False
+
+
+def test_check_conditions_invalid_value_type(sample_state: StateObject):
+    """Test that a condition with a non-comparable value returns False."""
+    sample_state._cached_values = {"temperature": 25.0}
+    if_config = AutomationIf(
+        source="switchbot", conditions={"temperature": "> non_numeric_value"}
+    )
+    trigger = EdgeTrigger(if_config)
+    assert trigger._check_all_conditions(sample_state) is False

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from switchbot_actions.config import AutomationIf as ConditionBlock
-from switchbot_actions.state import StateObject
+from switchbot_actions.state import StateObject, _EmptyState
 from switchbot_actions.triggers import (
     DurationTrigger,
     EdgeTrigger,
@@ -343,3 +343,247 @@ class TestDurationTrigger:
             await trigger.process_state(mock_state_object)
             mock_action.assert_not_called()
             assert mock_state_object.id not in trigger._active_timers
+
+
+# 3.3. Test of _evaluate_single_condition
+@pytest.mark.parametrize(
+    "condition, new_value, expected",
+    [
+        # Integer comparisons
+        ("== 10", 10, True),
+        ("== 10", 11, False),
+        ("!= 10", 11, True),
+        ("> 5", 10, True),
+        ("< 15", 10, True),
+        (">= 10", 10, True),
+        ("<= 10", 10, True),
+        # Float comparisons
+        ("== 10.5", 10.5, True),
+        ("> 10.0", 10.5, True),
+        # String comparisons
+        ("== hello", "hello", True),
+        ("!= world", "hello", True),
+        # Boolean comparisons
+        ("== true", True, True),
+        ("== false", False, True),
+        ("== true", False, False),
+        ("!= true", False, True),
+        # Implicit ==
+        ("10", 10, True),
+        ("hello", "hello", True),
+        ("true", True, True),
+        # Type mismatch
+        ("== 10", "hello", False),
+        # None value
+        ("== 10", None, False),
+    ],
+)
+def test_evaluate_single_condition(condition, new_value, expected):
+    from switchbot_actions.triggers import _evaluate_single_condition
+
+    assert _evaluate_single_condition(condition, new_value) == expected
+
+
+@pytest.fixture
+def mock_state_with_snapshot(mock_state_object):
+    """A mock state object that has a snapshot of other devices."""
+    living_meter_state = MagicMock(spec=StateObject)
+    living_meter_state.temperature = 26.0
+    living_meter_state.humidity = 40.0
+    living_meter_state.format.side_effect = lambda x: x
+
+    empty_state_device = _EmptyState()
+
+    # Use a simple object to simulate the snapshot, allowing attribute access.
+    # This correctly simulates the production environment where snapshot is an object,
+    # not a dict, fixing the bug where tests passed while production failed.
+    class Snapshot:
+        living_meter: StateObject
+        empty_device: StateObject
+        pass
+
+    snapshot = Snapshot()
+    snapshot.living_meter = living_meter_state
+    snapshot.empty_device = empty_state_device
+
+    mock_state_object.snapshot = snapshot
+    # The triggering device's own state
+    mock_state_object.id = "trigger_device"
+    mock_state_object.button_pressed = True
+
+    return mock_state_object
+
+
+class TestCheckAllConditionsWithCrossDeviceState:
+    """Tests for _check_all_conditions with cross-device state access."""
+
+    def test_cross_device_condition_success(self, mock_state_with_snapshot):
+        """Test a successful condition check using another device's state."""
+        conditions = {"living_meter.temperature": "> 25.0"}
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is True
+
+    def test_cross_device_condition_failure(self, mock_state_with_snapshot):
+        """Test a failing condition check using another device's state."""
+        conditions = {"living_meter.temperature": "< 25.0"}
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is False
+
+    def test_combined_local_and_cross_device_conditions_success(
+        self, mock_state_with_snapshot
+    ):
+        """Test local and cross-device conditions that should succeed."""
+        conditions = {
+            "button_pressed": "== true",
+            "living_meter.temperature": "> 25.0",
+        }
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is True
+
+    def test_combined_local_and_cross_device_conditions_failure(
+        self, mock_state_with_snapshot
+    ):
+        """Test a combination of local and cross-device conditions that should fail."""
+        conditions = {
+            "button_pressed": "== true",
+            "living_meter.temperature": "< 25.0",  # This part fails
+        }
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is False
+
+    def test_undefined_alias_returns_false_and_logs_warning(
+        self, mock_state_with_snapshot, caplog
+    ):
+        """Test that an undefined alias in a condition evaluates to False."""
+        conditions = {"non_existent_alias.temperature": "> 20.0"}
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+
+        with caplog.at_level("WARNING"):
+            result = trigger._check_all_conditions(mock_state_with_snapshot)
+            assert result is False
+            assert "Rule 'TestRule'" in caplog.text
+            assert (
+                "Condition key 'non_existent_alias.temperature' is invalid"
+                in caplog.text
+            )
+
+    def test_undefined_attribute_returns_false_and_logs_warning(
+        self, mock_state_with_snapshot, caplog
+    ):
+        """Test that an undefined attribute for a valid alias evaluates to False."""
+        conditions = {"living_meter.non_existent_attr": "== 123"}
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+
+        with caplog.at_level("WARNING"):
+            result = trigger._check_all_conditions(mock_state_with_snapshot)
+            assert result is False
+            assert "Rule 'TestRule'" in caplog.text
+            assert (
+                "Condition key 'living_meter.non_existent_attr' is invalid"
+                in caplog.text
+            )
+
+    def test_alias_with_empty_state_returns_false(
+        self, mock_state_with_snapshot, caplog
+    ):
+        """Test condition on device with no data (_EmptyState) evaluates to False."""
+        conditions = {"empty_device.temperature": "> 20.0"}
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule"
+        mock_if_config.conditions = conditions
+        trigger = EdgeTrigger(mock_if_config)
+
+        with caplog.at_level("WARNING"):
+            result = trigger._check_all_conditions(mock_state_with_snapshot)
+            assert result is False
+            assert "Rule 'TestRule'" in caplog.text
+            assert "Condition key 'empty_device.temperature' is invalid" in caplog.text
+
+
+class TestCheckAllConditionsWithDeviceKey:
+    """
+    Tests for composite conditions involving the 'device' key and cross-device
+    state references ('alias.attribute'), as specified in the SOW.
+    """
+
+    @pytest.fixture
+    def trigger(self, mock_state_with_snapshot):
+        """
+        Sets up a trigger where the rule is for 'trigger_device' and has
+        conditions that reference 'living_meter'.
+        """
+        # This state is for "trigger_device"
+        assert mock_state_with_snapshot.id == "trigger_device"
+        assert mock_state_with_snapshot.button_pressed is True
+        # The other device "living_meter" has temperature 26.0
+        assert mock_state_with_snapshot.snapshot.living_meter.temperature == 26.0
+
+        mock_if_config = MagicMock(spec=ConditionBlock)
+        mock_if_config.name = "TestRule with device key"
+        # The 'device' key in the config determines which state object
+        # triggers the rule.
+        # The test setup simulates that this routing has already happened, and we are
+        # now inside the trigger's logic.
+        mock_if_config.device = "trigger_device"
+        return EdgeTrigger(mock_if_config)
+
+    def test_composite_condition_success(self, trigger, mock_state_with_snapshot):
+        """
+        SOW Success Case: `device:` key matches the triggering device, and the
+        `alias.attribute` condition is also met. The rule should evaluate to True.
+        """
+        trigger._if_config.conditions = {
+            "button_pressed": "== true",  # Condition on the triggering device
+            "living_meter.temperature": "> 25.0",  # Condition on another device
+        }
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is True
+
+    def test_composite_condition_failure_cross_device(
+        self, trigger, mock_state_with_snapshot
+    ):
+        """
+        SOW Failure Case 1: `device:` key matches, but the `alias.attribute`
+        condition is not met. The rule should evaluate to False.
+        """
+        trigger._if_config.conditions = {
+            "button_pressed": "== true",
+            "living_meter.temperature": "< 25.0",  # This cross-device condition fails
+        }
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is False
+
+    def test_composite_condition_failure_trigger_device(
+        self, trigger, mock_state_with_snapshot
+    ):
+        """
+        Another failure case: The cross-device condition is met, but the
+        triggering device's own condition is not. The rule should evaluate to False.
+        """
+        trigger._if_config.conditions = {
+            "button_pressed": "== false",  # This condition on the trigger device fails
+            "living_meter.temperature": "> 25.0",
+        }
+        assert trigger._check_all_conditions(mock_state_with_snapshot) is False
+
+    # SOW Failure Case 2 (alias.attribute met, but trigger device is wrong)
+    # cannot be tested at the `Trigger` level. That logic resides in a higher-level
+    # component (e.g., ActionRunner) that is responsible for routing state updates
+    # to the correct trigger based on the `device` key. If the device doesn't
+    # match, `process_state` would not even be called on this trigger instance.

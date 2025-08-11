@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Generic, Optional, TypeVar, cast
 
 from .config import AutomationIf
-from .state import StateObject
+from .state import StateObject, _EmptyState
 from .timers import Timer
 
 logger = logging.getLogger("switchbot_actions.automation")
@@ -66,17 +66,49 @@ class Trigger(ABC, Generic[T]):
         for key, condition_value in self._if_config.conditions.items():
             target_obj = state
             attr_name = key
+            value_to_check = None
 
-            if key.startswith("previous."):
-                if state.previous is None:
-                    return False  # previous state required but not available
-                target_obj = state.previous
-                attr_name = key.split(".", 1)[1]
+            if "." in key:
+                # Cross-device state reference, e.g., "living_meter.temperature"
+                # or "previous.temperature"
+                alias, new_attr_name = key.split(".", 1)
 
-            try:
-                value_to_check = getattr(target_obj, attr_name)
-            except AttributeError:
-                return None  # Attribute not found on state or previous state
+                if alias == "previous":
+                    if state.previous is None:
+                        return False  # previous state required but not available
+                    target_obj = state.previous
+                    attr_name = new_attr_name
+                    try:
+                        value_to_check = getattr(target_obj, attr_name)
+                    except AttributeError:
+                        return None  # Attribute not found on previous state
+                else:
+                    # It's a cross-device reference
+                    target_device_state = getattr(state.snapshot, alias, None)
+                    is_invalid = False
+                    if target_device_state is None:
+                        is_invalid = True
+                    elif isinstance(target_device_state, _EmptyState):
+                        is_invalid = True
+                    elif not hasattr(target_device_state, new_attr_name):
+                        is_invalid = True
+
+                    if is_invalid:
+                        logger.warning(
+                            f"Rule '{self._if_config.name}': Condition key '{key}' is "
+                            "invalid because the alias is not defined, "
+                            "the device has no state, "
+                            "or the attribute does not exist. Skipping condition."
+                        )
+                        return False  # Treat as condition not met
+
+                    value_to_check = getattr(target_device_state, new_attr_name)
+            else:
+                # Single device state reference (the triggering device)
+                try:
+                    value_to_check = getattr(state, key)
+                except AttributeError:
+                    return None  # Attribute not found on state
 
             # Format the condition value string (RHS) using the current state
             formatted_condition_value = state.format(str(condition_value))
@@ -155,6 +187,18 @@ class DurationTrigger(Trigger[T]):
         try:
             if self._action:
                 await self._action(state)
+        except Exception as e:
+            if isinstance(e, ValueError):
+                logger.error(
+                    f"Rule '{self._if_config.name}': Failed to execute action "
+                    f"due to a template error: {e}"
+                )
+            else:
+                logger.error(
+                    f"Rule '{self._if_config.name}': An unexpected error occurred "
+                    "during action execution.",
+                    exc_info=True,
+                )
         finally:
             if state.id in self._active_timers:
                 del self._active_timers[state.id]  # Clear the timer after execution

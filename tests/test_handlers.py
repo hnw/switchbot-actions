@@ -22,6 +22,7 @@ def state_store():
     mock_store = AsyncMock(spec=StateStore)
     mock_store.get.return_value = None  # Default for build_state_with_previous
     mock_store.get_and_update.return_value = None  # Ensure previous_raw_event is None
+    mock_store.get_all = AsyncMock(return_value={})  # Mock get_all method
     return mock_store
 
 
@@ -359,11 +360,12 @@ async def test_run_switchbot_runners_handles_exceptions(
         # Assert that the exception was logged
         assert len(caplog.records) == 1
         assert (
-            "An action runner failed with an exception: Test exception" in caplog.text
+            "Failed to execute action due to a template error: Test exception"
+            in caplog.text
         )
         assert caplog.records[0].levelname == "ERROR"
         assert (
-            "An action runner failed with an exception: Test exception"
+            "Failed to execute action due to a template error: Test exception"
             in caplog.records[0].message
         )
 
@@ -413,10 +415,11 @@ async def test_run_mqtt_runners_handles_exceptions(
         # Assert that the exception was logged
         assert len(caplog.records) == 1
         assert (
-            "An action runner failed with an exception: Test exception" in caplog.text
+            "Failed to execute action due to a template error: Test exception"
+            in caplog.text
         )
         assert caplog.records[0].levelname == "ERROR"
         assert (
-            "An action runner failed with an exception: Test exception"
+            "Failed to execute action due to a template error: Test exception"
             in caplog.records[0].message
         )

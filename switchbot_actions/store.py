@@ -43,7 +43,7 @@ class StateStore:
             logger.debug(f"State atomically retrieved and updated for key {key}")
             return old_raw_event
 
-    async def get_all_states(self) -> dict[str, RawStateEvent]:
+    async def get_all(self) -> dict[str, RawStateEvent]:
         """
         Retrieves a copy of the raw events of all entities.
         """
