@@ -37,7 +37,7 @@ def initial_settings():
         "mqtt": {"host": "localhost", "port": 1883},
         "prometheus_exporter": {"enabled": True, "port": 8000},
         "automations": [mock_rule],
-        "devices": {"test_device": {"address": "xx:xx:xx:xx:xx:xx"}},
+        "devices": {"test_device": {"address": "AA:BB:CC:DD:EE:FF"}},
     }
     return AppSettings.model_validate(settings_dict)
 

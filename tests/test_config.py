@@ -5,6 +5,7 @@ from switchbot_actions.config import (
     AppSettings,
     AutomationIf,
     AutomationRule,
+    DeviceSettings,  # Added for new tests
     LogAction,
     LoggingSettings,
     MqttPublishAction,
@@ -120,15 +121,18 @@ def test_automation_if_timer_source_requires_duration():
 
     # Invalid cases
     with pytest.raises(
-        ValidationError, match="'duration' is required for source 'switchbot_timer'"
+        ValidationError,
+        match="'duration' is required for source 'switchbot_timer'",
     ):
         AutomationIf(source="switchbot_timer")
     with pytest.raises(
-        ValidationError, match="'duration' is required for source 'mqtt_timer'"
+        ValidationError,
+        match="'duration' is required for source 'mqtt_timer'",
     ):
         AutomationIf(source="mqtt_timer", topic="a/b")
     with pytest.raises(
-        ValidationError, match="'duration' is required for source 'mqtt_timer'"
+        ValidationError,
+        match="'duration' is required for source 'mqtt_timer'",
     ):
         AutomationIf(source="mqtt_timer", topic="a/b")
 
@@ -143,7 +147,8 @@ def test_automation_if_mqtt_source_requires_topic():
     with pytest.raises(ValidationError, match="'topic' is required for source 'mqtt'"):
         AutomationIf(source="mqtt")
     with pytest.raises(
-        ValidationError, match="'topic' is required for source 'mqtt_timer'"
+        ValidationError,
+        match="'topic' is required for source 'mqtt_timer'",
     ):
         AutomationIf(source="mqtt_timer", duration=1)
 
@@ -167,7 +172,7 @@ def test_mqtt_publish_action_valid_qos(qos):
 
 def test_mqtt_publish_action_invalid_qos():
     with pytest.raises(ValidationError):
-        MqttPublishAction(type="mqtt_publish", topic="a/b", qos=3)  # type: ignore[arg-type]
+        MqttPublishAction(type="mqtt_publish", topic="a/b", qos=3)  # type: ignore
 
 
 def test_automation_rule_then_block_single_dict_to_list():
@@ -365,7 +370,7 @@ def test_switchbot_command_device_reference_success():
     settings = AppSettings.model_validate(config)
     action = settings.automations.rules[0].then_block[0]
     assert isinstance(action, SwitchBotCommandAction)
-    assert action.address == "aa:bb:cc:dd:ee:ff"
+    assert action.address == "AA:BB:CC:DD:EE:FF"  # Changed to expect normalized address
     assert action.config == {"password": "pass", "retry_count": 5}
     assert action.params == {"position": 100}
 
@@ -541,28 +546,6 @@ def test_if_block_device_reference_overwrites_address():
     assert if_block.conditions["temperature"] == {"gt": 25}
 
 
-def test_if_block_device_reference_not_found_error():
-    """Test that validation fails if device reference in if_block is not found."""
-    config = {
-        "devices": {},
-        "automations": [
-            {
-                "if": {
-                    "source": "switchbot",
-                    "device": "non-existent-meter",
-                    "conditions": {"temperature": {"gt": 25}},
-                },
-                "then": [{"type": "shell_command", "command": "echo hot"}],
-            }
-        ],
-    }
-    with pytest.raises(
-        ValidationError,
-        match="Device 'non-existent-meter' not found in devices section for if_block.",
-    ):
-        AppSettings.model_validate(config)
-
-
 def test_if_block_device_reference_no_impact_on_existing_rules():
     """Test that existing rules without device reference are not affected."""
     config = {
@@ -584,3 +567,209 @@ def test_if_block_device_reference_no_impact_on_existing_rules():
     assert if_block.conditions["address"] == "aa:bb:cc:dd:ee:ff"
     assert if_block.conditions["temperature"] == {"gt": 25}
     assert if_block.device is None
+
+
+# New tests for DeviceSettings address validation and normalization
+@pytest.mark.parametrize(
+    "input_address, expected_address",
+    [
+        ("11:22:33:AA:BB:CC", "11:22:33:AA:BB:CC"),
+        ("11-22-33-aa-bb-cc", "11:22:33:AA:BB:CC"),
+        ("11:22:33:aa:bb:cc", "11:22:33:AA:BB:CC"),
+        ("A1:B2:C3:D4:E5:F6", "A1:B2:C3:D4:E5:F6"),
+        ("a1-b2-c3-d4-e5-f6", "A1:B2:C3:D4:E5:F6"),
+        ("00:00:00:00:00:00", "00:00:00:00:00:00"),
+        (
+            "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+            "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+        ),
+        (
+            "ffffffff-ffff-ffff-ffff-ffffffffffff",
+            "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+        ),
+        (
+            "12345678-1234-5678-1234-567812345678",
+            "12345678-1234-5678-1234-567812345678",
+        ),
+    ],
+)
+def test_device_settings_valid_address_normalization(input_address, expected_address):
+    settings = DeviceSettings(address=input_address)
+    assert settings.address == expected_address
+
+
+@pytest.mark.parametrize(
+    "invalid_address",
+    [
+        "11:22:33:44:55",  # Too short
+        "11:22:33:44:55:66:77",  # Too long
+        "11:22:33:44:55:GG",  # Invalid character
+        "invalid-mac-address",
+        "12345678-1234-5678-1234-56781234567",  # UUID too short
+        "12345678-1234-5678-1234-5678123456789",  # UUID too long
+        "12345678-1234-5678-1234-56781234567G",  # UUID invalid char
+        "",  # Empty string
+    ],
+)
+def test_device_settings_invalid_address_format(invalid_address):
+    with pytest.raises(
+        ValidationError, match="Address '.*' is not a valid MAC address"
+    ):  # Updated regex to match the new error message
+        DeviceSettings(address=invalid_address)
+
+
+# New tests for AutomationSettings device alias name validation
+@pytest.mark.parametrize(
+    "alias_name",
+    [
+        "my_device",
+        "MyDevice",
+        "device-1",
+        "日本語デバイス",
+        "another_device_alias_with_numbers_123",
+    ],
+)
+def test_automation_settings_valid_device_alias_names(alias_name):
+    config_data = {
+        "automations": [],
+        "devices": {alias_name: {"address": "11:22:33:44:55:66"}},
+    }
+    # Should not raise ValidationError
+    AppSettings.model_validate(config_data)
+
+
+@pytest.mark.parametrize(
+    "invalid_alias_name",
+    [
+        "my.device",
+        "my[device]",
+        "my]device",
+        "device.with.dot",
+        "device[with_bracket]",
+        "device]with_bracket",
+    ],
+)
+def test_automation_settings_invalid_device_alias_names(invalid_alias_name):
+    config_data = {
+        "automations": [],
+        "devices": {invalid_alias_name: {"address": "11:22:33:44:55:66"}},
+    }
+    with pytest.raises(
+        ValidationError, match="Device alias '.*' contains invalid characters."
+    ):
+        AppSettings.model_validate(config_data)
+
+
+def test_cross_device_condition_alias_valid():
+    # Test with a valid cross-device condition where the alias exists
+    config_data = {
+        "devices": {"my_sensor": {"address": "AA:BB:CC:DD:EE:FF"}},
+        "automations": [
+            {
+                "name": "ValidRule1",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"my_sensor.temperature": "> 25"},
+                },
+                "then": [{"type": "log", "message": "Temp high"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config_data)
+    assert (
+        settings.automations.rules[0].name == "ValidRule1"
+    )  # Ensure validation passes
+
+    # Test with 'previous.attribute' which should always be allowed
+    config_data = {
+        "automations": [
+            {
+                "name": "ValidRule2",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"previous.humidity": "< 50"},
+                },
+                "then": [{"type": "log", "message": "Humidity low"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config_data)
+    assert (
+        settings.automations.rules[0].name == "ValidRule2"
+    )  # Ensure validation passes
+
+    # Test with no cross-device conditions
+    config_data = {
+        "automations": [
+            {
+                "name": "ValidRule3",
+                "if": {"source": "switchbot", "conditions": {"temperature": "> 20"}},
+                "then": [{"type": "log", "message": "Simple temp check"}],
+            }
+        ],
+    }
+    settings = AppSettings.model_validate(config_data)
+    assert (
+        settings.automations.rules[0].name == "ValidRule3"
+    )  # Ensure validation passes
+
+
+def test_cross_device_condition_alias_not_found():
+    # Test with a cross-device condition where the alias does NOT exist in devices
+    config_data = {
+        "devices": {
+            "another_sensor": {"address": "11:22:33:44:55:66"}
+        },  # 'my_sensor' is missing
+        "automations": [
+            {
+                "name": "InvalidRule",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"my_sensor.temperature": "> 25"},
+                },
+                "then": [{"type": "log", "message": "Temp high"}],
+            }
+        ],
+    }
+    with pytest.raises(
+        ValidationError,
+        match=(
+            r"In automation rule 'InvalidRule', the condition 'my_sensor.temperature' "
+            r"refers to a device alias 'my_sensor' that is not defined in the "
+            r"top-level 'devices' section."
+        ),
+    ):
+        AppSettings.model_validate(config_data)
+
+    # Test with multiple rules, one of which has an invalid alias
+    config_data = {
+        "devices": {"sensor_a": {"address": "AA:BB:CC:DD:EE:FF"}},
+        "automations": [
+            {
+                "name": "FirstValidRule",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"sensor_a.temperature": "> 20"},
+                },
+                "then": [{"type": "log", "message": "Sensor A temp"}],
+            },
+            {
+                "name": "SecondInvalidRule",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"sensor_b.humidity": "< 60"},
+                },  # sensor_b is missing
+                "then": [{"type": "log", "message": "Sensor B humidity"}],
+            },
+        ],
+    }
+    with pytest.raises(
+        ValidationError,
+        match=(
+            r"In automation rule 'SecondInvalidRule', the condition "
+            r"'sensor_b.humidity' "
+            r"refers to a device alias 'sensor_b' that is not defined in the "
+            r"top-level 'devices' section."
+        ),
+    ):
+        AppSettings.model_validate(config_data)

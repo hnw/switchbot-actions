@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
@@ -7,6 +8,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PrivateAttr,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -28,6 +30,38 @@ class BaseConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DeviceSettings(BaseConfigModel):
+    address: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("address")
+    @classmethod
+    def validate_and_normalize_address(cls, v: str) -> str:
+        """
+        Validates that the address is a valid MAC address or UUID,
+        and normalizes it to a canonical format.
+        """
+        # Regex for MAC addresses (colon/hyphen separated, case-insensitive)
+        mac_regex = re.compile(r"^([0-9a-f]{2}[:-]){5}([0-9a-f]{2})$", re.IGNORECASE)
+        # Regular expression for UUIDs (case-insensitive)
+        uuid_regex = re.compile(
+            r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$", re.IGNORECASE
+        )
+
+        if mac_regex.match(v):
+            # For MAC addresses, convert to uppercase and unify hyphens to colons
+            return v.upper().replace("-", ":")
+
+        if uuid_regex.match(v):
+            # For UUIDs, convert to uppercase
+            return v.upper()
+
+        raise ValueError(
+            f"Address '{v}' is not a valid MAC address "
+            "(e.g., '11:22:33:AA:BB:CC') or UUID (for macOS)."
+        )
+
+
 class MqttSettings(BaseConfigModel):
     host: str
     port: int = Field(1883, ge=1, le=65535)
@@ -40,6 +74,7 @@ class PrometheusExporterSettings(BaseConfigModel):
     enabled: bool = False
     port: int = Field(8000, ge=1, le=65535)
     target: Dict[str, Any] = Field(default_factory=dict)
+    devices: Dict[str, DeviceSettings] = Field(default_factory=dict)
 
 
 class ScannerSettings(BaseConfigModel):
@@ -126,11 +161,6 @@ class MqttPublishAction(BaseConfigModel):
     retain: bool = False
 
 
-class DeviceSettings(BaseConfigModel):
-    address: str
-    config: Dict[str, Any] = Field(default_factory=dict)
-
-
 class SwitchBotCommandAction(BaseConfigModel):
     type: Literal["switchbot_command"]
     device: Optional[str] = None  # Reference to a device in the top-level devices map
@@ -192,6 +222,26 @@ class AutomationSettings(BaseConfigModel):
     rules: List[AutomationRule] = Field(default_factory=list)
     devices: Dict[str, DeviceSettings] = Field(default_factory=dict)
 
+    @field_validator("devices")
+    @classmethod
+    def validate_device_alias_names(
+        cls, v: Dict[str, DeviceSettings]
+    ) -> Dict[str, DeviceSettings]:
+        """
+        Validates that device alias names do not contain characters that conflict
+        with the string formatter syntax (e.g., '.', '[', ']').
+        """
+        # Forbidden characters that conflict with formatter syntax
+        FORBIDDEN_CHARS = [".", "[", "]"]
+
+        for alias in v.keys():
+            if any(char in alias for char in FORBIDDEN_CHARS):
+                raise ValueError(
+                    f"Device alias '{alias}' contains invalid characters. "
+                    f"Dots (.) and square brackets ([]) are not allowed."
+                )
+        return v
+
 
 class AppSettings(BaseConfigModel):
     config_path: str = "config.yaml"
@@ -211,10 +261,12 @@ class AppSettings(BaseConfigModel):
             automations_data = {}
             if "automations" in data:
                 automations_data["rules"] = data.pop("automations")
-            if "devices" in data:
-                automations_data["devices"] = data.pop("devices")
-            if automations_data:
+                if "devices" in data:
+                    automations_data["devices"] = data.pop("devices")
                 data["automations"] = automations_data
+            if "prometheus_exporter" in data and "devices" in data:
+                data["prometheus_exporter"]["devices"] = data.pop("devices")
+
         return data
 
     @model_validator(mode="after")
@@ -254,4 +306,63 @@ class AppSettings(BaseConfigModel):
                         f"for if_block."
                     )
                 rule.if_block.conditions["address"] = device_settings.address
+        return self
+
+    @model_validator(mode="after")
+    def validate_cross_device_condition_aliases(self) -> "AppSettings":
+        """
+        Validates that any device alias used in a cross-device condition
+        (e.g., 'alias.attribute') is defined in the top-level 'devices' section.
+        """
+        if not self.automations or not self.automations.devices:
+            # No check needed if there is no devices section
+            return self
+
+        defined_aliases = self.automations.devices.keys()
+        errors = []
+
+        for i, rule in enumerate(self.automations.rules):
+            # Ensure rule.if_block and rule.if_block.conditions exist before iterating
+            if not rule.if_block or not rule.if_block.conditions:
+                continue
+
+            for condition_key in rule.if_block.conditions.keys():
+                if "." not in condition_key:
+                    continue  # Skip if not a cross-device condition
+
+                alias, attribute = condition_key.split(".", 1)
+
+                if alias == "previous":
+                    # 'previous' is a special keyword, so skip
+                    continue
+
+                if alias not in defined_aliases:
+                    msg = (
+                        f"In automation rule '{rule.name}', the condition "
+                        f"'{condition_key}' refers to a device alias '{alias}' "
+                        "that is not defined in the top-level 'devices' section."
+                    )
+                    exc = ValueError(msg)
+
+                    errors.append(
+                        {
+                            "type": "value_error",
+                            "loc": (
+                                "automations",
+                                "rules",
+                                i,
+                                "if",
+                                "conditions",
+                                condition_key,
+                            ),
+                            "msg": msg,
+                            "ctx": {"error": exc},
+                        }
+                    )
+
+        if errors:
+            raise ValidationError.from_exception_data(
+                title=self.__class__.__name__, line_errors=errors
+            )
+
         return self
