@@ -27,7 +27,7 @@ def cleanup_registry():
     ]
     collectors = list(REGISTRY._collector_to_names.keys())
     for collector in collectors:
-        if hasattr(collector, "_name") and collector._name in metric_names_to_remove:  # type: ignore[attr-defined]
+        if hasattr(collector, "_name") and collector._name in metric_names_to_remove:  # pyright:ignore[reportAttributeAccessIssue]
             REGISTRY.unregister(collector)
 
 
@@ -57,6 +57,64 @@ def mock_state_2(mock_switchbot_advertisement):
     )
 
 
+@pytest.fixture
+def mock_state_unconfigured(mock_switchbot_advertisement):
+    return mock_switchbot_advertisement(
+        address="AA:BB:CC:DD:EE:FF",
+        rssi=-70,
+        data={"modelName": "Bot", "data": {"battery": 100}},
+    )
+
+
+@pytest.fixture
+def configured_exporter_settings():
+    return PrometheusExporterSettings(
+        enabled=True,
+        devices={
+            "living_room_meter": {"address": "DE:AD:BE:EF:33:33"},
+            "bedroom_bot": {"address": "DE:AD:BE:EF:44:44"},
+        },
+    )  # pyright:ignore[reportCallIssue]
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.exporter.start_http_server")
+async def test_info_metric_initialization(
+    mock_start_http_server, configured_exporter_settings, test_registry
+):
+    """Test that switchbot_device_info is initialized correctly at startup."""
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    exporter = PrometheusExporter(
+        settings=configured_exporter_settings, registry=test_registry
+    )
+    await exporter.start()
+
+    # Verify initial state for living_room_meter
+    info_value_lr = test_registry.get_sample_value(
+        "switchbot_device_info",
+        labels={
+            "address": "DE:AD:BE:EF:33:33",
+            "name": "living_room_meter",
+            "model": "Unknown",
+        },
+    )
+    assert info_value_lr == 1.0
+
+    # Verify initial state for bedroom_bot
+    info_value_bb = test_registry.get_sample_value(
+        "switchbot_device_info",
+        labels={
+            "address": "DE:AD:BE:EF:44:44",
+            "name": "bedroom_bot",
+            "model": "Unknown",
+        },
+    )
+    assert info_value_bb == 1.0
+
+    await exporter.stop()
+
+
 @pytest.mark.asyncio
 @patch("switchbot_actions.exporter.start_http_server")
 async def test_exporter_handle_advertisement(
@@ -65,7 +123,7 @@ async def test_exporter_handle_advertisement(
     """Test that the exporter correctly handles an advertisement and updates gauges."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
 
-    settings = PrometheusExporterSettings(enabled=True)  # type: ignore[call-arg]
+    settings = PrometheusExporterSettings(enabled=True)  # pyright:ignore[reportCallIssue]
     exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
     await exporter.start()  # Await the start method
@@ -94,13 +152,61 @@ async def test_exporter_handle_advertisement(
 
 @pytest.mark.asyncio
 @patch("switchbot_actions.exporter.start_http_server")
+async def test_info_metric_update_on_advertisement(
+    mock_start_http_server,
+    configured_exporter_settings,
+    mock_state_1,
+    mock_state_unconfigured,
+    test_registry,
+):
+    """Test that info metric is updated and unconfigured devices are ignored."""
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    exporter = PrometheusExporter(
+        settings=configured_exporter_settings, registry=test_registry
+    )
+    await exporter.start()
+
+    # Send advertisement for a configured device (mock_state_1)
+    switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
+
+    # Verify that the model name is updated for mock_state_1
+    info_value_updated = test_registry.get_sample_value(
+        "switchbot_device_info",
+        labels={
+            "address": "DE:AD:BE:EF:33:33",
+            "name": "living_room_meter",
+            "model": "WoSensorTH",
+        },
+    )
+    assert info_value_updated == 1.0
+
+    # Send advertisement for an unconfigured device (mock_state_unconfigured)
+    switchbot_advertisement_received.send(exporter, new_state=mock_state_unconfigured)
+
+    # Verify that no info metric is created for the unconfigured device
+    info_value_unconfigured = test_registry.get_sample_value(
+        "switchbot_device_info",
+        labels={
+            "address": "AA:BB:CC:DD:EE:FF",
+            "name": "",  # Name will be empty as it's not in the map
+            "model": "Bot",
+        },
+    )
+    assert info_value_unconfigured is None
+
+    await exporter.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.exporter.start_http_server")
 async def test_metric_filtering(mock_start_http_server, mock_state_1, test_registry):
     """Test that metrics are filtered based on the target config."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
 
     settings = PrometheusExporterSettings(
         enabled=True, target={"metrics": ["temperature", "battery"]}
-    )  # type: ignore[call-arg]
+    )  # pyright:ignore[reportCallIssue]
     exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
     await exporter.start()  # Await the start method
@@ -138,7 +244,7 @@ async def test_address_filtering(
     settings = PrometheusExporterSettings(
         enabled=True,
         target={"addresses": ["DE:AD:BE:EF:44:44"]},  # only mock_state_2
-    )  # type: ignore[call-arg]
+    )  # pyright:ignore[reportCallIssue]
     exporter = PrometheusExporter(settings=settings, registry=test_registry)
 
     await exporter.start()  # Await the start method

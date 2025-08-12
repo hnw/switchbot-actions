@@ -18,6 +18,26 @@ class PrometheusExporter:
         self._label_names = ["address", "model"]
         self.server: HTTPServer | None = None
         self.registry = registry
+        self._address_to_name_map = {
+            v.address: k for k, v in self.settings.devices.items()
+        }
+        self._info_gauge = Gauge(
+            "switchbot_device_info",
+            "Information about a SwitchBot device",
+            ["address", "name", "model"],
+            registry=self.registry,
+        )
+        self._create_initial_info_metrics()
+
+    def _create_initial_info_metrics(self):
+        """Initialize info metrics for all configured devices at startup."""
+        for name, device in self.settings.devices.items():
+            info_labels = {
+                "address": device.address,
+                "name": name,
+                "model": "Unknown",  # Initially unknown until an advertisement is seen
+            }
+            self._info_gauge.labels(**info_labels).set(1)
 
     def handle_advertisement(self, sender, **kwargs):
         raw_state = kwargs.get("new_state")
@@ -28,6 +48,16 @@ class PrometheusExporter:
 
         if not isinstance(state, SwitchBotState):
             return
+
+        device_name = self._address_to_name_map.get(state.id)
+        if device_name:
+            # Update the info gauge with the latest model name
+            info_labels = {
+                "address": state.id,
+                "name": device_name,
+                "model": state.get_values_dict().get("modelName", "Unknown"),
+            }
+            self._info_gauge.labels(**info_labels).set(1)
 
         target_addresses = self.settings.target.get("addresses")
         if target_addresses and state.id not in target_addresses:

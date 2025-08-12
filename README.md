@@ -15,7 +15,14 @@ Its efficiency makes it a great fit for resource-constrained hardware like a Ras
 - **Direct Device Control**: A `switchbot_command` action allows you to directly control any SwitchBot device, enabling powerful, interconnected automations.
 - **Event-Driven & Time-Based Triggers**: React to state changes instantly or trigger actions only when a condition has been met for a specific duration (e.g., "if a door has been open for 5 minutes").
 - **Full MQTT Integration**: Use MQTT messages as triggers and publish messages as an action.
-- **Prometheus Exporter**: Exposes device metrics at a configurable `/metrics` endpoint.
+- **Prometheus Exporter**: Exposes device metrics at a configurable `/metrics` endpoint. It also provides a special `switchbot_device_info` metric, which allows you to use your custom device names in PromQL queries for improved readability. For technical details and query examples, please see the [Project Specification](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).
+  - **`switchbot_device_info` metric**: This metric provides metadata about configured SwitchBot devices, including their `address`, user-defined `name` (alias), and `model`. Its value is always `1` and it's useful for joining with other metrics to make queries more readable.
+
+    **Example PromQL Query (to get temperature by device name):**
+
+    ```promql
+    switchbot_temperature * on(address) group_left(name) switchbot_device_info{name="living_room_meter"}
+    ```
 
 ## **Prerequisites**
 

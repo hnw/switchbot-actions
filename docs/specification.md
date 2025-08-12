@@ -308,6 +308,14 @@ Configures the Prometheus metrics endpoint.
   - `addresses`: (list, optional) List of MAC addresses to export. If empty, all are exported.
   - `metrics`: (list, optional) List of metric names (e.g., `temperature`) to export. If empty, all are exported.
 
+- **`switchbot_device_info` metric**: This metric provides metadata about configured SwitchBot devices, including their `address`, user-defined `name` (alias), and `model`. Its value is always `1` and it's useful for joining with other metrics to make queries more readable.
+
+  **Example PromQL Query (to get temperature by device name):**
+
+  ```promql
+  switchbot_temperature * on(address) group_left(name) switchbot_device_info{name="living_room_meter"}
+  ```
+
 ### **5.5. `logging`**
 
 Configures logging behavior.
