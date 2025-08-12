@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from switchbot_actions.scanner import SwitchbotClient
+from switchbot_actions.config import ScannerSettings
+from switchbot_actions.scanner import SwitchbotScanner
 from switchbot_actions.signals import switchbot_advertisement_received
 from switchbot_actions.store import StateStore
 
@@ -34,11 +35,15 @@ def mock_storage():
 
 
 @pytest.fixture
-def scanner(mock_ble_scanner, mock_storage):
-    """Provides a SwitchbotClient with mock dependencies."""
-    return SwitchbotClient(
-        scanner=mock_ble_scanner, store=mock_storage, cycle=1, duration=1
-    )
+def scanner_settings():
+    """Provides mock ScannerSettings."""
+    return ScannerSettings(interface=0, cycle=1, duration=1)
+
+
+@pytest.fixture
+def scanner(mock_ble_scanner, scanner_settings):
+    """Provides a SwitchbotScanner with mock dependencies."""
+    return SwitchbotScanner(settings=scanner_settings, scanner=mock_ble_scanner)
 
 
 @pytest.mark.asyncio
@@ -151,7 +156,63 @@ def test_format_ble_error_message(
     """
     Test that _format_ble_error_message generates correct messages and known error flag.
     """
-    client = SwitchbotClient(MagicMock(), MagicMock())
+    client = SwitchbotScanner(MagicMock(), MagicMock())
     message, is_known_error = client._format_ble_error_message(exception)
     assert expected_message_part in message
     assert is_known_error == expected_is_known_error
+
+
+@pytest.mark.asyncio
+async def test_scanner_already_running_warning(scanner):
+    """Test that starting an already running scanner logs a warning."""
+    scanner._running = True
+    with patch("logging.Logger.warning") as mock_log_warning:
+        await scanner.start()
+        mock_log_warning.assert_called_once_with("Scanner is already running.")
+
+
+@pytest.mark.asyncio
+async def test_scanner_not_running_warning(scanner):
+    """Test that stopping a not running scanner logs a warning."""
+    scanner._running = False
+    with patch("logging.Logger.warning") as mock_log_warning:
+        await scanner.stop()
+        mock_log_warning.assert_called_once_with("Scanner is not running.")
+
+
+@pytest.mark.asyncio
+async def test_switchbot_client_initializes_scanner_internally(scanner_settings):
+    """
+    Test that SwitchbotScanner initializes GetSwitchbotDevices internally
+    when no scanner is provided.
+    """
+    with patch(
+        "switchbot_actions.scanner.GetSwitchbotDevices"
+    ) as MockGetSwitchbotDevices:
+        # Instantiate SwitchbotScanner without providing a scanner mock
+        client = SwitchbotScanner(settings=scanner_settings)
+
+        # Assert that GetSwitchbotDevices was called with the correct interface
+        MockGetSwitchbotDevices.assert_called_once_with(
+            interface=scanner_settings.interface
+        )
+
+        # Verify that the internal _scanner attribute is set to the mock instance
+        assert client._scanner == MockGetSwitchbotDevices.return_value
+
+        # Configure mock discover to return empty dict then raise CancelledError
+        MockGetSwitchbotDevices.return_value.discover.side_effect = [
+            {},
+            asyncio.CancelledError,
+        ]
+
+        # Ensure start/stop can still be called
+        await client.start()
+        # The loop should stop after one iteration due to the mock's side_effect
+        # Wait a bit to ensure the task has been processed
+        await asyncio.sleep(0.1)
+
+        MockGetSwitchbotDevices.return_value.discover.assert_called()
+        await client.stop()
+        # discover is called once per loop iteration, so it should still be 1 after stop
+        MockGetSwitchbotDevices.return_value.discover.assert_called()

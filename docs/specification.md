@@ -11,7 +11,7 @@ The project has two primary goals:
 
 ## **2. Architecture**
 
-The application employs a decoupled, signal-based architecture. `SwitchbotClient` and `MqttClient` act as event sources, emitting signals for new device advertisements or messages.
+The application employs a decoupled, signal-based architecture. `SwitchbotScanner` and `MqttClient` act as event sources, emitting signals for new device advertisements or messages.
 
 These signals are consumed by the `AutomationHandler`, which acts as a central dispatcher. Upon receiving an event, the handler retrieves the previous state of the device from the `StateStore` and constructs a `StateSnapshot` of all current device states. These pieces of context are used to create a unified `StateObject`.
 
@@ -29,7 +29,7 @@ classDiagram
         +reload_settings()
     }
 
-    class SwitchbotClient {
+    class SwitchbotScanner {
         +start()
     }
 
@@ -82,7 +82,7 @@ classDiagram
     }
 
     %% --- Aggregation/Composition (has-a) relationships ---
-    Application o-- SwitchbotClient
+    Application o-- SwitchbotScanner
     Application o-- MqttClient
     Application o-- PrometheusExporter
     Application o-- AutomationHandler
@@ -106,8 +106,8 @@ classDiagram
     PrometheusExporter ..> StateObject
 
     %% --- Signal-based communication, represented as dependencies ---
-    SwitchbotClient ..> AutomationHandler : signal
-    SwitchbotClient ..> PrometheusExporter : signal
+    SwitchbotScanner ..> AutomationHandler : signal
+    SwitchbotScanner ..> PrometheusExporter : signal
     MqttClient ..> AutomationHandler : signal
     ActionExecutor ..> Application : signal
     Application ..> MqttClient
@@ -341,11 +341,11 @@ Placeholders allow you to insert dynamic data into your actions. They are resolv
 
 The application uses the `blinker` library for internal communication.
 
-| **Signal Name**                    | **Emitter**       | **Role**                                        |
-| :--------------------------------- | :---------------- | :---------------------------------------------- |
-| `switchbot-advertisement-received` | `SwitchbotClient` | Notifies of a new SwitchBot BLE advertisement.  |
-| `mqtt-message-received`            | `MqttClient`      | Notifies of a new MQTT message.                 |
-| `publish-mqtt-message-request`     | `ActionExecutor`  | Requests the `MqttClient` to publish a message. |
+| **Signal Name**                    | **Emitter**        | **Role**                                        |
+| :--------------------------------- | :----------------- | :---------------------------------------------- |
+| `switchbot-advertisement-received` | `SwitchbotScanner` | Notifies of a new SwitchBot BLE advertisement.  |
+| `mqtt-message-received`            | `MqttClient`       | Notifies of a new MQTT message.                 |
+| `publish-mqtt-message-request`     | `ActionExecutor`   | Requests the `MqttClient` to publish a message. |
 
 ### **7.2. How to Add a New Trigger Source**
 
@@ -381,7 +381,7 @@ The application uses the `blinker` library for internal communication.
 │   ├── handlers.py         # AutomationHandler
 │   ├── logging.py          # Logging setup
 │   ├── mqtt.py             # MqttClient
-│   ├── scanner.py          # SwitchbotClient
+│   ├── scanner.py          # SwitchbotScanner
 │   ├── signals.py          # Blinker signals
 │   ├── store.py            # StateStore
 │   └── timers.py           # Timer class

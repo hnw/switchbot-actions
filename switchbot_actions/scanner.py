@@ -6,13 +6,13 @@ from switchbot import (
     SwitchBotAdvertisement,
 )
 
+from .config import ScannerSettings
 from .signals import switchbot_advertisement_received
-from .store import StateStore
 
 logger = logging.getLogger(__name__)
 
 
-class SwitchbotClient:
+class SwitchbotScanner:
     """
     Continuously scans for SwitchBot BLE advertisements and serves as the
     central publisher of device events.
@@ -20,15 +20,15 @@ class SwitchbotClient:
 
     def __init__(
         self,
-        scanner: GetSwitchbotDevices,
-        store: StateStore,
-        cycle: int = 10,
-        duration: int = 3,
+        settings: ScannerSettings,
+        scanner: GetSwitchbotDevices | None = None,
     ):
-        self._scanner = scanner
-        self._store = store
-        self._cycle = cycle
-        self._duration = duration
+        if scanner is None:
+            self._scanner = GetSwitchbotDevices(interface=settings.interface)
+        else:
+            self._scanner = scanner
+        self._cycle = settings.cycle
+        self._duration = settings.duration
         self._running = False
         self.task: asyncio.Task | None = None
 

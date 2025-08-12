@@ -48,9 +48,8 @@ def mock_components():
     with (
         patch("switchbot_actions.app.MqttClient") as mock_mqtt,
         patch("switchbot_actions.app.PrometheusExporter") as mock_exporter,
-        patch("switchbot_actions.app.SwitchbotClient") as mock_scanner,
+        patch("switchbot_actions.app.SwitchbotScanner") as mock_scanner,
         patch("switchbot_actions.app.AutomationHandler") as mock_handler,
-        patch("switchbot_actions.app.GetSwitchbotDevices") as mock_ble_scanner,
     ):
         # Make start/stop methods async mocks
         for mock_class in [mock_mqtt, mock_exporter, mock_scanner, mock_handler]:
@@ -61,7 +60,6 @@ def mock_components():
             "exporter": mock_exporter,
             "scanner": mock_scanner,
             "handler": mock_handler,
-            "ble_scanner": mock_ble_scanner,
         }
 
 
@@ -72,12 +70,9 @@ def mock_components():
 def test_application_creates_scanner_by_default(
     initial_settings, cli_args, mock_components
 ):
-    """Test that SwitchbotClient is always created."""
+    """Test that SwitchbotScanner is always created."""
     Application(initial_settings, cli_args)
     mock_components["scanner"].assert_called_once()
-    mock_components["ble_scanner"].assert_called_with(
-        interface=initial_settings.scanner.interface
-    )
 
 
 @pytest.mark.parametrize(
@@ -260,11 +255,7 @@ async def test_reload_settings_config_error(
         app = Application(initial_settings, cli_args)
 
         # Get references to original component stop methods
-        original_stop_methods = [
-            m.return_value.stop
-            for m in mock_components.values()
-            if hasattr(m.return_value, "stop")
-        ]
+        original_stop_methods = [m.return_value.stop for m in mock_components.values()]
 
         await app.reload_settings()
 
@@ -387,6 +378,3 @@ async def test_run_app_handles_os_error_on_startup(
         mock_exit.assert_called_once_with(1)
         # app.stop() should not be called because app instantiation failed
         mock_app.return_value.stop.assert_not_called()
-
-
-# endregion

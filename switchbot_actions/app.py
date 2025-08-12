@@ -6,8 +6,6 @@ import sys
 import time
 from typing import Any, Protocol
 
-from switchbot import GetSwitchbotDevices
-
 from .config import AppSettings
 from .config_loader import load_settings_from_cli
 from .error import ConfigError
@@ -15,7 +13,7 @@ from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
 from .logging import setup_logging
 from .mqtt import MqttClient
-from .scanner import SwitchbotClient
+from .scanner import SwitchbotScanner
 from .signals import publish_mqtt_message_request
 from .store import StateStore
 
@@ -68,13 +66,7 @@ class Application:
     def _create_all_components(self, settings: AppSettings) -> dict[str, Component]:
         components: dict[str, Component] = {}
 
-        ble_scanner = GetSwitchbotDevices(interface=settings.scanner.interface)
-        components["scanner"] = SwitchbotClient(
-            scanner=ble_scanner,
-            store=self.storage,
-            cycle=settings.scanner.cycle,
-            duration=settings.scanner.duration,
-        )
+        components["scanner"] = SwitchbotScanner(settings=settings.scanner)
 
         if settings.mqtt:
             components["mqtt"] = MqttClient(settings.mqtt)
