@@ -1,10 +1,10 @@
 # tests/test_exporter.py
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from prometheus_client import REGISTRY, CollectorRegistry
 
-from switchbot_actions.config import PrometheusExporterSettings
+from switchbot_actions.config import DeviceSettings, PrometheusExporterSettings
 from switchbot_actions.exporter import PrometheusExporter
 from switchbot_actions.signals import switchbot_advertisement_received
 
@@ -24,6 +24,7 @@ def cleanup_registry():
         "switchbot_battery",
         "switchbot_rssi",
         "switchbot_isOn",
+        "switchbot_device_info",
     ]
     collectors = list(REGISTRY._collector_to_names.keys())
     for collector in collectors:
@@ -275,3 +276,117 @@ async def test_address_filtering(
     )
 
     await exporter.stop()  # Await the stop method
+
+
+@pytest.mark.asyncio
+async def test_start_does_not_call__start_if_disabled(test_registry):
+    """
+    Tests that the public start() method does not call the internal _start()
+    if the component is disabled via its settings.
+    """
+    disabled_settings = PrometheusExporterSettings(enabled=False)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=disabled_settings, registry=test_registry)
+
+    exporter._start = AsyncMock()
+
+    await exporter.start()
+
+    exporter._start.assert_not_called()
+
+
+# --- Added Tests for Reload Logic ---
+
+
+def test_require_restart_on_port_change(test_registry):
+    """Tests that _require_restart returns True when the port changes."""
+    settings = PrometheusExporterSettings(enabled=True, port=8000)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+
+    new_settings = settings.model_copy()
+    new_settings.port = 9000
+
+    assert exporter._require_restart(new_settings) is True
+
+
+def test_no_restart_on_other_settings_change(test_registry):
+    """Tests that _require_restart returns False for non-critical changes."""
+    settings = PrometheusExporterSettings(enabled=True)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+
+    new_settings = settings.model_copy()
+    new_settings.target = {"metrics": ["temperature"]}
+
+    assert exporter._require_restart(new_settings) is False
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.exporter.start_http_server")
+async def test_apply_live_update_recreates_info_gauge(
+    mock_start_http_server, test_registry
+):
+    """
+    Tests that a live update correctly removes old device info metrics and
+    creates new ones when the device list changes.
+    """
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+    initial_settings = PrometheusExporterSettings(
+        enabled=True,
+        devices={
+            "old_device": DeviceSettings(address="11:11:11:11:11:11"),
+        },
+    )  # pyright:ignore[reportCallIssue]
+
+    exporter = PrometheusExporter(settings=initial_settings, registry=test_registry)
+    await exporter.start()
+
+    # Verify initial metric exists
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_device_info",
+            labels={
+                "address": "11:11:11:11:11:11",
+                "name": "old_device",
+                "model": "Unknown",
+            },
+        )
+        == 1.0
+    )
+
+    # Prepare new settings and apply live update
+    new_settings = PrometheusExporterSettings(
+        enabled=True,
+        devices={
+            "new_device": DeviceSettings(address="22:22:22:22:22:22"),
+        },
+    )  # pyright:ignore[reportCallIssue]
+
+    await exporter._apply_live_update(new_settings)
+    exporter.settings = new_settings  # Simulate settings update by parent class
+
+    # Verify old metric is gone
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_device_info",
+            labels={
+                "address": "11:11:11:11:11:11",
+                "name": "old_device",
+                "model": "Unknown",
+            },
+        )
+        is None
+    )
+
+    # Verify new metric exists
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_device_info",
+            labels={
+                "address": "22:22:22:22:22:22",
+                "name": "new_device",
+                "model": "Unknown",
+            },
+        )
+        == 1.0
+    )
+
+    await exporter.stop()

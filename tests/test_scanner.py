@@ -144,8 +144,8 @@ async def test_scanner_error_handling(
         (Exception("No such device"), "Bluetooth device not found.", True),
         (
             Exception("Some other error"),
-            "This might be due to adapter issues, permissions, or other "
-            "environmental factors.",
+            "This might be due to adapter issues, permissions, "
+            "or other environmental factors.",
             False,
         ),
     ],
@@ -165,19 +165,21 @@ def test_format_ble_error_message(
 @pytest.mark.asyncio
 async def test_scanner_already_running_warning(scanner):
     """Test that starting an already running scanner logs a warning."""
-    scanner._running = True
+    scanner._running = True  # Manually set state for test
     with patch("logging.Logger.warning") as mock_log_warning:
         await scanner.start()
-        mock_log_warning.assert_called_once_with("Scanner is already running.")
+        # The generic message from BaseComponent is expected
+        mock_log_warning.assert_called_once_with("SwitchbotScanner is already running.")
 
 
 @pytest.mark.asyncio
 async def test_scanner_not_running_warning(scanner):
-    """Test that stopping a not running scanner logs a warning."""
-    scanner._running = False
-    with patch("logging.Logger.warning") as mock_log_warning:
+    """Test that stopping a not running scanner logs a debug message."""
+    scanner._running = False  # Manually set state for test
+    with patch("logging.Logger.debug") as mock_log_debug:
         await scanner.stop()
-        mock_log_warning.assert_called_once_with("Scanner is not running.")
+        # The generic message from BaseComponent is expected at DEBUG level
+        mock_log_debug.assert_called_once_with("SwitchbotScanner is not running.")
 
 
 @pytest.mark.asyncio
@@ -216,3 +218,30 @@ async def test_switchbot_client_initializes_scanner_internally(scanner_settings)
         await client.stop()
         # discover is called once per loop iteration, so it should still be 1 after stop
         MockGetSwitchbotDevices.return_value.discover.assert_called()
+
+
+# --- Added Tests for Reload Logic ---
+
+
+def test_require_restart_on_interface_change(scanner_settings):
+    """Tests that _require_restart returns True when the interface changes."""
+    scanner = SwitchbotScanner(settings=scanner_settings)
+    new_settings = scanner_settings.model_copy()
+    new_settings.interface = 99  # A different interface
+
+    assert scanner._require_restart(new_settings) is True
+
+
+@pytest.mark.parametrize("setting_to_change", ["cycle", "duration"])
+def test_no_restart_on_timing_settings_change(scanner_settings, setting_to_change):
+    """
+    Tests that _require_restart returns False when timing settings like
+    cycle or duration are changed.
+    """
+    scanner = SwitchbotScanner(settings=scanner_settings)
+    new_settings = scanner_settings.model_copy()
+
+    # Change a non-critical setting
+    setattr(new_settings, setting_to_change, 99)
+
+    assert scanner._require_restart(new_settings) is False

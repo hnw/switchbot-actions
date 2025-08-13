@@ -63,7 +63,7 @@ class DeviceSettings(BaseConfigModel):
 
 
 class MqttSettings(BaseConfigModel):
-    host: str
+    host: str = ""
     port: int = Field(1883, ge=1, le=65535)
     username: Optional[str] = None
     password: Optional[str] = None
@@ -248,11 +248,13 @@ class AppSettings(BaseConfigModel):
     debug: bool = False
     scanner: ScannerSettings = Field(default_factory=ScannerSettings)
     prometheus_exporter: PrometheusExporterSettings = Field(
-        default_factory=PrometheusExporterSettings  # type: ignore[arg-type]
+        default_factory=PrometheusExporterSettings  # pyright:ignore[reportArgumentType]
     )
     automations: AutomationSettings = Field(default_factory=AutomationSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-    mqtt: Optional[MqttSettings] = None
+    mqtt: MqttSettings = Field(
+        default_factory=MqttSettings  # pyright:ignore[reportArgumentType]
+    )
 
     @model_validator(mode="before")
     @classmethod

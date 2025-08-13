@@ -1,4 +1,4 @@
-# test_app.py
+# tests/test_app.py
 
 import argparse
 import logging
@@ -6,12 +6,13 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 
 from switchbot_actions.app import Application, run_app
+from switchbot_actions.component import ComponentError
 from switchbot_actions.config import (
     AppSettings,
-    MqttSettings,
-    PrometheusExporterSettings,
+    AutomationRule,
 )
 from switchbot_actions.error import ConfigError
 
@@ -42,130 +43,98 @@ def initial_settings():
     return AppSettings.model_validate(settings_dict)
 
 
-@pytest.fixture
-def mock_components():
-    """Mocks all components that Application creates."""
-    with (
-        patch("switchbot_actions.app.MqttClient") as mock_mqtt,
-        patch("switchbot_actions.app.PrometheusExporter") as mock_exporter,
-        patch("switchbot_actions.app.SwitchbotScanner") as mock_scanner,
-        patch("switchbot_actions.app.AutomationHandler") as mock_handler,
-    ):
-        # Make start/stop methods async mocks
-        for mock_class in [mock_mqtt, mock_exporter, mock_scanner, mock_handler]:
-            mock_class.return_value.start = AsyncMock()
-            mock_class.return_value.stop = AsyncMock()
-        yield {
-            "mqtt": mock_mqtt,
-            "exporter": mock_exporter,
-            "scanner": mock_scanner,
-            "handler": mock_handler,
-        }
+@pytest_asyncio.fixture
+async def app_with_mocked_abstract_methods(initial_settings, cli_args):
+    """
+    Creates an Application instance and mocks its components' abstract methods.
+    """
+    app = Application(initial_settings, cli_args)
+
+    for component in app._components.values():
+        # Ensures all components start with _running = False for a clean test state.
+        component._running = False
+
+        # Mock abstract methods to control their behavior in tests.
+        # This now works because the subclass signatures are fixed.
+        component._is_enabled = MagicMock(side_effect=component._is_enabled)
+        component._start = AsyncMock()
+        component._stop = AsyncMock()
+        component._require_restart = MagicMock(return_value=False)
+        component._apply_live_update = AsyncMock()
+
+    yield app
 
 
-# Tests
+#  Initialization Tests
 
 
-# region Initialization Tests
-def test_application_creates_scanner_by_default(
-    initial_settings, cli_args, mock_components
-):
-    """Test that SwitchbotScanner is always created."""
-    Application(initial_settings, cli_args)
-    mock_components["scanner"].assert_called_once()
+def test_application_always_creates_all_components(initial_settings, cli_args):
+    """Test that Application always instantiates all components."""
+    initial_settings.mqtt.host = ""
+    initial_settings.prometheus_exporter.enabled = False
+    initial_settings.automations.rules = []
+
+    app = Application(initial_settings, cli_args)
+
+    assert "scanner" in app._components
+    assert "mqtt" in app._components
+    assert "prometheus_exporter" in app._components
+    assert "automations" in app._components
 
 
-@pytest.mark.parametrize(
-    "component_name,is_enabled,setting_attr,setting_value",
-    [
-        ("mqtt", True, "mqtt", MqttSettings(host="localhost")),  # type: ignore[call-arg]
-        ("mqtt", False, "mqtt", None),
-        (
-            "prometheus_exporter",
-            True,
-            "prometheus_exporter",
-            PrometheusExporterSettings(enabled=True),  # type: ignore[call-arg]
-        ),
-        (
-            "prometheus_exporter",
-            False,
-            "prometheus_exporter",
-            PrometheusExporterSettings(enabled=False),  # type: ignore[call-arg]
-        ),
-        ("automations", True, "automations", [MagicMock()]),
-        ("automations", False, "automations", []),
-    ],
-)
-def test_application_creates_components_based_on_settings(
-    initial_settings,
-    cli_args,
-    mock_components,
-    component_name,
-    is_enabled,
-    setting_attr,
-    setting_value,
-):
-    """Test that components are created based on their settings."""
-    settings = deepcopy(initial_settings)
-    setattr(settings, setting_attr, setting_value)
-
-    component_map = {
-        "mqtt": mock_components["mqtt"],
-        "prometheus_exporter": mock_components["exporter"],
-        "automations": mock_components["handler"],
-    }
-    mock_to_check = component_map[component_name]
-
-    Application(settings, cli_args)
-
-    if is_enabled:
-        mock_to_check.assert_called_once()
-    else:
-        mock_to_check.assert_not_called()
-
-
-# endregion
-
-# region Start/Stop Tests
+# Start/Stop Tests
 
 
 @pytest.mark.asyncio
-async def test_start_starts_all_created_components(
-    initial_settings, cli_args, mock_components
-):
-    """Test that app.start() starts all created components."""
-    app = Application(initial_settings, cli_args)
-    await app.start()
+async def test_start_calls_all_component_starts(app_with_mocked_abstract_methods):
+    """Test that app.start() calls start() on all enabled component instances."""
+    await app_with_mocked_abstract_methods.start()
 
-    mock_components["scanner"].return_value.start.assert_awaited_once()
-    mock_components["mqtt"].return_value.start.assert_awaited_once()
-    mock_components["exporter"].return_value.start.assert_awaited_once()
-    mock_components["handler"].return_value.start.assert_awaited_once()
+    for component in app_with_mocked_abstract_methods._components.values():
+        # Simulate the real method\n's behavior by setting the _running flag
+        # after _start is called.
+        if component.is_enabled:
+            component._start.assert_awaited_once()
+        else:
+            component._start.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_stop_stops_all_components_in_reverse_order(
-    initial_settings, cli_args, mock_components
+    app_with_mocked_abstract_methods,
 ):
     """Test that app.stop() stops all components in reverse order of creation."""
-    app = Application(initial_settings, cli_args)
+    # Start the application to ensure components are in a running state for the test.
+    await app_with_mocked_abstract_methods.start()
+    # Manually set running state as mocks don't do it automatically
+    for comp in app_with_mocked_abstract_methods._components.values():
+        if comp.is_enabled:
+            comp._running = True
 
-    # To check call order, we can use a manager mock
     manager = MagicMock()
-    manager.attach_mock(mock_components["scanner"].return_value.stop, "scanner_stop")
-    manager.attach_mock(mock_components["mqtt"].return_value.stop, "mqtt_stop")
-    manager.attach_mock(mock_components["exporter"].return_value.stop, "exporter_stop")
-    manager.attach_mock(mock_components["handler"].return_value.stop, "handler_stop")
+    manager.attach_mock(
+        app_with_mocked_abstract_methods._components["scanner"]._stop, "scanner_stop"
+    )
+    manager.attach_mock(
+        app_with_mocked_abstract_methods._components["mqtt"]._stop, "mqtt_stop"
+    )
+    manager.attach_mock(
+        app_with_mocked_abstract_methods._components["prometheus_exporter"]._stop,
+        "exporter_stop",
+    )
+    manager.attach_mock(
+        app_with_mocked_abstract_methods._components["automations"]._stop,
+        "handler_stop",
+    )
 
-    await app.stop()
+    await app_with_mocked_abstract_methods.stop()
 
-    # Assert that stop was called on all of them
-    mock_components["scanner"].return_value.stop.assert_awaited_once()
-    mock_components["mqtt"].return_value.stop.assert_awaited_once()
-    mock_components["exporter"].return_value.stop.assert_awaited_once()
-    mock_components["handler"].return_value.stop.assert_awaited_once()
+    for component in app_with_mocked_abstract_methods._components.values():
+        if component.is_enabled:
+            component._stop.assert_awaited_once()
+        else:
+            component._stop.assert_not_awaited()
 
-    # Assert the reverse order of calls
     expected_call_order = [
         "handler_stop",
         "exporter_stop",
@@ -177,171 +146,133 @@ async def test_stop_stops_all_components_in_reverse_order(
 
 
 @pytest.mark.asyncio
-async def test_start_components_error_propagation(
-    initial_settings, cli_args, mock_components
-):
+async def test_start_components_error_propagation(app_with_mocked_abstract_methods):
     """Test that if a component fails to start, the exception propagates."""
-    mock_components["mqtt"].return_value.start.side_effect = ValueError("MQTT Boom")
+    app_with_mocked_abstract_methods._components[
+        "mqtt"
+    ]._start.side_effect = ValueError("MQTT Boom")
 
-    app = Application(initial_settings, cli_args)
-
-    with pytest.raises(ValueError, match="MQTT Boom"):
-        await app.start()
+    with pytest.raises(ComponentError, match="Failed to start MqttClient"):
+        await app_with_mocked_abstract_methods.start()
 
 
-# endregion
-
-# region Reload Tests
+# Reload Tests
 
 
 @pytest.mark.asyncio
-async def test_reload_settings_success(initial_settings, cli_args, mock_components):
-    """Test successful reloading of settings and restarting of components."""
-    with patch("switchbot_actions.app.load_settings_from_cli") as mock_load_settings:
-        # Initial setup
-        app = Application(initial_settings, cli_args)
-        await app.start()
+async def test_reload_settings_success_mqtt_restart(app_with_mocked_abstract_methods):
+    """
+    Test that when MQTT settings change (requiring restart), only MQTT component
+    is stopped and started.
+    """
+    await app_with_mocked_abstract_methods.start()
 
-        # Get references to old component mocks' stop methods
-        old_scanner_stop = mock_components["scanner"].return_value.stop
-        old_mqtt_stop = mock_components["mqtt"].return_value.stop
-        old_exporter_stop = mock_components["exporter"].return_value.stop
-        old_handler_stop = mock_components["handler"].return_value.stop
+    mock_mqtt = app_with_mocked_abstract_methods._components["mqtt"]
+    mock_scanner = app_with_mocked_abstract_methods._components["scanner"]
 
-        # Mock new settings (disable mqtt, change exporter port)
-        new_settings = deepcopy(initial_settings)
-        new_settings.mqtt = None
-        new_settings.prometheus_exporter.port = 9090
-        mock_load_settings.return_value = new_settings
+    # Reset mock call counts to ensure accurate assertion of calls
+    # made during the test action.
+    mock_mqtt._start.reset_mock()
+    mock_mqtt._stop.reset_mock()
+    mock_scanner._apply_live_update.reset_mock()
 
-        # Reset mocks to track new calls for creation and start
-        mock_components["scanner"].reset_mock()
-        mock_components["mqtt"].reset_mock()
-        mock_components["exporter"].reset_mock()
-        mock_components["handler"].reset_mock()
+    new_settings = deepcopy(app_with_mocked_abstract_methods.settings)
+    new_settings.mqtt.host = "new_mqtt_host"
 
-        # Reload settings
-        await app.reload_settings()
+    mock_mqtt._require_restart.return_value = True
 
-        # 1. Assert old components were stopped
-        old_scanner_stop.assert_awaited_once()
-        old_mqtt_stop.assert_awaited_once()
-        old_exporter_stop.assert_awaited_once()
-        old_handler_stop.assert_awaited_once()
+    with patch(
+        "switchbot_actions.app.load_settings_from_cli", return_value=new_settings
+    ):
+        await app_with_mocked_abstract_methods.reload_settings()
 
-        # 2. Assert new components were created based on new config
-        mock_components["scanner"].assert_called_once()
-        mock_components["mqtt"].assert_not_called()  # Was disabled
-        mock_components["exporter"].assert_called_with(
-            settings=new_settings.prometheus_exporter
-        )
-        mock_components["handler"].assert_called_once()
-
-        # 3. Assert new components were started
-        mock_components["scanner"].return_value.start.assert_awaited_once()
-        mock_components["mqtt"].return_value.start.assert_not_called()
-        mock_components["exporter"].return_value.start.assert_awaited_once()
-        mock_components["handler"].return_value.start.assert_awaited_once()
+        mock_mqtt._stop.assert_awaited_once()
+        mock_mqtt._start.assert_awaited_once()
+        mock_scanner._apply_live_update.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_reload_settings_config_error(
-    initial_settings, cli_args, mock_components, caplog
-):
+async def test_reload_settings_config_error(app_with_mocked_abstract_methods, caplog):
     """Test that a ConfigError on reload prevents changes and logs an error."""
     with patch("switchbot_actions.app.load_settings_from_cli") as mock_load_settings:
         mock_load_settings.side_effect = ConfigError("Invalid new config")
 
-        app = Application(initial_settings, cli_args)
+        await app_with_mocked_abstract_methods.reload_settings()
 
-        # Get references to original component stop methods
-        original_stop_methods = [m.return_value.stop for m in mock_components.values()]
-
-        await app.reload_settings()
-
-        # Assert that an error was logged
-        assert "Failed to load new configuration" in caplog.text
+        assert "Failed to apply new configuration" in caplog.text
         assert "Invalid new config" in caplog.text
-
-        # Assert that no components were stopped
-        for stop_method in original_stop_methods:
-            stop_method.assert_not_called()
-
-        # Assert that settings and components were not replaced
-        assert app.settings == initial_settings
 
 
 @pytest.mark.asyncio
-async def test_reload_settings_rollback_fails(
-    initial_settings, cli_args, mock_components, caplog
-):
-    """Test that a failure during rollback is a critical error."""
+async def test_reload_settings_rollback_fails(app_with_mocked_abstract_methods, caplog):
+    """Test that a failure during rollback is a critical error and exits."""
+    await app_with_mocked_abstract_methods.start()
     caplog.set_level(logging.INFO)
+
     with (
         patch("switchbot_actions.app.load_settings_from_cli") as mock_load_settings,
         patch("switchbot_actions.app.sys.exit") as mock_exit,
     ):
-        app = Application(initial_settings, cli_args)
+        new_settings = deepcopy(app_with_mocked_abstract_methods.settings)
+        new_settings.scanner.cycle = 99
+        new_settings.mqtt.reconnect_interval = 99
 
-        # Make the new component fail to start
-        new_settings = deepcopy(initial_settings)
         mock_load_settings.return_value = new_settings
 
-        # Re-configure mocks for the 'new' component creation phase
-        for m in mock_components.values():
-            m.reset_mock(return_value=True, side_effect=True)
-            m.return_value.start = AsyncMock()
-            m.return_value.stop = AsyncMock()
+        # Use a list for side_effect to simulate success on apply, failure on
+        # rollback for the 'scanner' component.
+        app_with_mocked_abstract_methods._components[
+            "scanner"
+        ]._apply_live_update.side_effect = [None, Exception("Scanner rollback failed")]
 
-        mock_components["mqtt"].return_value.start.side_effect = Exception(
-            "New component start failed"
-        )
+        # Make the 'mqtt' component's initial apply fail, which triggers the
+        # rollback process.
+        app_with_mocked_abstract_methods._components[
+            "mqtt"
+        ]._apply_live_update.side_effect = Exception("MQTT apply failed")
 
-        # Make the *old* component fail to start during rollback
-        # The app holds references to the original components.
-        app._components["scanner"].start = AsyncMock(
-            side_effect=Exception("Rollback start failed")
-        )
+        await app_with_mocked_abstract_methods.reload_settings()
 
-        await app.reload_settings()
+        assert "Failed to apply new configuration" in caplog.text
+        assert "MQTT apply failed" in caplog.text  # Check for the initial failure
+        assert "Rolling back to the previous configuration" in caplog.text
 
-        assert "Rollback failed" in caplog.text
-        assert "Rollback start failed" in caplog.text
+        # Assert the correct log message for the component that actually fails
+        # during the rollback.
+        assert "Failed to rollback settings for scanner" in caplog.text
+        assert "Scanner rollback failed" in caplog.text
         mock_exit.assert_called_once_with(1)
 
 
 @pytest.mark.asyncio
-async def test_mqtt_message_published_after_reload_completes(
-    initial_settings, cli_args, mock_components
+async def test_reload_settings_automation_handler_live_update_rules_change(
+    app_with_mocked_abstract_methods,
 ):
     """
-    Test that an MQTT message requested during reload is published only after
-    reload completes.
+    Test that when AutomationHandler rules change, a live update is performed.
     """
-    # List to store all MqttClient instances created
-    created_mqtt_clients = []
+    await app_with_mocked_abstract_methods.start()
+    mock_automations = app_with_mocked_abstract_methods._components["automations"]
 
-    def mqtt_client_constructor_side_effect(*args, **kwargs):
-        new_client_mock = MagicMock()
-        new_client_mock.publish = AsyncMock()
-        new_client_mock.start = AsyncMock()
-        new_client_mock.stop = AsyncMock()
-        created_mqtt_clients.append(new_client_mock)
-        return new_client_mock
+    new_settings = deepcopy(app_with_mocked_abstract_methods.settings)
+    new_rule = {
+        "if": {"source": "mqtt", "topic": "test/topic"},
+        "then": [{"type": "log", "message": "new rule"}],
+        "name": "new mock rule",
+    }
+    new_settings.automations.rules.append(AutomationRule.model_validate(new_rule))
 
-    # Apply the side effect to the MqttClient mock from the fixture
-    mock_components["mqtt"].side_effect = mqtt_client_constructor_side_effect
+    with patch(
+        "switchbot_actions.app.load_settings_from_cli", return_value=new_settings
+    ):
+        await app_with_mocked_abstract_methods.reload_settings()
 
-    # Apply the side effect to the MqttClient mock from the fixture
-    mock_components["mqtt"].side_effect = mqtt_client_constructor_side_effect
-
-    app = Application(initial_settings, cli_args)
-    await app.start()
+        mock_automations._apply_live_update.assert_awaited_once_with(
+            new_settings.automations
+        )
 
 
-# endregion
-
-# region run_app tests
+# run_app tests
 
 
 @pytest.mark.asyncio
@@ -373,8 +304,7 @@ async def test_run_app_handles_os_error_on_startup(
 
         await run_app(initial_settings, cli_args)
 
-        assert "critical error during startup" in caplog.text
+        assert "Application encountered a critical error" in caplog.text
         assert "Address already in use" in caplog.text
         mock_exit.assert_called_once_with(1)
-        # app.stop() should not be called because app instantiation failed
         mock_app.return_value.stop.assert_not_called()

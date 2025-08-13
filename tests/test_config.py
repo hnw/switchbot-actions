@@ -19,8 +19,8 @@ from switchbot_actions.config import (
 
 
 def test_mqtt_settings_defaults():
-    settings = MqttSettings(host="localhost")  # type: ignore[call-arg]
-    assert settings.host == "localhost"
+    settings = MqttSettings()  # pyright:ignore[reportCallIssue]
+    assert settings.host == ""
     assert settings.port == 1883
     assert settings.username is None
     assert settings.password is None
@@ -34,7 +34,7 @@ def test_mqtt_settings_invalid_port(port):
 
 
 def test_prometheus_exporter_settings_defaults():
-    settings = PrometheusExporterSettings()  # type: ignore[call-arg]
+    settings = PrometheusExporterSettings()  # pyright:ignore[reportCallIssue]
     assert settings.enabled is False
     assert settings.port == 8000
     assert settings.target == {}
@@ -172,7 +172,11 @@ def test_mqtt_publish_action_valid_qos(qos):
 
 def test_mqtt_publish_action_invalid_qos():
     with pytest.raises(ValidationError):
-        MqttPublishAction(type="mqtt_publish", topic="a/b", qos=3)  # type: ignore
+        MqttPublishAction(
+            type="mqtt_publish",
+            topic="a/b",
+            qos=3,  # pyright:ignore[reportArgumentType]
+        )
 
 
 def test_automation_rule_then_block_single_dict_to_list():
@@ -215,7 +219,8 @@ def test_app_settings_defaults():
     assert settings.automations.rules == []
     assert settings.automations.devices == {}
     assert isinstance(settings.logging, LoggingSettings)
-    assert settings.mqtt is None
+    assert isinstance(settings.mqtt, MqttSettings)
+    assert settings.mqtt.host == ""
 
 
 def test_app_settings_from_dict():

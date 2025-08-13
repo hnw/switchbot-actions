@@ -4,11 +4,11 @@ import logging
 import signal
 import sys
 import time
-from typing import Any, Protocol
+from typing import Any, Dict, cast
 
+from .component import BaseComponent
 from .config import AppSettings
 from .config_loader import load_settings_from_cli
-from .error import ConfigError
 from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
 from .logging import setup_logging
@@ -18,12 +18,6 @@ from .signals import publish_mqtt_message_request
 from .store import StateStore
 
 logger = logging.getLogger(__name__)
-
-
-class Component(Protocol):
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
 
 
 class Application:
@@ -36,7 +30,7 @@ class Application:
         setup_logging(self.settings)
 
         self.storage = StateStore()
-        self._components: dict[str, Component] = self._create_all_components(
+        self._components: Dict[str, BaseComponent] = self._create_all_components(
             self.settings
         )
         publish_mqtt_message_request.connect(self._handle_publish_request)
@@ -47,7 +41,6 @@ class Application:
     async def _handle_publish_request_async(self, sender: Any, **kwargs) -> None:
         timeout_seconds = 5.0
         start_time = time.time()
-
         while self.is_reloading:
             if time.time() - start_time > timeout_seconds:
                 logger.error(
@@ -56,31 +49,22 @@ class Application:
                 )
                 return
             await asyncio.sleep(0.1)
+        mqtt_component = cast(MqttClient, self._components.get("mqtt"))
+        await mqtt_component.publish(**kwargs)
 
-        mqtt_client = self._components.get("mqtt")
-        if isinstance(mqtt_client, MqttClient):
-            await mqtt_client.publish(**kwargs)
-        else:
-            logger.warning("MQTT component is not configured, cannot publish message.")
-
-    def _create_all_components(self, settings: AppSettings) -> dict[str, Component]:
-        components: dict[str, Component] = {}
-
-        components["scanner"] = SwitchbotScanner(settings=settings.scanner)
-
-        if settings.mqtt:
-            components["mqtt"] = MqttClient(settings.mqtt)
-
-        if settings.prometheus_exporter.enabled:
-            components["prometheus_exporter"] = PrometheusExporter(
+    def _create_all_components(self, settings: AppSettings) -> Dict[str, BaseComponent]:
+        """Unconditionally create all component instances."""
+        components: Dict[str, BaseComponent] = {
+            "scanner": SwitchbotScanner(settings=settings.scanner),
+            "mqtt": MqttClient(settings.mqtt),
+            "prometheus_exporter": PrometheusExporter(
                 settings=settings.prometheus_exporter
-            )
-
-        if settings.automations:
-            components["automations"] = AutomationHandler(
-                settings=settings.automations, state_store=self.storage
-            )
-
+            ),
+            "automations": AutomationHandler(
+                settings=settings.automations,
+                state_store=self.storage,
+            ),
+        }
         return components
 
     async def reload_settings(self):
@@ -90,62 +74,54 @@ class Application:
 
         logger.info("SIGHUP received, reloading configuration.")
         self.is_reloading = True
-        old_components = self._components
         old_settings = self.settings
 
         try:
             new_settings = load_settings_from_cli(self.cli_args)
             setup_logging(new_settings)
-            new_components = self._create_all_components(new_settings)
 
-            logger.info("Stopping old components...")
-            await self._stop_components(old_components)
+            for name, component in self._components.items():
+                await component.apply_new_settings(getattr(new_settings, name))
 
             self.settings = new_settings
-            self._components = new_components
+            logger.info("Configuration reloaded successfully.")
 
-            logger.info("Starting new components...")
-            await self._start_components(self._components)
-
-            logger.info("Configuration reloaded and components restarted successfully.")
-
-        except ConfigError as e:
-            logger.error(
-                f"Failed to load new configuration, keeping the old. Reason:\n{e}"
-            )
-            # Rollback: If new settings couldn't be loaded, just log and return.
-            # No components were stopped or started yet.
-            self._components = old_components  # Ensure components reference is correct
-            self.settings = old_settings  # Ensure settings reference is correct
-            logger.info("No changes applied due to configuration error.")
         except Exception as e:
             logger.error(f"Failed to apply new configuration: {e}", exc_info=True)
             logger.info("Rolling back to the previous configuration.")
-            self.settings = old_settings  # Rollback to old settings
-            self._components = old_components  # Rollback to old components
 
-            try:
-                logger.info("Restarting old components...")
-                await self._start_components(self._components)
-                logger.info("Rollback successful.")
-            except Exception as rollback_e:
-                logger.critical(f"Rollback failed: {rollback_e}", exc_info=True)
-                logger.debug("Exiting due to rollback failure.", exc_info=True)
-                sys.exit(1)
+            for name, component in self._components.items():
+                logger.info(f"Rolling back settings for {name}...")
+                try:
+                    await component.apply_new_settings(getattr(old_settings, name))
+                except Exception as rollback_e:
+                    logger.critical(
+                        f"Failed to rollback settings for {name}: {rollback_e}. "
+                        "The application is in an inconsistent state and will exit.",
+                        exc_info=True,
+                    )
+                    sys.exit(1)
+
+            self.settings = old_settings
+            setup_logging(self.settings)
+            logger.info("Rollback completed.")
         finally:
             self.is_reloading = False
 
-    async def _start_components(self, components: dict[str, Component]) -> None:
-        logger.info("Starting components...")
-        await asyncio.gather(*[c.start() for c in components.values()])
-        logger.info("Components started successfully.")
+    async def _start_components(self, components: Dict[str, BaseComponent]) -> None:
+        logger.info("Starting enabled components...")
+        start_tasks = [c.start() for c in components.values()]
+        if start_tasks:
+            await asyncio.gather(*start_tasks)
+        logger.info("Components' start sequence finished.")
 
-    async def _stop_components(self, components: dict[str, Component]) -> None:
+    async def _stop_components(self, components: Dict[str, BaseComponent]) -> None:
         logger.info("Stopping components...")
-        # Stop components in reverse order of creation for graceful shutdown
-        for key in reversed(list(components.keys())):
-            component = components[key]
-            await component.stop()
+        stop_tasks = [
+            components[key].stop() for key in reversed(list(components.keys()))
+        ]
+        if stop_tasks:
+            await asyncio.gather(*stop_tasks)
         logger.info("Components stopped successfully.")
 
     async def start(self):
@@ -188,15 +164,12 @@ async def run_app(settings: AppSettings, args: argparse.Namespace):
 
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received.")
-    except OSError as e:
+    except Exception as e:
         logger.critical(
-            f"Application encountered a critical error during startup and will exit: "
-            f"{e}",
+            f"Application encountered a critical error and will exit: {e}",
             exc_info=True,
         )
         sys.exit(1)
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
     finally:
         if "app" in locals() and app:
             await app.stop()

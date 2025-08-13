@@ -1,18 +1,17 @@
 import asyncio
 import logging
+from typing import Optional
 
-from switchbot import (
-    GetSwitchbotDevices,
-    SwitchBotAdvertisement,
-)
+from switchbot import GetSwitchbotDevices, SwitchBotAdvertisement
 
+from .component import BaseComponent
 from .config import ScannerSettings
 from .signals import switchbot_advertisement_received
 
 logger = logging.getLogger(__name__)
 
 
-class SwitchbotScanner:
+class SwitchbotScanner(BaseComponent[ScannerSettings]):
     """
     Continuously scans for SwitchBot BLE advertisements and serves as the
     central publisher of device events.
@@ -23,31 +22,26 @@ class SwitchbotScanner:
         settings: ScannerSettings,
         scanner: GetSwitchbotDevices | None = None,
     ):
+        super().__init__(settings)
         if scanner is None:
-            self._scanner = GetSwitchbotDevices(interface=settings.interface)
+            self._scanner = GetSwitchbotDevices(interface=self.settings.interface)
         else:
             self._scanner = scanner
-        self._cycle = settings.cycle
-        self._duration = settings.duration
-        self._running = False
         self.task: asyncio.Task | None = None
 
-    async def start(self) -> None:
-        """Starts the scanner component and its background task."""
-        if self._running:
-            logger.warning("Scanner is already running.")
-            return
-        logger.info("Starting SwitchBot BLE scanner...")
-        self._running = True
+    def _is_enabled(self, settings: Optional[ScannerSettings] = None) -> bool:
+        """Scanner is always considered enabled."""
+        return True
+
+    async def _start(self) -> None:
+        """Starts the scanner component's background task."""
         self.task = asyncio.create_task(self._scan_loop())
 
-    async def stop(self) -> None:
-        """Stops the scanner component and its background task."""
-        if not self._running or not self.task:
-            logger.warning("Scanner is not running.")
+    async def _stop(self) -> None:
+        """Stops the scanner component's background task."""
+        if not self.task:
             return
-        logger.info("Stopping SwitchBot BLE scanner...")
-        self._running = False
+
         self.task.cancel()
         try:
             await self.task
@@ -55,18 +49,40 @@ class SwitchbotScanner:
             logger.info("Scanner task successfully cancelled.")
         self.task = None
 
+    def _require_restart(self, new_settings: ScannerSettings) -> bool:
+        """
+        Determines if a restart is required for the scanner based on new settings.
+        A restart is required if the Bluetooth interface changes.
+        """
+        return self.settings.interface != new_settings.interface
+
+    async def _apply_live_update(self, new_settings: ScannerSettings) -> None:
+        """
+        Applies live updates to scanner settings (cycle and duration).
+        These changes will be picked up by the scanning loop in its next iteration.
+        """
+        # The _scan_loop directly references self.settings.cycle and .duration.
+        # By updating self.settings in apply_new_settings (in BaseComponent),
+        # the loop will automatically use the new values in its next iteration.
+        # No explicit action is needed here.
+        pass
+
     async def _scan_loop(self) -> None:
         """The continuous scanning loop for SwitchBot devices."""
-        while self._running:
+        while True:
             try:
-                logger.debug(f"Starting BLE scan for {self._duration} seconds...")
-                devices = await self._scanner.discover(scan_timeout=self._duration)
+                logger.debug(
+                    f"Starting BLE scan for {self.settings.duration} seconds..."
+                )
+                devices = await self._scanner.discover(
+                    scan_timeout=self.settings.duration
+                )
 
                 for address, device in devices.items():
                     self._process_advertisement(device)
 
                 # Wait for the remainder of the cycle
-                wait_time = self._cycle - self._duration
+                wait_time = self.settings.cycle - self.settings.duration
                 if self._running and wait_time > 0:
                     logger.debug(f"Scan finished, waiting for {wait_time} seconds.")
                     await asyncio.sleep(wait_time)
@@ -79,7 +95,7 @@ class SwitchbotScanner:
                     logger.error(message, exc_info=True)
                 # In case of error, wait for the full cycle time to avoid spamming
                 if self._running:
-                    await asyncio.sleep(self._cycle)
+                    await asyncio.sleep(self.settings.cycle)
 
     def _format_ble_error_message(self, exception: Exception) -> tuple[str, bool]:
         """Generates a user-friendly error message for BLE scan exceptions."""

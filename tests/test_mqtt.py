@@ -1,9 +1,10 @@
 import asyncio
 import json
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
+import aiomqtt
 import pytest
-from aiomqtt import MqttError
 
 from switchbot_actions.config import MqttSettings
 from switchbot_actions.mqtt import MqttClient, mqtt_message_received
@@ -22,64 +23,117 @@ def mqtt_settings():
 
 def test_mqtt_client_initialization(mock_aiomqtt_client, mqtt_settings):
     MqttClient(settings=mqtt_settings)
+    # Initialization now uses a null object, so the real client is not called here.
+    mock_aiomqtt_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_start_creates_real_client(mock_aiomqtt_client, mqtt_settings):
+    """Test that start() creates and uses the real aiomqtt.Client."""
+    client = MqttClient(settings=mqtt_settings)
+    # Make the loop exit immediately after starting
+    client._run_mqtt_loop = AsyncMock()
+
+    await client.start()
+
     mock_aiomqtt_client.assert_called_once_with(
         hostname="localhost", port=1883, username="user", password="pass"
     )
-
-
-@patch("switchbot_actions.mqtt.aiomqtt.Client")
-@pytest.mark.asyncio
-async def test_message_reception_and_signal(
-    mock_aiomqtt_client, mqtt_settings, mqtt_message_plain
-):
-    client = MqttClient(settings=mqtt_settings)
-
-    mock_message = mqtt_message_plain
-
-    async def mock_message_generator():
-        yield mock_message
-
-    mock_aiomqtt_client.return_value.messages = mock_message_generator()
-
-    received_signals = []
-
-    def on_message_received(sender, message):
-        received_signals.append(message)
-
-    mqtt_message_received.connect(on_message_received)
-
-    client = MqttClient(settings=mqtt_settings)
-
-    async for message in client.client.messages:
-        mqtt_message_received.send(client, message=message)
-
-    assert len(received_signals) == 1
-    assert received_signals[0].topic.value == "test/topic"
-    assert received_signals[0].payload == b"ON"
-
-    mqtt_message_received.disconnect(on_message_received)
+    assert client._mqtt_loop_task is not None
+    await client.stop()
 
 
 @pytest.mark.asyncio
-async def test_publish_message(mqtt_settings):
+async def test_message_reception_and_signal(mqtt_settings, mqtt_message_plain):
+    """
+    Tests that the MqttClient component correctly receives messages from the
+    broker and emits a `mqtt_message_received` signal.
+    """
+    # 1. Setup: Create a mock aiomqtt.Client that will yield a test message.
+    mock_instance = AsyncMock(spec=aiomqtt.Client)
+
+    async def mock_messages_generator():
+        yield mqtt_message_plain
+        # Keep the loop running until cancelled to simulate a real connection
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            pass
+
+    # Configure the mock instance's async context manager and message iterator
+    mock_instance.messages = mock_messages_generator()  # Correctly assign the iterator
+    mock_instance.__aenter__.return_value = mock_instance  # __aenter__ returns self
+
+    # 2. Patch the aiomqtt.Client constructor to return our mock instance
+    with patch("switchbot_actions.mqtt.aiomqtt.Client", return_value=mock_instance):
+        # 3. Setup signal receiver
+        received_signals = []
+        received_event = asyncio.Event()
+
+        def on_message_received(sender, message):
+            received_signals.append(message)
+            received_event.set()
+
+        mqtt_message_received.connect(on_message_received)
+
+        # 4. Action: Instantiate and start the MqttClient component
+        client = MqttClient(settings=mqtt_settings)
+        await client.start()
+
+        # 5. Assert: Wait for the signal to be received
+        try:
+            await asyncio.wait_for(received_event.wait(), timeout=1)
+        except asyncio.TimeoutError:
+            pytest.fail("mqtt_message_received signal was not emitted within timeout.")
+        finally:
+            # 6. Cleanup
+            await client.stop()
+            mqtt_message_received.disconnect(on_message_received)
+
+        # 7. Final assertions on the received signal data
+        assert len(received_signals) == 1
+        assert received_signals[0].topic.value == "test/topic"
+        assert received_signals[0].payload == b"ON"
+
+
+@pytest.mark.asyncio
+async def test_publish_message_for_null_client(mqtt_settings):
     client = MqttClient(settings=mqtt_settings)
+    # Since the client is not started, it should use the _NullClient
     client.client.publish = AsyncMock()
-
     await client.publish("test/topic", "test_payload")
-
     client.client.publish.assert_called_once_with(
         "test/topic", "test_payload", qos=0, retain=False
     )
 
 
 @pytest.mark.asyncio
+async def test_publish_message(mqtt_settings):
+    client = MqttClient(settings=mqtt_settings)
+    client._run_mqtt_loop = AsyncMock()
+    await client.start()
+    client.client.publish = AsyncMock()
+    await client.publish("test/topic", "test_payload")
+    client.client.publish.assert_called_once_with(
+        "test/topic", "test_payload", qos=0, retain=False
+    )
+    await client.stop()
+
+
+@pytest.mark.asyncio
 async def test_publish_message_handles_error(mqtt_settings, caplog):
     client = MqttClient(settings=mqtt_settings)
-    client.client.publish = AsyncMock(side_effect=MqttError("Test Error"))
+    # Start the client to use the real aiomqtt.Client
+    client._run_mqtt_loop = AsyncMock()  # Prevent loop from running
+    await client.start()
+    # Manually set the real client's publish to an async mock that raises an error
+    real_client = cast(aiomqtt.Client, client.client)
+    real_client.publish = AsyncMock(side_effect=aiomqtt.MqttError("Test Error"))
 
     await client.publish("test/topic", "test_payload")
 
     assert "MQTT client not connected, cannot publish message." in caplog.text
+    await client.stop()
 
 
 @pytest.mark.asyncio
@@ -93,41 +147,34 @@ async def test_mqtt_client_lifecycle_and_subscription(mqtt_settings):
         "switchbot_actions.mqtt.aiomqtt.Client", autospec=True
     ) as mock_aiomqtt_client:
         mock_instance = mock_aiomqtt_client.return_value
+        mock_instance.__aenter__.return_value = mock_instance
 
-        # Mock `subscribe` to set an event when it's called
         async def mock_subscribe(*args, **kwargs):
             subscribed_event.set()
 
         mock_instance.subscribe = AsyncMock(side_effect=mock_subscribe)
 
-        # Make the `messages` async iterator block indefinitely until cancelled
         async def mock_messages_generator():
             try:
                 await asyncio.Event().wait()
             except asyncio.CancelledError:
                 pass
-            # The 'if False' makes this yield unreachable, but it's necessary
-            # to tell Python that this is an async generator, not a coroutine.
             if False:
                 yield
 
-        mock_instance.messages.__aiter__.return_value = mock_messages_generator()
+        mock_instance.messages = mock_messages_generator()
 
         client = MqttClient(settings=mqtt_settings)
-        await client.start()  # This starts _run_mqtt_loop in the background
+        await client.start()
 
         try:
-            # Wait for the subscribe call to happen, with a timeout
             await asyncio.wait_for(subscribed_event.wait(), timeout=1)
         except asyncio.TimeoutError:
             pytest.fail("Subscribe was not called within the timeout period.")
         finally:
-            # Ensure cleanup by stopping the client
             await client.stop()
 
-        # Assert that subscribe was called correctly
         mock_instance.subscribe.assert_awaited_once_with("#")
-        # Assert that the background task was cleaned up
         assert client._mqtt_loop_task is None
 
 
@@ -137,9 +184,8 @@ async def test_mqtt_client_reconnect_on_failure(mqtt_settings, caplog):
     Tests that the client attempts to reconnect after a connection failure.
     """
     client = MqttClient(settings=mqtt_settings)
-    client.settings.reconnect_interval = 0.01  # Use a small interval for testing
+    client.settings.reconnect_interval = 0.01
 
-    # Custom exception to break the infinite loop for the test
     class TestBreakLoop(Exception):
         pass
 
@@ -151,14 +197,14 @@ async def test_mqtt_client_reconnect_on_failure(mqtt_settings, caplog):
             "switchbot_actions.mqtt.aiomqtt.Client", autospec=True
         ) as mock_aiomqtt_client,
     ):
-        # Configure the async with block to raise MqttError
-        mock_aiomqtt_client.return_value.__aenter__.side_effect = MqttError(
+        mock_aiomqtt_client.return_value.__aenter__.side_effect = aiomqtt.MqttError(
             "Connection failed"
         )
-        # Make sleep raise an exception to break the loop after one iteration
         mock_sleep.side_effect = TestBreakLoop()
 
-        # The loop will run, fail, log, and then our mocked sleep will raise to exit.
+        # We need to manually set the client to a real mock instance for this test
+        client.client = mock_aiomqtt_client.return_value
+
         with pytest.raises(TestBreakLoop):
             await client._run_mqtt_loop()
 
@@ -173,6 +219,8 @@ async def test_publish_json_payload(mqtt_settings):
     Tests that a dictionary payload is correctly serialized to a JSON string.
     """
     client = MqttClient(settings=mqtt_settings)
+    client._run_mqtt_loop = AsyncMock()
+    await client.start()
     client.client.publish = AsyncMock()
 
     payload_dict = {"key": "value", "number": 123}
@@ -183,3 +231,52 @@ async def test_publish_json_payload(mqtt_settings):
     client.client.publish.assert_called_once_with(
         "test/json_topic", expected_json_string, qos=0, retain=False
     )
+    await client.stop()
+
+
+@pytest.mark.asyncio
+async def test_start_does_not_call__start_if_disabled():
+    """
+    Tests that the public start() method does not call the internal _start()
+    if the component is disabled via its settings.
+    """
+    disabled_settings = MqttSettings(host="")  # pyright:ignore[reportCallIssue]
+    client = MqttClient(settings=disabled_settings)
+
+    client._start = AsyncMock()
+
+    await client.start()
+
+    client._start.assert_not_called()
+
+
+# --- Added Tests for Reload Logic ---
+
+
+@pytest.mark.parametrize("setting_to_change", ["host", "port", "username", "password"])
+def test_require_restart_on_critical_settings_change(mqtt_settings, setting_to_change):
+    """
+    Tests that _require_restart returns True when critical connection
+    settings are changed.
+    """
+    client = MqttClient(settings=mqtt_settings)
+    new_settings = mqtt_settings.model_copy()
+
+    # Change one of the critical settings
+    setattr(new_settings, setting_to_change, "new_value")
+
+    assert client._require_restart(new_settings) is True
+
+
+def test_no_restart_on_non_critical_settings_change(mqtt_settings):
+    """
+    Tests that _require_restart returns False when a non-critical setting
+    like reconnect_interval is changed.
+    """
+    client = MqttClient(settings=mqtt_settings)
+    new_settings = mqtt_settings.model_copy()
+
+    # Change a non-critical setting
+    new_settings.reconnect_interval = 999
+
+    assert client._require_restart(new_settings) is False

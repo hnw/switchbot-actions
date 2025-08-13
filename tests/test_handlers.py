@@ -423,3 +423,80 @@ async def test_run_mqtt_runners_handles_exceptions(
             "Failed to execute action due to a template error: Test exception"
             in caplog.records[0].message
         )
+
+
+@pytest.mark.asyncio
+async def test_start_does_not_call__start_if_disabled(automation_handler_factory):
+    """
+    Tests that the public start() method does not call the internal _start()
+    if the component is disabled by having no rules.
+    """
+    # AutomationHandler is disabled if there are no rules.
+    disabled_settings = AutomationSettings(rules=[])
+    handler = automation_handler_factory(disabled_settings)
+
+    handler._start = AsyncMock()
+
+    await handler.start()
+
+    handler._start.assert_not_called()
+
+
+# --- Added Tests for Reload Logic ---
+
+
+@pytest.mark.asyncio
+async def test_apply_live_update_reinitializes_runners(automation_handler_factory):
+    """
+    Tests that _apply_live_update correctly re-initializes the action runners
+    when automation rules change.
+    """
+    # Initial settings with one switchbot rule
+    initial_rules = [
+        AutomationRule.model_validate(
+            {"if": {"source": "switchbot"}, "then": [{"type": "log", "message": "a"}]}
+        )
+    ]
+    initial_settings = AutomationSettings(rules=initial_rules)
+    handler = automation_handler_factory(initial_settings)
+
+    assert len(handler._switchbot_runners) == 1
+    assert len(handler._mqtt_runners) == 0
+
+    # New settings with one MQTT rule and one switchbot timer rule
+    new_rules = [
+        AutomationRule.model_validate(
+            {
+                "if": {"source": "mqtt", "topic": "#"},
+                "then": [{"type": "log", "message": "b"}],
+            }
+        ),
+        AutomationRule.model_validate(
+            {
+                "if": {"source": "switchbot_timer", "duration": "5s"},
+                "then": [{"type": "log", "message": "c"}],
+            }
+        ),
+    ]
+    new_settings = AutomationSettings(rules=new_rules)
+
+    # Mock signal connect/disconnect to verify they are called during update
+    with (
+        patch(
+            "switchbot_actions.handlers.switchbot_advertisement_received"
+        ) as mock_switchbot_signal,
+        patch("switchbot_actions.handlers.mqtt_message_received") as mock_mqtt_signal,
+    ):
+        await handler._apply_live_update(new_settings)
+
+        # Verify signals were re-connected
+        mock_switchbot_signal.disconnect.assert_called_once()
+        mock_switchbot_signal.connect.assert_called_once()
+        mock_mqtt_signal.disconnect.assert_called_once()
+        mock_mqtt_signal.connect.assert_called_once()
+
+    # Verify runners are updated
+    assert len(handler._switchbot_runners) == 1
+    assert len(handler._mqtt_runners) == 1
+    assert isinstance(handler._switchbot_runners[0]._trigger, DurationTrigger)
+    assert isinstance(handler._mqtt_runners[0]._trigger, EdgeTrigger)

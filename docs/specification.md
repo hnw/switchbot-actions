@@ -29,18 +29,31 @@ classDiagram
         +reload_settings()
     }
 
-    class SwitchbotScanner {
+    class BaseComponent {
+        <<Abstract>>
+        +settings: SettingsType
+        +is_running: bool
+        +is_enabled: bool
         +start()
+        +stop()
+        #_is_enabled() bool
+        #_start()
+        #_stop()
+    }
+
+    class SwitchbotScanner {
     }
 
     class MqttClient {
-        +start()
         +publish()
     }
 
     class AutomationHandler {
         +handle_switchbot_event(state)
         +handle_mqtt_event(state)
+    }
+
+    class PrometheusExporter {
     }
 
     class ActionRunner {
@@ -76,16 +89,15 @@ classDiagram
         +__getattr__(alias: str) : StateObject
     }
 
-    class PrometheusExporter {
-        +start()
-        +stop()
-    }
+    %% --- Inheritance ---
+    BaseComponent <|-- SwitchbotScanner
+    BaseComponent <|-- MqttClient
+    BaseComponent <|-- PrometheusExporter
+    BaseComponent <|-- AutomationHandler
+
 
     %% --- Aggregation/Composition (has-a) relationships ---
-    Application o-- SwitchbotScanner
-    Application o-- MqttClient
-    Application o-- PrometheusExporter
-    Application o-- AutomationHandler
+    Application o-- BaseComponent : components
     Application o-- StateStore
 
     AutomationHandler "1" *-- "N" ActionRunner
@@ -380,6 +392,7 @@ The application uses the `blinker` library for internal communication.
 │   └── specification.md
 ├── switchbot_actions/
 │   ├── app.py              # Application main logic
+│   ├── base_component.py   # Abstract base class for components
 │   ├── action_executor.py  # Action execution logic
 │   ├── action_runner.py    # ActionRunnerBase and concrete implementations
 │   ├── cli.py              # Command-line interface entry point
