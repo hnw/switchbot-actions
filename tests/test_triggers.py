@@ -43,7 +43,7 @@ def mock_duration_condition_block():
     cb = MagicMock(spec=ConditionBlock)
     cb.name = "DurationTestRule"
     cb.duration = 1.0
-    cb.source = "switchbot_timer"
+    cb.source = "switchbot"
     cb.topic = None
     cb.conditions = {"some_key": "== some_value"}
     return cb

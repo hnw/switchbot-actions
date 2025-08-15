@@ -49,20 +49,20 @@ class AutomationHandler(BaseComponent[AutomationSettings]):
             ]
             source = config.if_block.source
 
-            if source in ["switchbot", "switchbot_timer"]:
+            if source == "switchbot":
                 trigger = (
-                    EdgeTrigger[SwitchBotState](config.if_block)
-                    if source == "switchbot"
-                    else DurationTrigger[SwitchBotState](config.if_block)
+                    DurationTrigger[SwitchBotState](config.if_block)
+                    if config.if_block.duration is not None
+                    else EdgeTrigger[SwitchBotState](config.if_block)
                 )
                 self._switchbot_runners.append(
                     ActionRunner[SwitchBotState](config, executors, trigger)
                 )
-            elif source in ["mqtt", "mqtt_timer"]:
+            elif source == "mqtt":
                 trigger = (
-                    EdgeTrigger[MqttState](config.if_block)
-                    if source == "mqtt"
-                    else DurationTrigger[MqttState](config.if_block)
+                    DurationTrigger[MqttState](config.if_block)
+                    if config.if_block.duration is not None
+                    else EdgeTrigger[MqttState](config.if_block)
                 )
                 self._mqtt_runners.append(
                     ActionRunner[MqttState](config, executors, trigger)

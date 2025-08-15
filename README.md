@@ -104,7 +104,7 @@ if:
 
 ```yaml
 if:
-  source: "switchbot_timer"
+  source: "switchbot"
   duration: "10m"
   conditions:
     contact_open: True

@@ -123,9 +123,10 @@ automations:
 
   - name: "Turn off Lights if No Motion for 5 Minutes"
     if:
-      # "switchbot_timer" triggers when a state is sustained for a duration.
-      source: "switchbot_timer"
-      # The duration the state must be continuously met.
+      # To create a timer-based trigger, add the `duration` key.
+      # The action will run only if the conditions are met continuously
+      # for the specified duration.
+      source: "switchbot"
       duration: "5m"
       conditions:
         modelName: "WoPresence"
@@ -138,7 +139,7 @@ automations:
   - name: "Alert if Door is Open for 10 Minutes"
     cooldown: "1h"
     if:
-      source: "switchbot_timer"
+      source: "switchbot"
       duration: "10m"
       conditions:
         modelName: "WoContact"
@@ -319,7 +320,7 @@ logging:
   level: "INFO"
 
   # Log format, using Python's logging format syntax.
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  format: "% (asctime)s - %(name)s - %(levelname)s - %(message)s"
 
   # Set specific log levels for noisy libraries.
   # This is useful for debugging specific components without enabling global debug.

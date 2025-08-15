@@ -56,7 +56,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
             ),
             AutomationRule.model_validate(
                 {
-                    "if": {"source": "switchbot_timer", "duration": "1s"},
+                    "if": {"source": "switchbot", "duration": "1s"},
                     "then": then_block,
                 }
             ),
@@ -65,7 +65,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
             ),
             AutomationRule.model_validate(
                 {
-                    "if": {"source": "mqtt_timer", "topic": "test", "duration": "1s"},
+                    "if": {"source": "mqtt", "topic": "test", "duration": "1s"},
                     "then": then_block,
                 }
             ),
@@ -473,7 +473,7 @@ async def test_apply_live_update_reinitializes_runners(automation_handler_factor
         ),
         AutomationRule.model_validate(
             {
-                "if": {"source": "switchbot_timer", "duration": "5s"},
+                "if": {"source": "switchbot", "duration": "5s"},
                 "then": [{"type": "log", "message": "c"}],
             }
         ),

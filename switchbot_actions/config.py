@@ -98,8 +98,25 @@ class LoggingSettings(BaseConfigModel):
 
 
 class AutomationIf(BaseConfigModel):
+    """
+    Defines the trigger conditions for an automation rule.
+
+    The behavior of the trigger (immediate vs. time-based) is determined
+    by the presence of the 'duration' field.
+
+    - If 'duration' is absent, the trigger is immediate, firing as soon as
+      the specified 'source' event occurs and 'conditions' are met.
+    - If 'duration' is present, the trigger is time-based. It fires only if
+      the 'source' event and 'conditions' remain true for the specified
+      duration.
+
+    The 'source' field's sole responsibility is to define the origin of the
+    event (e.g., 'switchbot' for BLE advertisements, 'mqtt' for MQTT messages),
+    not its timing behavior.
+    """
+
     _name: str = PrivateAttr(default="")
-    source: Literal["switchbot", "switchbot_timer", "mqtt", "mqtt_timer"]
+    source: Literal["switchbot", "mqtt"]
     duration: Optional[float] = None
     conditions: Dict[str, Any] = Field(default_factory=dict)
     topic: Optional[str] = None
@@ -121,14 +138,8 @@ class AutomationIf(BaseConfigModel):
         return v
 
     @model_validator(mode="after")
-    def validate_duration_for_timer_source(self):
-        if self.source in ["switchbot_timer", "mqtt_timer"] and self.duration is None:
-            raise ValueError(f"'duration' is required for source '{self.source}'")
-        return self
-
-    @model_validator(mode="after")
     def validate_topic_for_mqtt_source(self):
-        if self.source in ["mqtt", "mqtt_timer"] and self.topic is None:
+        if self.source == "mqtt" and self.topic is None:
             raise ValueError(f"'topic' is required for source '{self.source}'")
         return self
 

@@ -176,19 +176,23 @@ An automation rule consists of three main parts:
 
 The `if` block determines the precise circumstances under which an automation will run.
 
-#### **4.2.1. Trigger Source (`source`)**
+#### **4.2.1. Trigger Behavior: Immediate vs. Duration-Based**
 
-This mandatory key defines the type of event that can trigger the rule.
+The behavior of a trigger is determined by the presence of the `duration` key.
 
-- `switchbot`: Triggers immediately when a SwitchBot device's state changes to meet the conditions (edge-triggered).
-- `switchbot_timer`: Triggers only when a SwitchBot device's state has been **continuously** met for the specified `duration`.
-- `mqtt`: Triggers immediately when an MQTT message is received that meets the conditions.
-- `mqtt_timer`: Triggers only when the state derived from an MQTT message has been **continuously** met for the specified `duration`.
+- **Immediate Trigger (Edge-Triggered)**: If `duration` is **not** present, the rule triggers immediately as soon as the conditions are met.
+- **Duration-Based Trigger**: If `duration` **is** present (e.g., `duration: "5m"`), the rule triggers only after the conditions have been continuously met for that entire time period.
 
-For `_timer` sources, the `duration` key is required (e.g., `"5m"`, `"30s"`).
-For `mqtt` and `mqtt_timer` sources, the `topic` key is required.
+#### **4.2.2. Trigger Source (`source`)**
 
-#### **4.2.2. Conditions (`conditions`)**
+This mandatory key defines the origin of the event that can trigger the rule.
+
+- `switchbot`: Triggers based on state changes from SwitchBot BLE devices.
+- `mqtt`: Triggers based on messages received from an MQTT topic.
+
+For `mqtt` sources, the `topic` key is also required.
+
+#### **4.2.3. Conditions (`conditions`)**
 
 The `conditions` map is where you define the specific state(s) required to trigger the rule.
 

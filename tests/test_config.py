@@ -113,44 +113,17 @@ def test_log_action_invalid_level():
         LogAction(type="log", message="Invalid level", level="UNKNOWN")  # type: ignore
 
 
-def test_automation_if_timer_source_requires_duration():
-    # Valid case
-    AutomationIf(source="switchbot_timer", duration=10)
-    AutomationIf(source="mqtt_timer", duration=5, topic="a/b")
-    AutomationIf(source="switchbot")  # No duration required
-
-    # Invalid cases
-    with pytest.raises(
-        ValidationError,
-        match="'duration' is required for source 'switchbot_timer'",
-    ):
-        AutomationIf(source="switchbot_timer")
-    with pytest.raises(
-        ValidationError,
-        match="'duration' is required for source 'mqtt_timer'",
-    ):
-        AutomationIf(source="mqtt_timer", topic="a/b")
-    with pytest.raises(
-        ValidationError,
-        match="'duration' is required for source 'mqtt_timer'",
-    ):
-        AutomationIf(source="mqtt_timer", topic="a/b")
-
-
 def test_automation_if_mqtt_source_requires_topic():
     # Valid case
     AutomationIf(source="mqtt", topic="test/topic")
-    AutomationIf(source="mqtt_timer", topic="test/topic", duration=1)
+    AutomationIf(source="mqtt", topic="test/topic", duration=1)  # With duration
     AutomationIf(source="switchbot")  # No topic required
 
     # Invalid cases
     with pytest.raises(ValidationError, match="'topic' is required for source 'mqtt'"):
         AutomationIf(source="mqtt")
-    with pytest.raises(
-        ValidationError,
-        match="'topic' is required for source 'mqtt_timer'",
-    ):
-        AutomationIf(source="mqtt_timer", duration=1)
+    with pytest.raises(ValidationError, match="'topic' is required for source 'mqtt'"):
+        AutomationIf(source="mqtt", duration=1)
 
 
 @pytest.mark.parametrize("method_in, method_out", [("post", "POST"), ("get", "GET")])
@@ -230,7 +203,7 @@ def test_app_settings_from_dict():
         "mqtt": {"host": "test.mqtt.org"},
         "automations": [
             {
-                "if": {"source": "switchbot_timer", "duration": 60},
+                "if": {"source": "switchbot", "duration": 60},
                 "then": [{"type": "webhook", "url": "http://example.com/turn_on"}],
             }
         ],
@@ -243,7 +216,7 @@ def test_app_settings_from_dict():
     assert settings.mqtt is not None
     assert settings.mqtt.host == "test.mqtt.org"
     assert len(settings.automations.rules) == 1
-    assert settings.automations.rules[0].if_block.source == "switchbot_timer"
+    assert settings.automations.rules[0].if_block.source == "switchbot"
     assert settings.automations.rules[0].if_block.duration == 60
     assert isinstance(settings.automations.rules[0].then_block[0], WebhookAction)
     assert (
@@ -299,17 +272,6 @@ def test_app_settings_invalid_config_data():
     with pytest.raises(ValidationError):
         AppSettings.model_validate(invalid_config_data)
 
-    invalid_config_data = {
-        "automations": [
-            {
-                "if": {"source": "switchbot_timer"},  # Missing duration
-                "then": [{"type": "webhook", "url": "http://example.com/turn_on"}],
-            }
-        ],
-    }
-    with pytest.raises(ValidationError):
-        AppSettings.model_validate(invalid_config_data)
-
     # Test case for invalid action structure within then_block
     invalid_config_data = {
         "automations": [
@@ -327,7 +289,7 @@ def test_app_settings_with_multiple_automations():
     config_data = {
         "automations": [
             {
-                "if": {"source": "switchbot_timer", "duration": 60},
+                "if": {"source": "switchbot", "duration": 60},
                 "then": [{"type": "webhook", "url": "http://example.com/turn_on"}],
             },
             {
@@ -343,7 +305,7 @@ def test_app_settings_with_multiple_automations():
     }
     settings = AppSettings.model_validate(config_data)
     assert len(settings.automations.rules) == 2
-    assert settings.automations.rules[0].if_block.source == "switchbot_timer"
+    assert settings.automations.rules[0].if_block.source == "switchbot"
     assert settings.automations.rules[1].if_block.source == "mqtt"
     assert settings.automations.rules[1].if_block.topic == "home/light/status"
     assert isinstance(settings.automations.rules[0].then_block[0], WebhookAction)
@@ -781,3 +743,73 @@ def test_cross_device_condition_alias_not_found():
         ),
     ):
         AppSettings.model_validate(config_data)
+
+
+def test_cross_device_condition_no_devices_section():
+    # Test that validation is skipped if there is no top-level 'devices' section
+    config_data = {
+        "automations": [
+            {
+                "name": "RuleWithCondition",
+                "if": {
+                    "source": "switchbot",
+                    "conditions": {"some_alias.value": "== 1"},
+                },
+                "then": [{"type": "log", "message": "This will fail"}],
+            }
+        ]
+    }
+    # This should pass validation because the check is skipped
+    settings = AppSettings.model_validate(config_data)
+    assert settings.automations.rules[0].name == "RuleWithCondition"
+
+
+def test_duration_parsing():
+    # Test with integer
+    assert AutomationIf.model_validate(
+        {"source": "switchbot", "duration": 30}
+    ).duration == pytest.approx(30.0)
+
+    # Test with float
+    assert AutomationIf.model_validate(
+        {"source": "switchbot", "duration": 15.5}
+    ).duration == pytest.approx(15.5)
+
+    # Test with valid duration string
+    assert AutomationIf.model_validate(
+        {"source": "switchbot", "duration": "1m 30s"}
+    ).duration == pytest.approx(90.0)
+
+    # Test with another valid duration string
+    assert AutomationIf.model_validate(
+        {"source": "switchbot", "duration": "2h"}
+    ).duration == pytest.approx(7200.0)
+
+    # Test with invalid duration string
+    with pytest.raises(ValidationError, match="Invalid duration string: invalid"):
+        AutomationIf.model_validate({"source": "switchbot", "duration": "invalid"})
+
+    # Test with None
+    assert (
+        AutomationIf.model_validate({"source": "switchbot", "duration": None}).duration
+        is None
+    )
+
+    # Test without duration key
+    assert AutomationIf.model_validate({"source": "switchbot"}).duration is None
+
+
+@pytest.mark.parametrize(
+    "invalid_source",
+    [
+        "switchbot_timer",
+        "mqtt_timer",
+    ],
+)
+def test_automation_if_rejects_old_timer_suffix_in_source(invalid_source):
+    """
+    Tests that the old '_timer' suffix in the 'source' field is rejected.
+    This confirms that the breaking change is effective and prevents confusion.
+    """
+    with pytest.raises(ValidationError):
+        AutomationIf.model_validate({"source": invalid_source, "topic": "any/topic"})
