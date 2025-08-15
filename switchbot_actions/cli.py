@@ -59,6 +59,11 @@ def cli_main():
     parser.add_argument(
         "--log-level", type=str, help="Set the logging level (e.g., INFO, DEBUG)"
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check the configuration and exit without running the application.",
+    )
     args = parser.parse_args()
 
     try:
@@ -66,6 +71,10 @@ def cli_main():
     except ConfigError as e:
         print(f"Error loading configuration: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if args.check:
+        print("Configuration is valid.")
+        sys.exit(0)
 
     try:
         asyncio.run(run_app(settings, args))
