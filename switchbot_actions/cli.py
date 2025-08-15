@@ -15,55 +15,120 @@ def cli_main():
     parser = argparse.ArgumentParser(
         description="A YAML-based automation engine for SwitchBot BLE devices."
     )
-    parser.add_argument(
+
+    # General settings
+    general_group = parser.add_argument_group("General Settings")
+    general_group.add_argument(
         "-c",
         "--config",
         default="config.yaml",
-        help="Path to the configuration file (default: config.yaml)",
+        help="Path to the configuration file. (default: config.yaml)",
+        metavar="PATH",
     )
-    parser.add_argument(
-        "-d",
-        "--debug",
-        action=argparse.BooleanOptionalAction,
-        help="Enable debug logging",
+    general_group.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase logging verbosity (-v: automation, -vv: app, -vvv: full debug).",
     )
-    parser.add_argument(
-        "--scan-cycle", type=int, help="Time in seconds between BLE scan cycles"
-    )
-    parser.add_argument(
-        "--scan-duration", type=int, help="Time in seconds to scan for BLE devices"
-    )
-    parser.add_argument(
-        "--interface",
-        type=int,
-        help="Bluetooth adapter number to use (e.g., 0 for hci0, 1 for hci1)",
-    )
-    parser.add_argument(
-        "--prometheus-enabled",
-        action=argparse.BooleanOptionalAction,
-        help="Enable Prometheus exporter",
-    )
-    parser.add_argument(
-        "--prometheus-port",
-        type=int,
-        help="Prometheus exporter port",
-        metavar="PORT",
-    )
-    parser.add_argument("--mqtt-host", type=str, help="MQTT broker host")
-    parser.add_argument("--mqtt-port", type=int, help="MQTT broker port")
-    parser.add_argument("--mqtt-username", type=str, help="MQTT broker username")
-    parser.add_argument("--mqtt-password", type=str, help="MQTT broker password")
-    parser.add_argument(
-        "--mqtt-reconnect-interval", type=int, help="MQTT broker reconnect interval"
-    )
-    parser.add_argument(
-        "--log-level", type=str, help="Set the logging level (e.g., INFO, DEBUG)"
-    )
-    parser.add_argument(
+    general_group.add_argument(
         "--check",
         action="store_true",
-        help="Check the configuration and exit without running the application.",
+        help="Check the configuration and exit without running.",
     )
+
+    # Scanner settings
+    scanner_group = parser.add_argument_group("Scanner Settings")
+    scanner_group.add_argument(
+        "--scanner-cycle",
+        type=int,
+        default=10,
+        help="Time between BLE scan cycles. (default: 10)",
+        metavar="SECONDS",
+    )
+    scanner_group.add_argument(
+        "--scanner-duration",
+        type=int,
+        default=3,
+        help="Time to scan for BLE devices. (default: 3)",
+        metavar="SECONDS",
+    )
+    scanner_group.add_argument(
+        "--scanner-interface",
+        type=int,
+        help="Bluetooth adapter number (e.g., 0 for hci0).",
+        metavar="ADAPTER",
+    )
+
+    # Prometheus settings
+    prometheus_group = parser.add_argument_group("Prometheus Settings")
+    prometheus_group.add_argument(
+        "--prometheus",
+        dest="prometheus_enabled",
+        action="store_true",
+        default=None,
+        help="Enable Prometheus exporter.",
+    )
+    prometheus_group.add_argument(
+        "--no-prometheus",
+        dest="prometheus_enabled",
+        action="store_false",
+        default=None,
+        help="Disable Prometheus exporter.",
+    )
+    prometheus_group.add_argument(
+        "--prometheus-port",
+        type=int,
+        default=8000,
+        help="Prometheus exporter port. (default: 8000)",
+        metavar="PORT",
+    )
+
+    # MQTT settings
+    mqtt_group = parser.add_argument_group("MQTT Settings")
+    mqtt_group.add_argument(
+        "--mqtt",
+        dest="mqtt_enabled",
+        action="store_true",
+        default=None,
+        help="Enable MQTT client.",
+    )
+    mqtt_group.add_argument(
+        "--no-mqtt",
+        dest="mqtt_enabled",
+        action="store_false",
+        default=None,
+        help="Disable MQTT client.",
+    )
+    mqtt_group.add_argument(
+        "--mqtt-host",
+        type=str,
+        default="localhost",
+        help='MQTT broker host. (default: "localhost")',
+        metavar="HOST",
+    )
+    mqtt_group.add_argument(
+        "--mqtt-port",
+        type=int,
+        default=1883,
+        help="MQTT broker port. (default: 1883)",
+        metavar="PORT",
+    )
+    mqtt_group.add_argument(
+        "--mqtt-username", type=str, help="MQTT broker username.", metavar="USER"
+    )
+    mqtt_group.add_argument(
+        "--mqtt-password", type=str, help="MQTT broker password.", metavar="PASS"
+    )
+    mqtt_group.add_argument(
+        "--mqtt-reconnect-interval",
+        type=float,
+        default=10.0,
+        help="MQTT broker reconnect interval. (default: 10.0)",
+        metavar="SECONDS",
+    )
+
     args = parser.parse_args()
 
     try:

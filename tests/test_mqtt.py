@@ -18,7 +18,9 @@ def mock_aiomqtt_client():
 
 @pytest.fixture
 def mqtt_settings():
-    return MqttSettings(host="localhost", port=1883, username="user", password="pass")
+    return MqttSettings(
+        enabled=True, host="localhost", port=1883, username="user", password="pass"
+    )
 
 
 def test_mqtt_client_initialization(mock_aiomqtt_client, mqtt_settings):
@@ -240,7 +242,7 @@ async def test_start_does_not_call__start_if_disabled():
     Tests that the public start() method does not call the internal _start()
     if the component is disabled via its settings.
     """
-    disabled_settings = MqttSettings(host="")  # pyright:ignore[reportCallIssue]
+    disabled_settings = MqttSettings(enabled=False)  # pyright:ignore[reportCallIssue]
     client = MqttClient(settings=disabled_settings)
 
     client._start = AsyncMock()

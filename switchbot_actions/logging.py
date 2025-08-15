@@ -1,40 +1,33 @@
 import logging
 import sys
 
-from .config import AppSettings
+from .config import LoggingSettings
 
 logger = logging.getLogger(__name__)
 
 
-def setup_logging(settings: AppSettings):
-    """Configures logging based on AppSettings."""
-    if settings.debug:
-        # Debug mode: hardcode levels, ignore config
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            stream=sys.stdout,
-        )
-        # Set bleak to INFO to reduce noise
-        logging.getLogger("bleak").setLevel(logging.INFO)
-        logger.info("Debug mode enabled. Root logger set to DEBUG, bleak set to INFO.")
-        return
+def setup_logging(settings: LoggingSettings):
+    """Configures logging based on LoggingSettings."""
+    log_format = settings.format
+    stream = sys.stdout
 
-    # Normal mode: use config file
-    log_settings = settings.logging
-    level = log_settings.level
-    fmt = log_settings.format
+    level = settings.level
 
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
-        format=fmt,
-        stream=sys.stdout,
+        format=log_format,
+        stream=stream,
     )
 
     # Apply specific logger levels from config
-    for logger_name, logger_level in log_settings.loggers.items():
+    for logger_name, logger_level in settings.loggers.items():
         logging.getLogger(logger_name).setLevel(
             getattr(logging, logger_level.upper(), logging.INFO)
         )
 
-    logger.info(f"Logging configured with level {level}")
+    logger.info(f"Logging configured with level {level} from config.")
+
+
+def get_logger(name: str) -> logging.Logger:
+    """Returns a logger with the specified name."""
+    return logging.getLogger(name)

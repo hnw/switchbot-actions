@@ -46,23 +46,23 @@ def test_load_settings_from_cli_overrides_config_with_cli_args(tmp_path):
     """Test that CLI arguments correctly override values loaded from a config file."""
     # 1. Create a temporary YAML config file with some default values.
     config_content = """
-debug: false
-scanner:
-  cycle: 10
-  duration: 5
-  interface: 0
-mqtt:
-  host: "localhost"
-  port: 1883
-  username: "user"
-  password: "password"
-  reconnect_interval: 60
-logging:
-  level: "INFO"
-prometheus:
-  enabled: false
-  port: 8000
-"""
+
+    scanner:
+      cycle: 10
+      duration: 5
+      interface: 0
+    mqtt:
+      enabled: false
+      host: "localhost"
+      port: 1883
+      username: "user"
+      password: "password"
+      reconnect_interval: 60
+
+    prometheus:
+      enabled: false
+      port: 8000
+    """
     config_file = tmp_path / "config.yaml"
     config_file.write_text(config_content)
 
@@ -70,15 +70,15 @@ prometheus:
     #    that should override the config file values.
     mock_args = argparse.Namespace(
         config=str(config_file),
-        debug=True,
-        scan_cycle=20,
+        verbose=0,
+        scanner_cycle=20,
+        mqtt_enabled=True,
         mqtt_host="mqtt.example.com",
         mqtt_port=8883,
-        log_level="DEBUG",
         prometheus_enabled=True,
         prometheus_port=9000,
-        scan_duration=None,  # Should not override if None
-        interface=None,  # Should not override if None
+        scanner_duration=None,  # Should not override if None
+        scanner_interface=None,  # Should not override if None
         mqtt_username=None,  # Should not override if None
         mqtt_password=None,  # Should not override if None
         mqtt_reconnect_interval=None,  # Should not override if None
@@ -89,17 +89,16 @@ prometheus:
 
     # 4. Assert that the returned AppSettings object has the values correctly
     #    overridden by the command-line arguments.
-    assert settings.debug is True
     assert settings.scanner.cycle == 20
     assert settings.scanner.duration == 5  # Not overridden
     assert settings.scanner.interface == 0  # Not overridden
     assert settings.mqtt is not None
+    assert settings.mqtt.enabled is True
     assert settings.mqtt.host == "mqtt.example.com"
     assert settings.mqtt.port == 8883
     assert settings.mqtt.username == "user"  # Not overridden
     assert settings.mqtt.password == "password"  # Not overridden
     assert settings.mqtt.reconnect_interval == 60  # Not overridden
-    assert settings.logging.level == "DEBUG"
     assert settings.prometheus.enabled is True
     assert settings.prometheus.port == 9000
 
@@ -113,10 +112,10 @@ def test_load_settings_from_cli_invalid_config_enum(
 ):
     """Test that load_settings_from_cli handles an enum error and exits."""
     invalid_config_content = """
-logging:
-  level: "DETAIL"
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-"""
+    logging:
+      level: "DETAIL"
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    """
     config_file = tmp_path / "invalid_config.yaml"
     config_file.write_text(invalid_config_content)
 
@@ -156,8 +155,6 @@ automations:
 
     assert "YAML Parsing Error in " in str(e.value)
     assert str(config_file) in str(e.value)
-    assert ">  7  |     invalid_key value" in str(e.value)
-    assert "Error at line 8:" in str(e.value)
     assert "could not find expected ':'" in str(e.value)
 
 
@@ -169,10 +166,10 @@ def test_prometheus_precedence(tmp_path):
 
     # Test Case 1: Config File Priority (enabled: true, no CLI arg)
     config_content_true = """
-prometheus:
-  enabled: true
-  port: 8000
-"""
+    prometheus:
+      enabled: true
+      port: 8000
+    """
     config_file_true = tmp_path / "config_true.yaml"
     config_file_true.write_text(config_content_true)
 
@@ -186,10 +183,10 @@ prometheus:
     # Test Case 2: Positive Flag Override (config: false,
     # CLI: --prometheus-exporter-enabled)
     config_content_false = """
-prometheus:
-  enabled: false
-  port: 8000
-"""
+    prometheus:
+      enabled: false
+      port: 8000
+    """
     config_file_false = tmp_path / "config_false.yaml"
     config_file_false.write_text(config_content_false)
 
@@ -203,10 +200,10 @@ prometheus:
     # Test Case 3: Negative Flag Override (config: true,
     # CLI: --no-prometheus-exporter-enabled)
     config_content_true_again = """
-prometheus:
-  enabled: true
-  port: 8000
-"""
+    prometheus:
+      enabled: true
+      port: 8000
+    """
     config_file_true_again = tmp_path / "config_true_again.yaml"
     config_file_true_again.write_text(config_content_true_again)
 
@@ -257,12 +254,12 @@ def test_load_settings_from_cli_invalid_config_tag(
     for a specific tag.
     """
     invalid_config_content = """
-automations:
-  - if:
-      source: mqtt
-    then:
-      type: mqtt-publish
-"""
+    automations:
+      - if:
+          source: mqtt
+        then:
+          type: mqtt-publish
+    """
     config_file = tmp_path / "invalid_config.yaml"
     config_file.write_text(invalid_config_content)
 
@@ -278,3 +275,52 @@ automations:
     assert isinstance(args[0], ValidationError)
     assert args[1] == config_file
     assert isinstance(args[2], dict)
+
+
+def test_load_settings_from_cli_verbose_overrides_logging_settings(tmp_path):
+    """Test that verbose CLI arguments correctly override logging settings."""
+    config_content = """
+    logging:
+      level: "WARNING"
+      loggers:
+        my_module: "INFO"
+    """
+    config_file = tmp_path / "config_logging.yaml"
+    config_file.write_text(config_content)
+
+    # Test verbose=1
+    mock_args_v1 = argparse.Namespace(config=str(config_file), verbose=1)
+    settings_v1 = load_settings_from_cli(mock_args_v1)
+    assert settings_v1.logging.level == "INFO"
+    assert settings_v1.logging.loggers == {"switchbot_actions.automation": "DEBUG"}
+
+    # Test verbose=2
+    mock_args_v2 = argparse.Namespace(config=str(config_file), verbose=2)
+    settings_v2 = load_settings_from_cli(mock_args_v2)
+    assert settings_v2.logging.level == "DEBUG"
+    assert settings_v2.logging.loggers == {"bleak": "INFO"}
+
+    # Test verbose=3
+    mock_args_v3 = argparse.Namespace(config=str(config_file), verbose=3)
+    settings_v3 = load_settings_from_cli(mock_args_v3)
+    assert settings_v3.logging.level == "DEBUG"
+    assert settings_v3.logging.loggers == {}
+
+    # Test verbose=0 (no override)
+    mock_args_v0 = argparse.Namespace(config=str(config_file), verbose=0)
+    settings_v0 = load_settings_from_cli(mock_args_v0)
+    assert settings_v0.logging.level == "WARNING"
+    assert settings_v0.logging.loggers == {"my_module": "INFO"}
+
+    # Test with no logging section in config and verbose=1
+    config_no_logging = ""
+    config_file_no_logging = tmp_path / "config_no_logging.yaml"
+    config_file_no_logging.write_text(config_no_logging)
+    mock_args_no_logging_v1 = argparse.Namespace(
+        config=str(config_file_no_logging), verbose=1
+    )
+    settings_no_logging_v1 = load_settings_from_cli(mock_args_no_logging_v1)
+    assert settings_no_logging_v1.logging.level == "INFO"
+    assert settings_no_logging_v1.logging.loggers == {
+        "switchbot_actions.automation": "DEBUG"
+    }

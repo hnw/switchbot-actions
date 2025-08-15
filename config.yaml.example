@@ -265,7 +265,12 @@ automations:
 # MQTT Client Settings
 # ----------------------------------------------------
 mqtt:
+  # To enable the MQTT client, set `enabled` to true and configure the host.
+  # This can also be controlled via the --mqtt/--no-mqtt CLI flags.
+  enabled: false
+
   # Hostname or IP address of the MQTT broker.
+  # Default: "localhost"
   host: "localhost"
 
   # Port number for the MQTT broker.

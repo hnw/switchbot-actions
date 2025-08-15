@@ -133,7 +133,19 @@ then:
 ## **Advanced Usage**
 
 - **Running as a Service**: For continuous, 24/7 monitoring, we recommend running the application as a systemd service. View the [**Deployment Guide**](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md)).
-- **Command-Line Overrides**: You can temporarily override any setting in your config.yaml using command-line flags. Run switchbot-actions --help for a full list.
+- **Command-Line Overrides**: You can temporarily override settings in your `config.yaml` using command-line flags. For example, to enable the Prometheus exporter and set its port:
+
+  ```bash
+  switchbot-actions --prometheus --prometheus-port 8080
+  ```
+
+  To enable MQTT:
+
+  ```bash
+  switchbot-actions --mqtt --mqtt-host my-broker
+  ```
+
+  Run `switchbot-actions --help` for a full list of options, which are grouped by function (`Scanner`, `MQTT`, `Prometheus`) for clarity.
 
 ## **Robustness Features**
 

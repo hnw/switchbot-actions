@@ -27,7 +27,7 @@ class Application:
         self.stopping = False
         self.is_reloading = False
 
-        setup_logging(self.settings)
+        setup_logging(self.settings.logging)
 
         self.storage = StateStore()
         self._components: Dict[str, BaseComponent] = self._create_all_components(
@@ -76,7 +76,7 @@ class Application:
 
         try:
             new_settings = load_settings_from_cli(self.cli_args)
-            setup_logging(new_settings)
+            setup_logging(new_settings.logging)
 
             for name, component in self._components.items():
                 await component.apply_new_settings(getattr(new_settings, name))
@@ -101,7 +101,7 @@ class Application:
                     sys.exit(1)
 
             self.settings = old_settings
-            setup_logging(self.settings)
+            setup_logging(self.settings.logging)
             logger.info("Rollback completed.")
         finally:
             self.is_reloading = False

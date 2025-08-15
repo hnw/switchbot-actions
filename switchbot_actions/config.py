@@ -63,7 +63,8 @@ class DeviceSettings(BaseConfigModel):
 
 
 class MqttSettings(BaseConfigModel):
-    host: str = ""
+    enabled: bool = False
+    host: str = "localhost"
     port: int = Field(1883, ge=1, le=65535)
     username: Optional[str] = None
     password: Optional[str] = None

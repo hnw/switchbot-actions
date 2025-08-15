@@ -48,24 +48,40 @@ def load_settings_from_cli(args: argparse.Namespace) -> AppSettings:
             raise ConfigError(f"YAML Parsing Error: {problem}")
 
     cli_to_config_map = {
-        "debug": "debug",
-        "scan_cycle": "scanner.cycle",
-        "scan_duration": "scanner.duration",
-        "interface": "scanner.interface",
+        "scanner_cycle": "scanner.cycle",
+        "scanner_duration": "scanner.duration",
+        "scanner_interface": "scanner.interface",
         "prometheus_enabled": "prometheus.enabled",
         "prometheus_port": "prometheus.port",
+        "mqtt_enabled": "mqtt.enabled",
         "mqtt_host": "mqtt.host",
         "mqtt_port": "mqtt.port",
         "mqtt_username": "mqtt.username",
         "mqtt_password": "mqtt.password",
         "mqtt_reconnect_interval": "mqtt.reconnect_interval",
-        "log_level": "logging.level",
     }
 
     for arg_key, key_path in cli_to_config_map.items():
         value = getattr(args, arg_key, None)
         if value is not None:
             _set_nested_value(config_data, key_path, value)
+
+    # Apply verbose setting from CLI to logging configuration
+    verbose_level = getattr(args, "verbose", 0)
+    if verbose_level > 0:
+        config_data.setdefault("logging", {})
+
+        if verbose_level == 1:
+            logging_override = {
+                "level": "INFO",
+                "loggers": {"switchbot_actions.automation": "DEBUG"},
+            }
+        elif verbose_level == 2:
+            logging_override = {"level": "DEBUG", "loggers": {"bleak": "INFO"}}
+        else:  # verbose_level >= 3:
+            logging_override = {"level": "DEBUG", "loggers": {}}
+
+        config_data["logging"].update(logging_override)
 
     try:
         settings = AppSettings.model_validate(config_data)

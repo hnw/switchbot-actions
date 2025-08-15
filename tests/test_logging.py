@@ -1,15 +1,15 @@
 import logging
 from unittest.mock import patch
 
-from switchbot_actions.config import AppSettings, LoggingSettings
+from switchbot_actions.config import LoggingSettings
 from switchbot_actions.logging import setup_logging
 
 
 @patch("logging.getLogger")
 @patch("logging.basicConfig")
-def test_setup_logging_debug_mode(mock_basic_config, mock_get_logger):
-    """Test that --debug flag sets root to DEBUG and bleak to INFO."""
-    settings = AppSettings(debug=True)
+def test_setup_logging_debug_level_and_bleak_info(mock_basic_config, mock_get_logger):
+    """Test that setup_logging correctly applies DEBUG level and bleak INFO logger."""
+    settings = LoggingSettings(level="DEBUG", loggers={"bleak": "INFO"})
     setup_logging(settings)
 
     # Check basicConfig call for root logger
@@ -26,12 +26,10 @@ def test_setup_logging_debug_mode(mock_basic_config, mock_get_logger):
 @patch("logging.basicConfig")
 def test_setup_logging_from_config_with_loggers(mock_basic_config, mock_get_logger):
     """Test that logging is configured from config file, including specific loggers."""
-    settings = AppSettings(
-        logging=LoggingSettings(
-            level="WARNING",
-            format="%(message)s",
-            loggers={"bleak": "ERROR", "aiohttp": "CRITICAL"},
-        )
+    settings = LoggingSettings(
+        level="WARNING",
+        format="%(message)s",
+        loggers={"bleak": "ERROR", "aiohttp": "CRITICAL"},
     )
     setup_logging(settings)
 
@@ -51,7 +49,7 @@ def test_setup_logging_from_config_with_loggers(mock_basic_config, mock_get_logg
 @patch("logging.basicConfig")
 def test_setup_logging_from_config_no_loggers(mock_basic_config):
     """Test that logging is configured correctly when loggers section is missing."""
-    settings = AppSettings(logging=LoggingSettings(level="INFO"))
+    settings = LoggingSettings(level="INFO")
     setup_logging(settings)
 
     mock_basic_config.assert_called_once()

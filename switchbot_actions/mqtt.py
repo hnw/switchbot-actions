@@ -35,7 +35,7 @@ class MqttClient(BaseComponent[MqttSettings]):
     def _is_enabled(self, settings: Optional[MqttSettings] = None) -> bool:
         """Checks if the component is enabled based on current or new settings."""
         current_settings = settings or self.settings
-        return current_settings.host != ""
+        return current_settings.enabled
 
     async def _start(self):
         logger.info("Starting MQTT client.")

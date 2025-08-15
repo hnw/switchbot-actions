@@ -22,7 +22,7 @@ from switchbot_actions.error import ConfigError
 @pytest.fixture
 def cli_args():
     """Provides mock command-line arguments."""
-    return argparse.Namespace(config="/path/to/config.yaml")
+    return argparse.Namespace(config="/path/to/config.yaml", verbose=0)
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def initial_settings():
     }
     settings_dict = {
         "scanner": {"cycle": 10, "duration": 3, "interface": 0},
-        "mqtt": {"host": "localhost", "port": 1883},
+        "mqtt": {"enabled": True, "host": "localhost", "port": 1883},
         "prometheus": {"enabled": True, "port": 8000},
         "automations": [mock_rule],
         "devices": {"test_device": {"address": "AA:BB:CC:DD:EE:FF"}},
@@ -70,7 +70,7 @@ async def app_with_mocked_abstract_methods(initial_settings, cli_args):
 
 def test_application_always_creates_all_components(initial_settings, cli_args):
     """Test that Application always instantiates all components."""
-    initial_settings.mqtt.host = ""
+    initial_settings.mqtt.enabled = False
     initial_settings.prometheus.enabled = False
     initial_settings.automations.rules = []
 
@@ -91,7 +91,7 @@ async def test_start_calls_all_component_starts(app_with_mocked_abstract_methods
     await app_with_mocked_abstract_methods.start()
 
     for component in app_with_mocked_abstract_methods._components.values():
-        # Simulate the real method\n's behavior by setting the _running flag
+        # Simulate the real method\'s behavior by setting the _running flag
         # after _start is called.
         if component.is_enabled:
             component._start.assert_awaited_once()

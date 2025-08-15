@@ -299,7 +299,7 @@ Settings are loaded in the following order, with later sources overriding earlie
 
 ### **5.2. `scanner`**
 
-Configures the BLE scanning behavior.
+Configures the BLE scanning behavior. These settings can be overridden by the `--scanner-cycle`, `--scanner-duration`, and `--scanner-interface` command-line flags.
 
 - `cycle`: (integer, optional, default: `10`) Time in seconds between the start of each scan cycle.
 - `duration`: (integer, optional, default: `3`) Time in seconds the scanner will actively listen. Must be less than or equal to `cycle`.
@@ -309,7 +309,8 @@ Configures the BLE scanning behavior.
 
 Configures the MQTT client connection.
 
-- `host`: (string, required) Hostname or IP of the MQTT broker.
+- `enabled`: (boolean, optional, default: `false`) Enables or disables the MQTT client. Can be overridden with the `--mqtt` and `--no-mqtt` flags.
+- `host`: (string, optional, default: `localhost`) Hostname or IP of the MQTT broker.
 - `port`: (integer, optional, default: `1883`)
 - `username` / `password`: (string, optional)
 - `reconnect_interval`: (float, optional, default: `10`) Seconds to wait before reconnecting.

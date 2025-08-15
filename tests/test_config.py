@@ -20,7 +20,8 @@ from switchbot_actions.config import (
 
 def test_mqtt_settings_defaults():
     settings = MqttSettings()  # pyright:ignore[reportCallIssue]
-    assert settings.host == ""
+    assert settings.enabled is False
+    assert settings.host == "localhost"
     assert settings.port == 1883
     assert settings.username is None
     assert settings.password is None
@@ -193,7 +194,8 @@ def test_app_settings_defaults():
     assert settings.automations.devices == {}
     assert isinstance(settings.logging, LoggingSettings)
     assert isinstance(settings.mqtt, MqttSettings)
-    assert settings.mqtt.host == ""
+    assert settings.mqtt.enabled is False
+    assert settings.mqtt.host == "localhost"
 
 
 def test_app_settings_from_dict():
