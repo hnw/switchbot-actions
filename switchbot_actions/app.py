@@ -9,10 +9,10 @@ from typing import Any, Dict, cast
 from .component import BaseComponent
 from .config import AppSettings
 from .config_loader import load_settings_from_cli
-from .exporter import PrometheusExporter
 from .handlers import AutomationHandler
 from .logging import setup_logging
 from .mqtt import MqttClient
+from .prometheus import PrometheusExporter
 from .scanner import SwitchbotScanner
 from .signals import publish_mqtt_message_request
 from .store import StateStore
@@ -57,9 +57,7 @@ class Application:
         components: Dict[str, BaseComponent] = {
             "scanner": SwitchbotScanner(settings=settings.scanner),
             "mqtt": MqttClient(settings.mqtt),
-            "prometheus_exporter": PrometheusExporter(
-                settings=settings.prometheus_exporter
-            ),
+            "prometheus": PrometheusExporter(settings=settings.prometheus),
             "automations": AutomationHandler(
                 settings=settings.automations,
                 state_store=self.storage,

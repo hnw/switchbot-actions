@@ -5,7 +5,7 @@ import pytest
 from prometheus_client import REGISTRY, CollectorRegistry
 
 from switchbot_actions.config import DeviceSettings, PrometheusExporterSettings
-from switchbot_actions.exporter import PrometheusExporter
+from switchbot_actions.prometheus import PrometheusExporter
 from switchbot_actions.signals import switchbot_advertisement_received
 
 
@@ -79,7 +79,7 @@ def configured_exporter_settings():
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_info_metric_initialization(
     mock_start_http_server, configured_exporter_settings, test_registry
 ):
@@ -117,7 +117,7 @@ async def test_info_metric_initialization(
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_exporter_handle_advertisement(
     mock_start_http_server, mock_state_1, test_registry
 ):
@@ -152,7 +152,7 @@ async def test_exporter_handle_advertisement(
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_info_metric_update_on_advertisement(
     mock_start_http_server,
     configured_exporter_settings,
@@ -200,7 +200,7 @@ async def test_info_metric_update_on_advertisement(
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_metric_filtering(mock_start_http_server, mock_state_1, test_registry):
     """Test that metrics are filtered based on the target config."""
     mock_start_http_server.return_value = [MagicMock(), Mock()]
@@ -235,7 +235,7 @@ async def test_metric_filtering(mock_start_http_server, mock_state_1, test_regis
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_address_filtering(
     mock_start_http_server, mock_state_1, mock_state_2, test_registry
 ):
@@ -320,7 +320,7 @@ def test_no_restart_on_other_settings_change(test_registry):
 
 
 @pytest.mark.asyncio
-@patch("switchbot_actions.exporter.start_http_server")
+@patch("switchbot_actions.prometheus.start_http_server")
 async def test_apply_live_update_recreates_info_gauge(
     mock_start_http_server, test_registry
 ):

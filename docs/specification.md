@@ -310,7 +310,7 @@ Configures the MQTT client connection.
 - `username` / `password`: (string, optional)
 - `reconnect_interval`: (float, optional, default: `10`) Seconds to wait before reconnecting.
 
-### **5.4. `prometheus_exporter`**
+### **5.4. `prometheus`**
 
 Configures the Prometheus metrics endpoint.
 
@@ -398,7 +398,7 @@ The application uses the `blinker` library for internal communication.
 │   ├── cli.py              # Command-line interface entry point
 │   ├── config.py           # Pydantic models for configuration
 │   ├── state.py            # StateObject class hierarchy for event data encapsulation
-│   ├── exporter.py         # PrometheusExporter
+│   ├── prometheus.py       # PrometheusExporter
 │   ├── handlers.py         # AutomationHandler
 │   ├── logging.py          # Logging setup
 │   ├── mqtt.py             # MqttClient

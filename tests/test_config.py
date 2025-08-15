@@ -33,7 +33,7 @@ def test_mqtt_settings_invalid_port(port):
         MqttSettings(host="localhost", port=port)
 
 
-def test_prometheus_exporter_settings_defaults():
+def test_prometheus_settings_defaults():
     settings = PrometheusExporterSettings()  # pyright:ignore[reportCallIssue]
     assert settings.enabled is False
     assert settings.port == 8000
@@ -41,7 +41,7 @@ def test_prometheus_exporter_settings_defaults():
 
 
 @pytest.mark.parametrize("port", [0, 65536])
-def test_prometheus_exporter_settings_invalid_port(port):
+def test_prometheus_settings_invalid_port(port):
     with pytest.raises(ValidationError):
         PrometheusExporterSettings(port=port)
 
@@ -215,7 +215,7 @@ def test_app_settings_defaults():
     assert settings.config_path == "config.yaml"
     assert settings.debug is False
     assert isinstance(settings.scanner, ScannerSettings)
-    assert isinstance(settings.prometheus_exporter, PrometheusExporterSettings)
+    assert isinstance(settings.prometheus, PrometheusExporterSettings)
     assert settings.automations.rules == []
     assert settings.automations.devices == {}
     assert isinstance(settings.logging, LoggingSettings)

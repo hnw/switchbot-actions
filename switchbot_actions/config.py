@@ -247,7 +247,7 @@ class AppSettings(BaseConfigModel):
     config_path: str = "config.yaml"
     debug: bool = False
     scanner: ScannerSettings = Field(default_factory=ScannerSettings)
-    prometheus_exporter: PrometheusExporterSettings = Field(
+    prometheus: PrometheusExporterSettings = Field(
         default_factory=PrometheusExporterSettings  # pyright:ignore[reportArgumentType]
     )
     automations: AutomationSettings = Field(default_factory=AutomationSettings)
@@ -266,8 +266,8 @@ class AppSettings(BaseConfigModel):
                 if "devices" in data:
                     automations_data["devices"] = data.pop("devices")
                 data["automations"] = automations_data
-            if "prometheus_exporter" in data and "devices" in data:
-                data["prometheus_exporter"]["devices"] = data.pop("devices")
+            if "prometheus" in data and "devices" in data:
+                data["prometheus"]["devices"] = data.pop("devices")
 
         return data
 

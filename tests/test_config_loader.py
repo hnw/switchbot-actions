@@ -59,7 +59,7 @@ mqtt:
   reconnect_interval: 60
 logging:
   level: "INFO"
-prometheus_exporter:
+prometheus:
   enabled: false
   port: 8000
 """
@@ -75,8 +75,8 @@ prometheus_exporter:
         mqtt_host="mqtt.example.com",
         mqtt_port=8883,
         log_level="DEBUG",
-        prometheus_exporter_enabled=True,
-        prometheus_exporter_port=9000,
+        prometheus_enabled=True,
+        prometheus_port=9000,
         scan_duration=None,  # Should not override if None
         interface=None,  # Should not override if None
         mqtt_username=None,  # Should not override if None
@@ -100,8 +100,8 @@ prometheus_exporter:
     assert settings.mqtt.password == "password"  # Not overridden
     assert settings.mqtt.reconnect_interval == 60  # Not overridden
     assert settings.logging.level == "DEBUG"
-    assert settings.prometheus_exporter.enabled is True
-    assert settings.prometheus_exporter.port == 9000
+    assert settings.prometheus.enabled is True
+    assert settings.prometheus.port == 9000
 
 
 @patch(
@@ -161,15 +161,15 @@ automations:
     assert "could not find expected ':'" in str(e.value)
 
 
-def test_prometheus_exporter_precedence(tmp_path):
+def test_prometheus_precedence(tmp_path):
     """
     Test that command-line arguments correctly override config file settings
-    for prometheus_exporter_enabled.
+    for prometheus_enabled.
     """
 
     # Test Case 1: Config File Priority (enabled: true, no CLI arg)
     config_content_true = """
-prometheus_exporter:
+prometheus:
   enabled: true
   port: 8000
 """
@@ -178,15 +178,15 @@ prometheus_exporter:
 
     mock_args_1 = argparse.Namespace(
         config=str(config_file_true),
-        prometheus_exporter_enabled=None,  # No CLI override
+        prometheus_enabled=None,  # No CLI override
     )
     settings_1 = load_settings_from_cli(mock_args_1)
-    assert settings_1.prometheus_exporter.enabled is True
+    assert settings_1.prometheus.enabled is True
 
     # Test Case 2: Positive Flag Override (config: false,
     # CLI: --prometheus-exporter-enabled)
     config_content_false = """
-prometheus_exporter:
+prometheus:
   enabled: false
   port: 8000
 """
@@ -195,15 +195,15 @@ prometheus_exporter:
 
     mock_args_2 = argparse.Namespace(
         config=str(config_file_false),
-        prometheus_exporter_enabled=True,  # CLI override to True
+        prometheus_enabled=True,  # CLI override to True
     )
     settings_2 = load_settings_from_cli(mock_args_2)
-    assert settings_2.prometheus_exporter.enabled is True
+    assert settings_2.prometheus.enabled is True
 
     # Test Case 3: Negative Flag Override (config: true,
     # CLI: --no-prometheus-exporter-enabled)
     config_content_true_again = """
-prometheus_exporter:
+prometheus:
   enabled: true
   port: 8000
 """
@@ -212,10 +212,10 @@ prometheus_exporter:
 
     mock_args_3 = argparse.Namespace(
         config=str(config_file_true_again),
-        prometheus_exporter_enabled=False,  # CLI override to False
+        prometheus_enabled=False,  # CLI override to False
     )
     settings_3 = load_settings_from_cli(mock_args_3)
-    assert settings_3.prometheus_exporter.enabled is False
+    assert settings_3.prometheus.enabled is False
 
 
 @patch(

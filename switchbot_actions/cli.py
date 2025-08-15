@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 def cli_main():
     """Synchronous entry point for the command-line interface."""
-    parser = argparse.ArgumentParser(description="SwitchBot Prometheus Exporter")
+    parser = argparse.ArgumentParser(
+        description="A YAML-based automation engine for SwitchBot BLE devices."
+    )
     parser.add_argument(
         "-c",
         "--config",
@@ -37,12 +39,15 @@ def cli_main():
         help="Bluetooth adapter number to use (e.g., 0 for hci0, 1 for hci1)",
     )
     parser.add_argument(
-        "--prometheus-exporter-enabled",
+        "--prometheus-enabled",
         action=argparse.BooleanOptionalAction,
         help="Enable Prometheus exporter",
     )
     parser.add_argument(
-        "--prometheus-exporter-port", type=int, help="Prometheus exporter port"
+        "--prometheus-port",
+        type=int,
+        help="Prometheus exporter port",
+        metavar="PORT",
     )
     parser.add_argument("--mqtt-host", type=str, help="MQTT broker host")
     parser.add_argument("--mqtt-port", type=int, help="MQTT broker port")

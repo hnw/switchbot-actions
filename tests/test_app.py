@@ -36,7 +36,7 @@ def initial_settings():
     settings_dict = {
         "scanner": {"cycle": 10, "duration": 3, "interface": 0},
         "mqtt": {"host": "localhost", "port": 1883},
-        "prometheus_exporter": {"enabled": True, "port": 8000},
+        "prometheus": {"enabled": True, "port": 8000},
         "automations": [mock_rule],
         "devices": {"test_device": {"address": "AA:BB:CC:DD:EE:FF"}},
     }
@@ -71,14 +71,14 @@ async def app_with_mocked_abstract_methods(initial_settings, cli_args):
 def test_application_always_creates_all_components(initial_settings, cli_args):
     """Test that Application always instantiates all components."""
     initial_settings.mqtt.host = ""
-    initial_settings.prometheus_exporter.enabled = False
+    initial_settings.prometheus.enabled = False
     initial_settings.automations.rules = []
 
     app = Application(initial_settings, cli_args)
 
     assert "scanner" in app._components
     assert "mqtt" in app._components
-    assert "prometheus_exporter" in app._components
+    assert "prometheus" in app._components
     assert "automations" in app._components
 
 
@@ -119,7 +119,7 @@ async def test_stop_stops_all_components_in_reverse_order(
         app_with_mocked_abstract_methods._components["mqtt"]._stop, "mqtt_stop"
     )
     manager.attach_mock(
-        app_with_mocked_abstract_methods._components["prometheus_exporter"]._stop,
+        app_with_mocked_abstract_methods._components["prometheus"]._stop,
         "exporter_stop",
     )
     manager.attach_mock(
