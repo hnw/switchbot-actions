@@ -120,6 +120,14 @@ if:
     payload: "ON" # React to a simple string payload
 ```
 
+- **Execute Shell Commands Safely**: Run external commands with arguments passed as a list, preventing command injection vulnerabilities.
+
+```yaml
+then:
+  type: "shell_command"
+  command: ["echo", "Hello, {username}!"]
+```
+
 **For a complete reference of all configuration options, please see the [Project Specification](https://github.com/hnw/switchbot-actions/blob/main/docs/specification.md).**
 
 ## **Advanced Usage**

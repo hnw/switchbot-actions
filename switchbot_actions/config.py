@@ -135,7 +135,7 @@ class AutomationIf(BaseConfigModel):
 
 class ShellCommandAction(BaseConfigModel):
     type: Literal["shell_command"]
-    command: str
+    command: List[str]
 
 
 class WebhookAction(BaseConfigModel):

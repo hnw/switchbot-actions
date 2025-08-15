@@ -183,13 +183,13 @@ def test_automation_rule_then_block_single_dict_to_list():
     rule = AutomationRule.model_validate(
         {
             "if": {"source": "switchbot"},
-            "then": {"type": "shell_command", "command": "echo hello"},
+            "then": {"type": "shell_command", "command": ["echo", "hello"]},
         }
     )
     assert isinstance(rule.then_block, list)
     assert len(rule.then_block) == 1
     assert isinstance(rule.then_block[0], ShellCommandAction)
-    assert rule.then_block[0].command == "echo hello"
+    assert rule.then_block[0].command == ["echo", "hello"]
 
 
 def test_automation_rule_then_block_already_list():
@@ -197,7 +197,7 @@ def test_automation_rule_then_block_already_list():
         {
             "if": {"source": "switchbot"},
             "then": [
-                {"type": "shell_command", "command": "echo hello"},
+                {"type": "shell_command", "command": ["echo", "hello"]},
                 {"type": "webhook", "url": "http://example.com"},
             ],
         }
@@ -205,7 +205,7 @@ def test_automation_rule_then_block_already_list():
     assert isinstance(rule.then_block, list)
     assert len(rule.then_block) == 2
     assert isinstance(rule.then_block[0], ShellCommandAction)
-    assert rule.then_block[0].command == "echo hello"
+    assert rule.then_block[0].command == ["echo", "hello"]
     assert isinstance(rule.then_block[1], WebhookAction)
     assert rule.then_block[1].url == "http://example.com"
 
@@ -266,12 +266,12 @@ def test_if_block_name_is_unified_with_rule_name():
                 {
                     "name": "MyRule",  # Rule with an explicit name
                     "if": {"source": "switchbot"},
-                    "then": [{"type": "shell_command", "command": "echo hello"}],
+                    "then": [{"type": "shell_command", "command": ["echo", "hello"]}],
                 },
                 {
                     # Rule with no name, should get a default name
                     "if": {"source": "mqtt", "topic": "test"},
-                    "then": [{"type": "shell_command", "command": "echo world"}],
+                    "then": [{"type": "shell_command", "command": ["echo", "world"]}],
                 },
             ]
         }
@@ -333,7 +333,10 @@ def test_app_settings_with_multiple_automations():
             {
                 "if": {"source": "mqtt", "topic": "home/light/status"},
                 "then": [
-                    {"type": "shell_command", "command": "echo 'Light status changed'"}
+                    {
+                        "type": "shell_command",
+                        "command": ["echo", "'Light status changed'"],
+                    }
                 ],
             },
         ]
@@ -345,10 +348,10 @@ def test_app_settings_with_multiple_automations():
     assert settings.automations.rules[1].if_block.topic == "home/light/status"
     assert isinstance(settings.automations.rules[0].then_block[0], WebhookAction)
     assert isinstance(settings.automations.rules[1].then_block[0], ShellCommandAction)
-    assert (
-        settings.automations.rules[1].then_block[0].command
-        == "echo 'Light status changed'"
-    )
+    assert settings.automations.rules[1].then_block[0].command == [
+        "echo",
+        "'Light status changed'",
+    ]
 
 
 def test_switchbot_command_device_reference_success():
@@ -510,7 +513,7 @@ def test_if_block_device_reference_success():
                     "device": "my-meter",
                     "conditions": {"temperature": {"gt": 25}},
                 },
-                "then": [{"type": "shell_command", "command": "echo hot"}],
+                "then": [{"type": "shell_command", "command": ["echo", "hot"]}],
             }
         ],
     }
@@ -539,7 +542,7 @@ def test_if_block_device_reference_overwrites_address():
                         "temperature": {"gt": 25},
                     },
                 },
-                "then": [{"type": "shell_command", "command": "echo hot"}],
+                "then": [{"type": "shell_command", "command": ["echo", "hot"]}],
             }
         ],
     }
@@ -563,7 +566,7 @@ def test_if_block_device_reference_no_impact_on_existing_rules():
                         "temperature": {"gt": 25},
                     },
                 },
-                "then": [{"type": "shell_command", "command": "echo hot"}],
+                "then": [{"type": "shell_command", "command": ["echo", "hot"]}],
             }
         ],
     }

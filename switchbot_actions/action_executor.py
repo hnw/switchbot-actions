@@ -40,10 +40,12 @@ class ShellCommandExecutor(ActionExecutor):
     """Executes a shell command."""
 
     async def execute(self, state: StateObject) -> None:
-        command = state.format(self._action_config.command)
-        logger.debug(f"Executing shell command: {command}")
-        process = await asyncio.create_subprocess_shell(
-            command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        command_list = [state.format(arg) for arg in self._action_config.command]
+        logger.debug(f"Executing command: {command_list}")
+        process = await asyncio.create_subprocess_exec(
+            *command_list,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await process.communicate()
         if stdout:

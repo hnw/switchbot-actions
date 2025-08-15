@@ -92,6 +92,16 @@ automations:
       # Optional: Specify the log level. Defaults to INFO.
       level: "INFO"
 
+  - name: "Execute Shell Command Example"
+    if:
+      source: "switchbot"
+      conditions:
+        modelName: "WoBot"
+        isOn: True
+    then:
+      type: "shell_command"
+      command: ["echo", "Button pressed at {timestamp}"]
+
   - name: "Button Press Notification"
     # Mute for 2 seconds to prevent bouncing/chattering effects.
     cooldown: "2s"

@@ -250,7 +250,7 @@ The `then` block specifies one or more actions to execute when the `if` conditio
   - `message`: (string, required) The message to log.
   - `level`: (string, optional, default: `INFO`) Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 - **`shell_command`**: Executes a shell command.
-  - `command`: (string, required) The command to execute.
+  - `command`: (list of strings, required) The command and its arguments as a list. The first element is the command, and subsequent elements are its arguments. This prevents command injection by avoiding shell interpretation.
 - **`webhook`**: Sends an HTTP request.
   - `url`: (string, required) The target URL.
   - `method`: (string, optional, default: `POST`) `POST` or `GET`.

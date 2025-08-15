@@ -49,7 +49,7 @@ def test_init_creates_correct_action_runners(automation_handler_factory):
     with patch("switchbot_actions.handlers.create_action_executor") as mock_factory:
         mock_factory.return_value = MagicMock(name="ActionExecutorMock")
 
-        then_block = [{"type": "shell_command", "command": "echo 'hi'"}]
+        then_block = [{"type": "shell_command", "command": ["echo", "hi"]}]
         configs = [
             AutomationRule.model_validate(
                 {"if": {"source": "switchbot"}, "then": then_block}

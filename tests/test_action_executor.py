@@ -69,14 +69,14 @@ async def test_log_executor_logs_message_at_correct_level(
 
 # --- Tests for ShellCommandExecutor ---
 @pytest.mark.asyncio
-@patch("asyncio.create_subprocess_shell")
+@patch("asyncio.create_subprocess_exec")
 async def test_shell_command_executor(
-    mock_create_subprocess_shell, mock_switchbot_advertisement
+    mock_create_subprocess_exec, mock_switchbot_advertisement
 ):
     mock_process = AsyncMock()
     mock_process.communicate.return_value = (b"stdout_output", b"stderr_output")
     mock_process.returncode = 0
-    mock_create_subprocess_shell.return_value = mock_process
+    mock_create_subprocess_exec.return_value = mock_process
 
     raw_state = mock_switchbot_advertisement(
         address="DE:AD:BE:EF:22:22",
@@ -89,13 +89,14 @@ async def test_shell_command_executor(
     state_object = create_state_object(raw_state)
     action_config = ShellCommandAction(
         type="shell_command",
-        command="echo 'Bot {address} pressed'",
+        command=["echo", "Bot {address} pressed"],
     )
     executor = ShellCommandExecutor(action_config)
     await executor.execute(state_object)
 
-    mock_create_subprocess_shell.assert_called_once_with(
-        state_object.format(action_config.command),
+    mock_create_subprocess_exec.assert_called_once_with(
+        "echo",
+        "Bot DE:AD:BE:EF:22:22 pressed",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

@@ -24,7 +24,7 @@ class TestActionRunner:
                 "name": "Cooldown Test",
                 "cooldown": "10s",
                 "if": {"source": "switchbot"},
-                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                "then": [{"type": "shell_command", "command": ["echo", "test"]}],
             }
         )
         mock_executor = AsyncMock()
@@ -57,7 +57,7 @@ class TestActionRunner:
             {
                 "name": "Test Rule",
                 "if": {"source": "mqtt", "topic": "#"},
-                "then": [{"type": "shell_command", "command": "echo 'test'"}],
+                "then": [{"type": "shell_command", "command": ["echo", "test"]}],
             }
         )
         mock_executor = AsyncMock()
