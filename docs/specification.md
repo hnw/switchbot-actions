@@ -168,7 +168,7 @@ This is the core of the application. The automation engine is configured under t
 
 An automation rule consists of three main parts:
 
-- **Rule**: A container for a single automation, which can have a `name` and a `cooldown`.
+- **Rule**: A container for a single automation, which can have a `name` and a `cooldown`. The cooldown is managed on a per-device basis (or per-topic for MQTT triggers).
 - **Trigger (`if` block)**: Defines **when** the rule should be activated. It specifies the event `source` and a set of `conditions` to be met.
 - **Actions (`then` block)**: Defines **what** happens when the rule is triggered. It contains one or more actions to be executed.
 
@@ -183,6 +183,8 @@ The behavior of a trigger is determined by the presence of the `duration` key.
 - **Immediate Trigger (Edge-Triggered)**: If `duration` is **not** present, the rule triggers immediately as soon as the conditions are met.
 - **Duration-Based Trigger**: If `duration` **is** present (e.g., `duration: "5m"`), the rule triggers only after the conditions have been continuously met for that entire time period.
 
+More specifically, a timer is started the moment the conditions for the rule first become true. If the conditions become false at any point before the duration has passed, the timer is cancelled. The action is executed only if the timer is allowed to complete without interruption.
+
 #### **4.2.2. Trigger Source (`source`)**
 
 This mandatory key defines the origin of the event that can trigger the rule.
@@ -196,13 +198,21 @@ For `mqtt` sources, the `topic` key is also required.
 
 The `conditions` map is where you define the specific state(s) required to trigger the rule.
 
-##### **A. Basic Syntax**
+##### **A. Basic Syntax and Evaluation Rules**
 
-A condition is a key-value pair: `attribute: 'operator value'`.
+A condition is a key-value pair in the format: `attribute: 'operator value'`.
 
 - **`attribute`**: The name of the state attribute to check (e.g., `temperature`).
-- **`operator`**: (Optional) Can be `==`, `!=`, `>`, `<`, `>=`, `<=`. If omitted, `==` is assumed.
+- **`operator`**: (Optional) Can be `==`, `!=`, `>`, `<`, `>=`, `<=`.
 - **`value`**: The value to compare against.
+
+The evaluation engine follows a clear set of rules to interpret the condition string:
+
+1.  **Operator Parsing**: If the value string begins with a recognized operator (e.g., `> `), it is parsed as a comparison. The remainder of the string is treated as the value to compare against.
+
+2.  **Implicit Equality**: If no operator is found at the beginning of the string, the `==` (equals) operator is assumed, and the entire string is used as the value. For example, `modelName: "WoSensorTH"` is equivalent to `modelName: "== WoSensorTH"`.
+
+3.  **Automatic Type Casting**: The engine attempts to convert the value string to match the data type of the state's `attribute` (e.g., number, boolean) before the comparison is performed. For instance, in the condition `temperature: '> 28.0'`, the string `"28.0"` is converted to a float before the numeric comparison occurs. If this conversion fails, the condition evaluates to `False`.
 
 Example: `temperature: '> 28.0'`
 
@@ -289,7 +299,7 @@ An alias can be used in two places:
 
 This section covers the configuration for the application's other components.
 
-### **5.1. **Configuration Precedence\*\*
+### **5.1. Configuration Precedence**
 
 Settings are loaded in the following order, with later sources overriding earlier ones:
 
@@ -343,7 +353,21 @@ Configures logging behavior.
 
 ## **6. State Object & Placeholder Reference**
 
-Placeholders allow you to insert dynamic data into your actions. They are resolved from the `StateObject` that triggered the rule.
+### **6.1. Placeholder Resolution Priority**
+
+Placeholders allow you to insert dynamic data into your actions. They are resolved from the `StateObject` that triggered the rule by checking for a matching key in the following order of priority. The first match found is used.
+
+1.  **The `previous` Keyword**: Keys prefixed with `previous.` (e.g., `{previous.temperature}`) always refer to the state of the triggering device just before the current event.
+
+2.  **Triggering Device's Attributes**: Keys that match an attribute of the triggering event's device (e.g., `{temperature}`, `{humidity}`, `modelName`) are resolved next.
+
+3.  **Other Device Aliases**: If the key does not match an attribute on the triggering device, the engine will then look for a matching device alias defined in the top-level `devices` section (e.g., `{living-room-ac.power}`).
+
+This priority is important. For example, if a rule is triggered by a device that has a `humidity` attribute, the placeholder `{humidity}` will always use the triggering device's value, even if another device happens to be aliased as `humidity`.
+
+### **6.2. Placeholder Syntax and Available Attributes**
+
+The table below shows the basic syntax for accessing different state contexts.
 
 | **Placeholder Syntax** | **Description**                                                    | **Example Value**                         |
 | :--------------------- | :----------------------------------------------------------------- | :---------------------------------------- |
