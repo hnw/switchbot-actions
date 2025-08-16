@@ -51,6 +51,7 @@ def load_settings_from_cli(args: argparse.Namespace) -> AppSettings:
         "scanner_cycle": "scanner.cycle",
         "scanner_duration": "scanner.duration",
         "scanner_interface": "scanner.interface",
+        "scanner_enabled": "scanner.enabled",
         "prometheus_enabled": "prometheus.enabled",
         "prometheus_port": "prometheus.port",
         "mqtt_enabled": "mqtt.enabled",

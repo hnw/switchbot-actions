@@ -79,6 +79,7 @@ class PrometheusExporterSettings(BaseConfigModel):
 
 
 class ScannerSettings(BaseConfigModel):
+    enabled: bool = True
     cycle: int = 10
     duration: int = 3
     interface: int = 0

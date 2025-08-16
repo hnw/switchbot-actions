@@ -30,8 +30,9 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
         self.task: asyncio.Task | None = None
 
     def _is_enabled(self, settings: Optional[ScannerSettings] = None) -> bool:
-        """Scanner is always considered enabled."""
-        return True
+        """Checks if the scanner is enabled based on settings."""
+        current_settings = settings or self.settings
+        return current_settings.enabled
 
     async def _start(self) -> None:
         """Starts the scanner component's background task."""

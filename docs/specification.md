@@ -347,6 +347,7 @@ Settings are loaded in the following order, with later sources overriding earlie
 
 Configures the BLE scanning behavior. These settings can be overridden by the `--scanner-cycle`, `--scanner-duration`, and `--scanner-interface` command-line flags.
 
+- `enabled`: (boolean, optional, default: `true`) Enables or disables the BLE scanner. Can be overridden with the `--scanner` and `--no-scanner` flags. Set to `false` to disable the scanner, useful in environments without Bluetooth.
 - `cycle`: (integer, optional, default: `10`) Time in seconds between the start of each scan cycle.
 - `duration`: (integer, optional, default: `3`) Time in seconds the scanner will actively listen. Must be less than or equal to `cycle`.
 - `interface`: (integer, optional, default: `0`) Bluetooth adapter number (e.g., `0` for `hci0`).

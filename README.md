@@ -145,6 +145,12 @@ then:
   switchbot-actions --mqtt --mqtt-host my-broker
   ```
 
+  To disable the scanner (useful in CI/CD environments or if you don't need BLE scanning):
+
+  ```bash
+  switchbot-actions --no-scanner
+  ```
+
   Run `switchbot-actions --help` for a full list of options, which are grouped by function (`Scanner`, `MQTT`, `Prometheus`) for clarity.
 
 ## **Robustness Features**

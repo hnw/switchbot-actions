@@ -44,6 +44,21 @@ def cli_main():
     # Scanner settings
     scanner_group = parser.add_argument_group("Scanner Settings")
     scanner_group.add_argument(
+        "--scanner",
+        dest="scanner_enabled",
+        action="store_true",
+        default=None,
+        help=f"Enable SwitchBot BLE scanner. "
+        f"(default: {'enabled' if DEFAULTS.scanner.enabled else 'disabled'})",
+    )
+    scanner_group.add_argument(
+        "--no-scanner",
+        dest="scanner_enabled",
+        action="store_false",
+        default=None,
+        help="Disable SwitchBot BLE scanner.",
+    )
+    scanner_group.add_argument(
         "--scanner-cycle",
         type=int,
         default=None,
@@ -71,7 +86,8 @@ def cli_main():
         dest="prometheus_enabled",
         action="store_true",
         default=None,
-        help="Enable Prometheus exporter.",
+        help=f"Enable Prometheus exporter. "
+        f"(default: {'enabled' if DEFAULTS.prometheus.enabled else 'disabled'})",
     )
     prometheus_group.add_argument(
         "--no-prometheus",
@@ -95,7 +111,8 @@ def cli_main():
         dest="mqtt_enabled",
         action="store_true",
         default=None,
-        help="Enable MQTT client.",
+        help=f"Enable MQTT client. "
+        f"(default: {'enabled' if DEFAULTS.mqtt.enabled else 'disabled'})",
     )
     mqtt_group.add_argument(
         "--no-mqtt",
