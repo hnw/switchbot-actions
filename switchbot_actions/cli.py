@@ -4,10 +4,13 @@ import logging
 import sys
 
 from .app import run_app
+from .config import AppSettings
 from .config_loader import load_settings_from_cli
 from .error import ConfigError
 
 logger = logging.getLogger(__name__)
+
+DEFAULTS = AppSettings()
 
 
 def cli_main():
@@ -43,15 +46,15 @@ def cli_main():
     scanner_group.add_argument(
         "--scanner-cycle",
         type=int,
-        default=10,
-        help="Time between BLE scan cycles. (default: 10)",
+        default=None,
+        help=f"Time between BLE scan cycles. (default: {DEFAULTS.scanner.cycle})",
         metavar="SECONDS",
     )
     scanner_group.add_argument(
         "--scanner-duration",
         type=int,
-        default=3,
-        help="Time to scan for BLE devices. (default: 3)",
+        default=None,
+        help=f"Time to scan for BLE devices. (default: {DEFAULTS.scanner.duration})",
         metavar="SECONDS",
     )
     scanner_group.add_argument(
@@ -80,8 +83,8 @@ def cli_main():
     prometheus_group.add_argument(
         "--prometheus-port",
         type=int,
-        default=8000,
-        help="Prometheus exporter port. (default: 8000)",
+        default=None,
+        help=f"Prometheus exporter port. (default: {DEFAULTS.prometheus.port})",
         metavar="PORT",
     )
 
@@ -104,15 +107,15 @@ def cli_main():
     mqtt_group.add_argument(
         "--mqtt-host",
         type=str,
-        default="localhost",
-        help='MQTT broker host. (default: "localhost")',
+        default=None,
+        help=f'MQTT broker host. (default: "{DEFAULTS.mqtt.host}")',
         metavar="HOST",
     )
     mqtt_group.add_argument(
         "--mqtt-port",
         type=int,
-        default=1883,
-        help="MQTT broker port. (default: 1883)",
+        default=None,
+        help=f"MQTT broker port. (default: {DEFAULTS.mqtt.port})",
         metavar="PORT",
     )
     mqtt_group.add_argument(
@@ -124,8 +127,9 @@ def cli_main():
     mqtt_group.add_argument(
         "--mqtt-reconnect-interval",
         type=float,
-        default=10.0,
-        help="MQTT broker reconnect interval. (default: 10.0)",
+        default=None,
+        help=f"MQTT broker reconnect interval. "
+        f"(default: {DEFAULTS.mqtt.reconnect_interval})",
         metavar="SECONDS",
     )
 
