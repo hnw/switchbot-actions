@@ -126,6 +126,9 @@ class StateObject(ABC, Generic[T_State]):
         self.previous = previous if previous else _empty_state_instance
         self.snapshot = snapshot
 
+    def __bool__(self) -> bool:
+        return True
+
     def __getattr__(self, name: str) -> Any:
         try:
             return self.get_values_dict()[name]
@@ -177,7 +180,7 @@ class StateObject(ABC, Generic[T_State]):
                 ) from e
 
 
-class _EmptyState(StateObject):
+class _NullState(StateObject):
     """A placeholder for a non-existent state, returning itself on attr access."""
 
     def __init__(self):
@@ -186,6 +189,9 @@ class _EmptyState(StateObject):
         self._raw_event = None
         self.previous = self
         self.snapshot = None
+
+    def __bool__(self) -> bool:
+        return False
 
     def __getattr__(self, name: str) -> Any:
         # Return self to allow chained attribute access on an empty state,
@@ -207,7 +213,7 @@ class _EmptyState(StateObject):
 
 
 _template_formatter = TemplateFormatter()
-_empty_state_instance = _EmptyState()
+_empty_state_instance = _NullState()
 
 
 class SwitchBotState(StateObject[SwitchBotAdvertisement]):

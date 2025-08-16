@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from switchbot_actions.config import AutomationIf as ConditionBlock
-from switchbot_actions.state import StateObject, _EmptyState
+from switchbot_actions.state import StateObject, _NullState
 from switchbot_actions.triggers import (
     DurationTrigger,
     EdgeTrigger,
@@ -187,7 +187,7 @@ class TestCheckAllConditions:
             ({"temperature": "== 99.0"}, False),
             ({"humidity": "== 50.0"}, True),
             ({"humidity": "!= 51.0"}, True),
-            ({"non_existent_attr": "== some_value"}, None),  # Attribute not found
+            ({"non_existent_attr": "== some_value"}, False),
         ],
     )
     def test_check_all_conditions_no_previous(
@@ -398,7 +398,7 @@ def mock_state_with_snapshot(mock_state_object):
     living_meter_state.humidity = 40.0
     living_meter_state.format.side_effect = lambda x: x
 
-    empty_state_device = _EmptyState()
+    empty_state_device = _NullState()
 
     # Use a simple object to simulate the snapshot, allowing attribute access.
     # This correctly simulates the production environment where snapshot is an object,
@@ -469,59 +469,63 @@ class TestCheckAllConditionsWithCrossDeviceState:
         trigger = EdgeTrigger(mock_if_config)
         assert trigger._check_all_conditions(mock_state_with_snapshot) is False
 
-    def test_undefined_alias_returns_false_and_logs_warning(
+    def test_undefined_alias_returns_false_and_logs_error(
         self, mock_state_with_snapshot, caplog
     ):
-        """Test that an undefined alias in a condition evaluates to False."""
+        """Test that an undefined alias in a condition evaluates to False and
+        logs an error."""
         conditions = {"non_existent_alias.temperature": "> 20.0"}
         mock_if_config = MagicMock(spec=ConditionBlock)
         mock_if_config.name = "TestRule"
         mock_if_config.conditions = conditions
         trigger = EdgeTrigger(mock_if_config)
 
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("ERROR"):
             result = trigger._check_all_conditions(mock_state_with_snapshot)
             assert result is False
             assert "Rule 'TestRule'" in caplog.text
             assert (
-                "Condition key 'non_existent_alias.temperature' is invalid"
+                "Invalid device alias 'non_existent_alias' in condition key "
+                "'non_existent_alias.temperature'. Please check your configuration."
                 in caplog.text
             )
 
-    def test_undefined_attribute_returns_false_and_logs_warning(
+    def test_undefined_attribute_returns_false_and_logs_error(
         self, mock_state_with_snapshot, caplog
     ):
-        """Test that an undefined attribute for a valid alias evaluates to False."""
+        """Test that an undefined attribute for a valid alias evaluates to False\
+        and logs an error."""
         conditions = {"living_meter.non_existent_attr": "== 123"}
         mock_if_config = MagicMock(spec=ConditionBlock)
         mock_if_config.name = "TestRule"
         mock_if_config.conditions = conditions
         trigger = EdgeTrigger(mock_if_config)
 
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("ERROR"):
             result = trigger._check_all_conditions(mock_state_with_snapshot)
             assert result is False
             assert "Rule 'TestRule'" in caplog.text
             assert (
-                "Condition key 'living_meter.non_existent_attr' is invalid"
+                "Device does not have attribute 'non_existent_attr' in condition key "
+                "'living_meter.non_existent_attr'. Please check your configuration."
                 in caplog.text
             )
 
-    def test_alias_with_empty_state_returns_false(
+    def test_alias_with_empty_state_returns_false_and_no_log(
         self, mock_state_with_snapshot, caplog
     ):
-        """Test condition on device with no data (_EmptyState) evaluates to False."""
+        "Test condition on device with no data (_NullState) evaluates to False\
+        and produces no log."
         conditions = {"empty_device.temperature": "> 20.0"}
         mock_if_config = MagicMock(spec=ConditionBlock)
         mock_if_config.name = "TestRule"
         mock_if_config.conditions = conditions
         trigger = EdgeTrigger(mock_if_config)
 
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("ERROR"):
             result = trigger._check_all_conditions(mock_state_with_snapshot)
             assert result is False
-            assert "Rule 'TestRule'" in caplog.text
-            assert "Condition key 'empty_device.temperature' is invalid" in caplog.text
+            assert not caplog.text  # No log expected
 
 
 class TestCheckAllConditionsWithDeviceKey:

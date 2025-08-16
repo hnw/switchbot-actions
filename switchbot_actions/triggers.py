@@ -2,10 +2,10 @@ import asyncio
 import logging
 import operator
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Generic, Optional, TypeVar, cast
+from typing import Any, Callable, Generic, TypeVar, cast
 
 from .config import AutomationIf
-from .state import StateObject, _EmptyState
+from .state import StateObject
 from .timers import Timer
 
 logger = logging.getLogger("switchbot_actions.automation")
@@ -57,58 +57,51 @@ class Trigger(ABC, Generic[T]):
     def on_triggered(self, action: Callable[[T], Any]):
         self._action = action
 
-    def _check_all_conditions(self, state: T) -> Optional[bool]:
+    def _check_all_conditions(self, state: T) -> bool:
         """
         Checks if the given conditions are met by the current state.
         Returns True if all conditions are met, False if any condition is not met,
         and None if the state does not match the expected source or topic.
         """
         for key, condition_value in self._if_config.conditions.items():
-            target_obj = state
+            target_state = state
             attr_name = key
-            value_to_check = None
 
             if "." in key:
                 # Cross-device state reference, e.g., "living_meter.temperature"
                 # or "previous.temperature"
-                alias, new_attr_name = key.split(".", 1)
+                alias, attr_name = key.split(".", 1)
 
                 if alias == "previous":
-                    if state.previous is None:
-                        return False  # previous state required but not available
-                    target_obj = state.previous
-                    attr_name = new_attr_name
-                    try:
-                        value_to_check = getattr(target_obj, attr_name)
-                    except AttributeError:
-                        return None  # Attribute not found on previous state
+                    target_state = state.previous
                 else:
                     # It's a cross-device reference
-                    target_device_state = getattr(state.snapshot, alias, None)
-                    is_invalid = False
-                    if target_device_state is None:
-                        is_invalid = True
-                    elif isinstance(target_device_state, _EmptyState):
-                        is_invalid = True
-                    elif not hasattr(target_device_state, new_attr_name):
-                        is_invalid = True
-
-                    if is_invalid:
-                        logger.warning(
-                            f"Rule '{self._if_config.name}': Condition key '{key}' is "
-                            "invalid because the alias is not defined, "
-                            "the device has no state, "
-                            "or the attribute does not exist. Skipping condition."
+                    try:
+                        target_state = getattr(state.snapshot, alias)
+                    except AttributeError:
+                        # Invalid alias (not defined in state.snapshot)
+                        logger.error(
+                            f"Rule '{self._if_config.name}': Invalid device alias "
+                            f"'{alias}' in condition key '{key}'. "
+                            "Please check your configuration."
                         )
-                        return False  # Treat as condition not met
+                        return False
 
-                    value_to_check = getattr(target_device_state, new_attr_name)
-            else:
-                # Single device state reference (the triggering device)
-                try:
-                    value_to_check = getattr(state, key)
-                except AttributeError:
-                    return None  # Attribute not found on state
+                    if not target_state:
+                        # Alias is valid, but device is unobserved (no state yet)
+                        # No error log, just silently treat as condition not met
+                        return False
+
+            if not hasattr(target_state, attr_name):
+                if "." in key:
+                    # Alias is valid, but attribute does not exist on the device state
+                    logger.error(
+                        f"Rule '{self._if_config.name}': Device does not have "
+                        f"attribute '{attr_name}' in condition key '{key}'. "
+                        "Please check your configuration."
+                    )
+                return False
+            value_to_check = getattr(target_state, attr_name)
 
             # Format the condition value string (RHS) using the current state
             formatted_condition_value = state.format(str(condition_value))
@@ -133,7 +126,7 @@ class EdgeTrigger(Trigger[T]):
         # Allows trigger to fire on first event if conditions_met_now is True
         # (e.g., when the 'conditions' block is empty).
         conditions_met_before = False
-        if state.previous is not None:
+        if state.previous:
             conditions_met_before = self._check_all_conditions(cast(T, state.previous))
 
         if conditions_met_now and not conditions_met_before:

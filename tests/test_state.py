@@ -7,7 +7,7 @@ from switchbot_actions.config import AutomationIf, DeviceSettings
 from switchbot_actions.state import (
     StateObject,
     StateSnapshot,
-    _EmptyState,
+    _NullState,
     create_state_object,
 )
 from switchbot_actions.triggers import EdgeTrigger, _evaluate_single_condition
@@ -109,7 +109,7 @@ class TestStateSnapshot:
     def test_getattr_returns_empty_state_for_missing_raw_event(self, snapshot):
         """Test that accessing a configured alias with no event returns EmptyState."""
         result = snapshot.bedroom_meter
-        assert isinstance(result, _EmptyState)
+        assert isinstance(result, _NullState)
 
 
 class TestStateObjectFormatting:
@@ -174,7 +174,7 @@ class TestStateObjectFormatting:
 
         # Test accessing a configured device for which no data is yet available.
         template = "{unseen_meter.temperature}"
-        # This case should return an empty string due to _EmptyState's behavior
+        # This case should return an empty string due to _NullState's behavior
         assert state_object.format(template) == ""
 
 
@@ -388,7 +388,7 @@ def test_check_conditions_no_data(sample_state: StateObject):
         source="switchbot", conditions={"non_existent_key": "some_value"}
     )
     trigger = EdgeTrigger(if_config)
-    assert trigger._check_all_conditions(sample_state) is None
+    assert trigger._check_all_conditions(sample_state) is False
 
 
 def test_check_conditions_mqtt_payload_pass(
@@ -459,7 +459,7 @@ def test_check_conditions_mqtt_json_no_key(
         conditions={"non_existent_key": "some_value"},
     )
     trigger = EdgeTrigger(if_config)
-    assert trigger._check_all_conditions(state) is None
+    assert trigger._check_all_conditions(state) is False
 
 
 def test_check_conditions_boolean_values(sample_state: StateObject):
@@ -533,7 +533,7 @@ def test_check_conditions_combined_conditions(sample_state: StateObject):
         },
     )
     trigger = EdgeTrigger(if_config)
-    assert trigger._check_all_conditions(sample_state) is None
+    assert trigger._check_all_conditions(sample_state) is False
 
 
 def test_check_conditions_invalid_operator(sample_state: StateObject):
