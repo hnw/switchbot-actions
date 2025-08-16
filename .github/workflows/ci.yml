@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   test:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+          cache: "pip"
 
       - name: Upgrade pip and setuptools
         run: |
@@ -45,7 +45,7 @@ jobs:
 
       - name: Run tests and generate coverage data
         run: |
-          pytest --cov-report=html
+          pytest --cov --cov-report=html
 
       - name: Upload coverage report artifact
         uses: actions/upload-artifact@v4
@@ -64,3 +64,49 @@ jobs:
       - name: Run pip-audit
         run: |
           pip-audit
+
+  e2e-test:
+    runs-on: ubuntu-latest
+    services:
+      mosquitto:
+        # NOTE: Using v1.6.15 because Mosquitto v2.x starts in a "local only"
+        # mode by default, which is incompatible with the GitHub Actions
+        # services networking model without manual container startup.
+        # v1.6.15 defaults to listening on all interfaces, allowing tests to connect.
+        image: eclipse-mosquitto:1.6.15-openssl
+        ports:
+          - 1883:1883
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Upgrade pip and setuptools
+        run: |
+          python -m pip install --upgrade pip setuptools
+
+      - name: Install dependencies
+        run: |
+          pip install -e '.[dev]'
+
+      - name: Wait for Mosquitto to be ready
+        run: |
+          echo "Waiting for Mosquitto service to be ready..."
+          for i in $(seq 1 10); do
+            if nc -z localhost 1883; then
+              echo "Mosquitto is ready."
+              exit 0
+            fi
+            echo "Attempt $i: Mosquitto not ready yet, waiting 2 seconds..."
+            sleep 2
+          done
+          echo "Timeout: Mosquitto service did not become available on port 1883."
+          exit 1
+      - name: Run E2E tests
+        run: |
+          pytest tests/e2e

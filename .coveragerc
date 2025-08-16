@@ -1,0 +1,6 @@
+[run]
+source =
+    switchbot_actions
+
+[report]
+show_missing = true
