@@ -127,12 +127,14 @@ class Trigger(ABC, Generic[T]):
 
 class EdgeTrigger(Trigger[T]):
     async def process_state(self, state: T) -> None:
-        if state.previous is None:
-            # No previous state, cannot detect an edge
-            return
-
         conditions_met_now = self._check_all_conditions(state)
-        conditions_met_before = self._check_all_conditions(cast(T, state.previous))
+
+        # If there's no previous state, treat conditions_met_before as False.
+        # Allows trigger to fire on first event if conditions_met_now is True
+        # (e.g., when the 'conditions' block is empty).
+        conditions_met_before = False
+        if state.previous is not None:
+            conditions_met_before = self._check_all_conditions(cast(T, state.previous))
 
         if conditions_met_now and not conditions_met_before:
             # Conditions just became true (rising edge)

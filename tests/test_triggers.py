@@ -278,12 +278,18 @@ class TestEdgeTrigger:
         trigger = EdgeTrigger[StateObject](mock_condition_block)
         trigger.on_triggered(mock_action)
 
+        # Simulate an empty conditions block
+        mock_condition_block.conditions = {}
+
         # state.previous is None
         mock_state_object.previous = None
-        with patch.object(trigger, "_check_all_conditions") as mock_check_conditions:
+        with patch.object(
+            trigger, "_check_all_conditions", return_value=True
+        ) as mock_check_conditions:
             await trigger.process_state(mock_state_object)
-            mock_action.assert_not_called()
-            mock_check_conditions.assert_not_called()
+            mock_action.assert_called_once_with(mock_state_object)
+            # _check_all_conditions is called once for the current state
+            mock_check_conditions.assert_called_once_with(mock_state_object)
 
 
 class TestDurationTrigger:

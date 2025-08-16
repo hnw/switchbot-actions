@@ -254,6 +254,42 @@ conditions:
 
 If a condition refers to an alias or attribute that does not exist (e.g., `non_existent_alias.temperature`), the condition is safely evaluated as `False`, and a `WARNING` is logged. The application will not crash.
 
+##### **E. Empty Conditions Behavior: The "First Seen" Trigger**
+
+When the `conditions` block is omitted or left empty, the rule's condition is always considered `True`.
+
+When combined with a standard automation rule (which is edge-triggered), this creates a **"first seen" trigger**. Crucially, this "first seen" status is tracked independently for each entity:
+
+- For `source: switchbot`, the trigger will fire **once for each unique device** (identified by its MAC address) that matches the rule.
+- For `source: mqtt`, the trigger will fire **once for each unique topic** that matches the rule.
+
+This behavior is useful for running an action the very first time a specific device is detected by the scanner, or the first time a message appears on a particular MQTT topic.
+
+#### **Example: Setting an Initial Position for Curtains on First Detection**
+
+This rule ensures that any newly detected curtain device is immediately set to the fully open position (100%). It will run once for each unique curtain, making it an effective initialization task.
+
+```yaml
+automations:
+  - name: "Set Initial Curtain Position on First Detection"
+    if:
+      source: "switchbot"
+      # This rule applies to all devices of model 'WoCurtain'
+      conditions:
+        modelName: "WoCurtain"
+    then:
+      - type: "log"
+        message: "Curtain {address} detected for the first time. Setting to open position."
+      - type: "switchbot_command"
+        address: "{address}" # The address of the triggering curtain
+        command: "set_position"
+        params:
+          position: 100 # 0=closed, 100=open
+```
+
+> [!IMPORTANT]
+> Because this trigger fires for each new entity, it is highly recommended to constrain the rule using keys like `device`, `address`, `topic`, or `modelName`. An unconstrained rule (e.g., only `source: switchbot`) could trigger for many unexpected devices.
+
 ### **4.3. Action Configuration (`then` block)**
 
 The `then` block specifies one or more actions to execute when the `if` conditions are met. It can be a single action (a map) or a list of actions. All string parameters in actions support placeholders (e.g., `{temperature}`).
