@@ -50,6 +50,7 @@ dev = [
     "pyright",
     "types-requests",
     "aiomqtt",
+    "aiohttp",
 ]
 
 [project.urls]
@@ -61,8 +62,8 @@ dev = [
 switchbot-actions = "switchbot_actions.cli:cli_main"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "--cov"
+#addopts = "--cov"
+norecursedirs = ["tests/e2e"]
 
 [tool.coverage.run]
 source = ["switchbot_actions"]
