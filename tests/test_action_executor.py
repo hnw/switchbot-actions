@@ -103,6 +103,44 @@ async def test_shell_command_executor(
     mock_process.communicate.assert_called_once()
 
 
+@pytest.mark.asyncio
+@patch("asyncio.create_subprocess_exec")
+async def test_shell_command_executor_file_not_found_error(
+    mock_create_subprocess_exec, caplog, mock_switchbot_advertisement
+):
+    caplog.set_level(logging.ERROR)
+
+    mock_create_subprocess_exec.side_effect = FileNotFoundError
+
+    raw_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:33:33",
+        data={"modelName": "Meter", "data": {"temperature": 25.0}},
+    )
+    state_object = create_state_object(raw_state)
+
+    non_existent_command = "/a/b/c/non-existent-command"
+    action_config = ShellCommandAction(
+        type="shell_command",
+        command=[non_existent_command, "arg1", "arg2"],
+    )
+    executor = ShellCommandExecutor(action_config)
+    await executor.execute(state_object)
+
+    mock_create_subprocess_exec.assert_called_once_with(
+        non_existent_command,
+        "arg1",
+        "arg2",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    assert (
+        f"Shell command not found: '{non_existent_command}'. "
+        "Please ensure the command is installed and in your system's PATH."
+        in caplog.text
+    )
+
+
 # --- Tests for WebhookExecutor ---
 @pytest.mark.asyncio
 @patch("switchbot_actions.action_executor.WebhookExecutor._send_request")

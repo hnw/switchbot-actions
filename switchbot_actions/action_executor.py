@@ -42,11 +42,18 @@ class ShellCommandExecutor(ActionExecutor):
     async def execute(self, state: StateObject) -> None:
         command_list = [state.format(arg) for arg in self._action_config.command]
         logger.debug(f"Executing command: {command_list}")
-        process = await asyncio.create_subprocess_exec(
-            *command_list,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command_list,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            logger.error(
+                f"Shell command not found: '{command_list[0]}'. "
+                "Please ensure the command is installed and in your system's PATH."
+            )
+            return
         stdout, stderr = await process.communicate()
         if stdout:
             logger.debug(f"Shell command stdout: {stdout.decode().strip()}")
