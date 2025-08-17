@@ -48,8 +48,8 @@ def load_settings_from_cli(args: argparse.Namespace) -> AppSettings:
             raise ConfigError(f"YAML Parsing Error: {problem}")
 
     cli_to_config_map = {
-        "scanner_cycle": "scanner.cycle",
         "scanner_duration": "scanner.duration",
+        "scanner_wait": "scanner.wait",
         "scanner_interface": "scanner.interface",
         "scanner_enabled": "scanner.enabled",
         "prometheus_enabled": "prometheus.enabled",

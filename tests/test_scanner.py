@@ -37,7 +37,7 @@ def mock_storage():
 @pytest.fixture
 def scanner_settings():
     """Provides mock ScannerSettings."""
-    return ScannerSettings(interface=0, cycle=1, duration=1)
+    return ScannerSettings(interface=0, duration=1, wait=1)
 
 
 @pytest.fixture
@@ -232,11 +232,11 @@ def test_require_restart_on_interface_change(scanner_settings):
     assert scanner._require_restart(new_settings) is True
 
 
-@pytest.mark.parametrize("setting_to_change", ["cycle", "duration"])
+@pytest.mark.parametrize("setting_to_change", ["duration", "wait"])
 def test_no_restart_on_timing_settings_change(scanner_settings, setting_to_change):
     """
     Tests that _require_restart returns False when timing settings like
-    cycle or duration are changed.
+    duration or wait are changed.
     """
     scanner = SwitchbotScanner(settings=scanner_settings)
     new_settings = scanner_settings.model_copy()

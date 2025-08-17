@@ -341,15 +341,15 @@ Settings are loaded in the following order, with later sources overriding earlie
 
 1. **Application Defaults**: Hardcoded default values.
 2. **config.yaml Settings**: Values loaded from your configuration file.
-3. **Command-Line Flags**: Arguments passed at runtime (e.g., --debug, --scan-cycle).
+3. **Command-Line Flags**: Arguments passed at runtime (e.g., --debug, --scan-duration).
 
 ### **5.2. `scanner`**
 
-Configures the BLE scanning behavior. These settings can be overridden by the `--scanner-cycle`, `--scanner-duration`, and `--scanner-interface` command-line flags.
+Configures the BLE scanning behavior. These settings can be overridden by the `--scanner-duration`, `--scanner-wait`, and `--scanner-interface` command-line flags.
 
 - `enabled`: (boolean, optional, default: `true`) Enables or disables the BLE scanner. Can be overridden with the `--scanner` and `--no-scanner` flags. Set to `false` to disable the scanner, useful in environments without Bluetooth.
-- `cycle`: (integer, optional, default: `10`) Time in seconds between the start of each scan cycle.
-- `duration`: (integer, optional, default: `3`) Time in seconds the scanner will actively listen. Must be less than or equal to `cycle`.
+- `duration`: (integer, optional, default: `3`) Time in seconds the scanner will actively listen for BLE advertisements.
+- `wait`: (integer, optional, default: `7`) Time in seconds the scanner will wait after a scan duration before starting the next scan.
 - `interface`: (integer, optional, default: `0`) Bluetooth adapter number (e.g., `0` for `hci0`).
 
 ### **5.3. `mqtt`**

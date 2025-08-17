@@ -34,7 +34,7 @@ def initial_settings():
         "name": "mock rule",
     }
     settings_dict = {
-        "scanner": {"cycle": 10, "duration": 3, "interface": 0},
+        "scanner": {"duration": 3, "wait": 1, "interface": 0},
         "mqtt": {"enabled": True, "host": "localhost", "port": 1883},
         "prometheus": {"enabled": True, "port": 8000},
         "automations": [mock_rule],
@@ -214,7 +214,7 @@ async def test_reload_settings_rollback_fails(app_with_mocked_abstract_methods, 
         patch("switchbot_actions.app.sys.exit") as mock_exit,
     ):
         new_settings = deepcopy(app_with_mocked_abstract_methods.settings)
-        new_settings.scanner.cycle = 99
+        new_settings.scanner.wait = 99
         new_settings.mqtt.reconnect_interval = 99
 
         mock_load_settings.return_value = new_settings

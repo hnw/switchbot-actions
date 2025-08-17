@@ -59,10 +59,11 @@ def cli_main():
         help="Disable SwitchBot BLE scanner.",
     )
     scanner_group.add_argument(
-        "--scanner-cycle",
+        "--scanner-wait",
         type=int,
         default=None,
-        help=f"Time between BLE scan cycles. (default: {DEFAULTS.scanner.cycle})",
+        help=f"Time to wait between BLE scan durations. "
+        f"(default: {DEFAULTS.scanner.wait})",
         metavar="SECONDS",
     )
     scanner_group.add_argument(

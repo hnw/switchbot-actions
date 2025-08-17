@@ -153,6 +153,12 @@ then:
 
   Run `switchbot-actions --help` for a full list of options, which are grouped by function (`Scanner`, `MQTT`, `Prometheus`) for clarity.
 
+  For scanner settings, you can now specify `--scanner-duration` and `--scanner-wait` instead of `--scanner-cycle`. For example:
+
+  ```bash
+  switchbot-actions --scanner-duration 5 --scanner-wait 10
+  ```
+
 ## **Robustness Features**
 
 switchbot-actions is designed for reliability:

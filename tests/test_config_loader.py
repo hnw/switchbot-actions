@@ -48,8 +48,8 @@ def test_load_settings_from_cli_overrides_config_with_cli_args(tmp_path):
     config_content = """
 
     scanner:
-      cycle: 10
       duration: 5
+      wait: 10
       interface: 0
     mqtt:
       enabled: false
@@ -71,7 +71,7 @@ def test_load_settings_from_cli_overrides_config_with_cli_args(tmp_path):
     mock_args = argparse.Namespace(
         config=str(config_file),
         verbose=0,
-        scanner_cycle=20,
+        scanner_wait=15,
         mqtt_enabled=True,
         mqtt_host="mqtt.example.com",
         mqtt_port=8883,
@@ -89,7 +89,7 @@ def test_load_settings_from_cli_overrides_config_with_cli_args(tmp_path):
 
     # 4. Assert that the returned AppSettings object has the values correctly
     #    overridden by the command-line arguments.
-    assert settings.scanner.cycle == 20
+    assert settings.scanner.wait == 15
     assert settings.scanner.duration == 5  # Not overridden
     assert settings.scanner.interface == 0  # Not overridden
     assert settings.mqtt is not None

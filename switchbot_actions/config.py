@@ -80,17 +80,9 @@ class PrometheusExporterSettings(BaseConfigModel):
 
 class ScannerSettings(BaseConfigModel):
     enabled: bool = True
-    cycle: int = 10
     duration: int = 3
+    wait: int = 1
     interface: int = 0
-
-    @model_validator(mode="after")
-    def validate_duration_less_than_cycle(self):
-        if self.duration > self.cycle:
-            raise ValueError(
-                "scanner.duration must be less than or equal to scanner.cycle"
-            )
-        return self
 
 
 class LoggingSettings(BaseConfigModel):

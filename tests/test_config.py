@@ -49,17 +49,9 @@ def test_prometheus_settings_invalid_port(port):
 
 def test_scanner_settings_defaults():
     settings = ScannerSettings()
-    assert settings.cycle == 10
     assert settings.duration == 3
+    assert settings.wait == 1
     assert settings.interface == 0
-
-
-def test_scanner_settings_duration_validation():
-    with pytest.raises(
-        ValidationError,
-        match="scanner.duration must be less than or equal to scanner.cycle",
-    ):
-        ScannerSettings(cycle=5, duration=6)
 
 
 def test_logging_settings_defaults():
@@ -201,7 +193,7 @@ def test_app_settings_defaults():
 def test_app_settings_from_dict():
     config_data = {
         "debug": True,
-        "scanner": {"cycle": 20, "duration": 5},
+        "scanner": {"duration": 5, "wait": 15},
         "mqtt": {"host": "test.mqtt.org"},
         "automations": [
             {
@@ -213,8 +205,8 @@ def test_app_settings_from_dict():
     settings = AppSettings.model_validate(config_data)
 
     assert settings.debug is True
-    assert settings.scanner.cycle == 20
     assert settings.scanner.duration == 5
+    assert settings.scanner.wait == 15
     assert settings.mqtt is not None
     assert settings.mqtt.host == "test.mqtt.org"
     assert len(settings.automations.rules) == 1
@@ -262,12 +254,6 @@ def test_if_block_name_is_unified_with_rule_name():
 
 
 def test_app_settings_invalid_config_data():
-    invalid_config_data = {
-        "scanner": {"cycle": 5, "duration": 10},  # Invalid duration
-    }
-    with pytest.raises(ValidationError):
-        AppSettings.model_validate(invalid_config_data)
-
     invalid_config_data = {
         "logging": {"level": "BAD_LEVEL"},  # Invalid log level
     }

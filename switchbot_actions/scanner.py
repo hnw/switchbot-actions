@@ -82,11 +82,12 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
                 for address, device in devices.items():
                     self._process_advertisement(device)
 
-                # Wait for the remainder of the cycle
-                wait_time = self.settings.cycle - self.settings.duration
-                if self._running and wait_time > 0:
-                    logger.debug(f"Scan finished, waiting for {wait_time} seconds.")
-                    await asyncio.sleep(wait_time)
+                # Wait for the configured wait time
+                if self._running and self.settings.wait > 0:
+                    logger.debug(
+                        f"Scan finished, waiting for {self.settings.wait} seconds."
+                    )
+                    await asyncio.sleep(self.settings.wait)
 
             except Exception as e:
                 message, is_known_error = self._format_ble_error_message(e)
@@ -94,9 +95,9 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
                     logger.error(message)
                 else:
                     logger.error(message, exc_info=True)
-                # In case of error, wait for the full cycle time to avoid spamming
+                # In case of error, wait for the configured wait time to avoid spamming
                 if self._running:
-                    await asyncio.sleep(self.settings.cycle)
+                    await asyncio.sleep(self.settings.wait)
 
     def _format_ble_error_message(self, exception: Exception) -> tuple[str, bool]:
         """Generates a user-friendly error message for BLE scan exceptions."""
