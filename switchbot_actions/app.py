@@ -4,7 +4,7 @@ import logging
 import signal
 import sys
 import time
-from typing import Any, Dict, cast
+from typing import Any, Dict, Union, cast
 
 from .component import BaseComponent
 from .config import AppSettings
@@ -35,10 +35,26 @@ class Application:
         )
         publish_mqtt_message_request.connect(self._handle_publish_request)
 
-    def _handle_publish_request(self, sender: Any, **kwargs) -> None:
-        asyncio.create_task(self._handle_publish_request_async(sender, **kwargs))
+    def _handle_publish_request(
+        self,
+        sender: Any,
+        topic: str,
+        payload: Union[str, Dict[str, Any]],
+        qos: int,
+        retain: bool,
+    ) -> None:
+        asyncio.create_task(
+            self._handle_publish_request_async(sender, topic, payload, qos, retain)
+        )
 
-    async def _handle_publish_request_async(self, sender: Any, **kwargs) -> None:
+    async def _handle_publish_request_async(
+        self,
+        sender: Any,
+        topic: str,
+        payload: Union[str, Dict[str, Any]],
+        qos: int,
+        retain: bool,
+    ) -> None:
         timeout_seconds = 5.0
         start_time = time.time()
         while self.is_reloading:
@@ -50,7 +66,9 @@ class Application:
                 return
             await asyncio.sleep(0.1)
         mqtt_component = cast(MqttClient, self._components.get("mqtt"))
-        await mqtt_component.publish(**kwargs)
+        await mqtt_component.publish(
+            topic=topic, payload=payload, qos=qos, retain=retain
+        )
 
     def _create_all_components(self, settings: AppSettings) -> Dict[str, BaseComponent]:
         """Unconditionally create all component instances."""

@@ -2,6 +2,9 @@ import asyncio
 import logging
 from typing import Any, Optional
 
+import aiomqtt
+from switchbot import SwitchBotAdvertisement
+
 from .action_executor import create_action_executor
 from .action_runner import ActionRunner
 from .component import BaseComponent
@@ -103,14 +106,18 @@ class AutomationHandler(BaseComponent[AutomationSettings]):
         switchbot_advertisement_received.connect(self.handle_switchbot_event)
         mqtt_message_received.connect(self.handle_mqtt_event)
 
-    def handle_switchbot_event(self, sender: Any, **kwargs: Any) -> None:
-        raw_event: RawStateEvent | None = kwargs.get("new_state")
+    def handle_switchbot_event(
+        self, sender: Any, new_state: Optional[SwitchBotAdvertisement]
+    ) -> None:
+        raw_event: RawStateEvent | None = new_state
         if not raw_event:
             return
         asyncio.create_task(self._handle_event_async(raw_event))
 
-    def handle_mqtt_event(self, sender: Any, **kwargs: Any) -> None:
-        raw_event: RawStateEvent | None = kwargs.get("message")
+    def handle_mqtt_event(
+        self, sender: Any, message: Optional[aiomqtt.Message]
+    ) -> None:
+        raw_event: RawStateEvent | None = message
         if not raw_event:
             return
         asyncio.create_task(self._handle_event_async(raw_event))

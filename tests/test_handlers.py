@@ -179,7 +179,6 @@ async def test_handle_state_change_does_nothing_if_no_new_state(
     handler = automation_handler_factory(settings)
 
     handler.handle_switchbot_event(None, new_state=None)
-    handler.handle_switchbot_event(None)  # no kwargs
 
     mock_create_task.assert_not_called()
 
@@ -203,7 +202,6 @@ async def test_handle_mqtt_message_does_nothing_if_no_message(
     handler = automation_handler_factory(settings)
 
     handler.handle_mqtt_event(None, message=None)
-    handler.handle_mqtt_event(None)  # no kwargs
 
     mock_create_task.assert_not_called()
 
