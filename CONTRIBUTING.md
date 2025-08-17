@@ -4,13 +4,23 @@ First off, thank you for considering contributing to this project! We welcome al
 
 To ensure a smooth process for everyone, please take a moment to review these guidelines.
 
----
-
-## Development Setup
+## **Development Setup**
 
 To get started with development, please follow these steps to set up your local environment.
 
-### 1. Clone the Repository
+### 1. Prerequisites
+
+This project uses Poetry for dependency management. Before you begin, please ensure you have Poetry installed on your system.
+
+The recommended way to install Poetry is using **`pipx`**, which installs it in an isolated environment to prevent conflicts.
+
+```bash
+pipx install poetry
+```
+
+If you don't have `pipx`, you can install it with `pip install pipx`. For all other installation methods, please refer to [the official Poetry installation guide](https://python-poetry.org/docs/#installation).
+
+### **2. Clone the Repository**
 
 Clone the project to your local machine.
 
@@ -19,45 +29,31 @@ git clone https://github.com/hnw/switchbot-actions.git
 cd switchbot-actions
 ```
 
-### 2. Create and Activate a Virtual Environment
+### **3. Install Dependencies**
 
-It is strongly recommended to use a virtual environment to avoid conflicts with other projects or your system's Python installation.
-
-```bash
-# Create a virtual environment named .venv
-python3 -m venv .venv
-
-# Activate the virtual environment
-# On macOS and Linux:
-source .venv/bin/activate
-
-# On Windows:
-# .venv\Scripts\activate
-```
-
-Once activated, you will see the name of the virtual environment (e.g., `(.venv)`) at the beginning of your shell prompt.
-
-### 3. Install Dependencies
-
-Now, install the package in "editable" mode along with all development dependencies into the activated virtual environment.
+Now, install the project dependencies using a single Poetry command. This command will automatically create a virtual environment and install all necessary packages (both for production and development) listed in `poetry.lock`.
 
 ```bash
-pip install -e '.[dev]'
+poetry install
 ```
 
-### 4. Set Up pre-commit Hooks
+### **4. Set Up pre-commit Hooks**
 
-This project uses `pre-commit` to automatically run code quality checks before each commit. These checks include linting with `ruff` and static type checking with `pyright`.
-
-To set up the hooks, run:
+This project uses `pre-commit` to automatically run code quality checks. To set up the hooks, run:
 
 ```bash
 pre-commit install
 ```
 
-Now, whenever you run `git commit`, the defined hooks will be executed on your staged files. If any of the checks fail, the commit will be aborted, allowing you to fix the issues before committing again.
+You are now all set up for development\! To activate the virtual environment created by Poetry and run commands, you can use `poetry shell`.
 
-You are now all set up for development. Your environment is isolated, and any packages you install will not affect your global Python installation.
+```bash
+# Activate the virtual environment
+eval $(poetry env activate)
+
+# You will now see that you are inside the project's environment
+# (.venv) $
+```
 
 ---
 

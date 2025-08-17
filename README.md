@@ -132,7 +132,8 @@ then:
 
 ## **Advanced Usage**
 
-- **Running as a Service**: For continuous, 24/7 monitoring, we recommend running the application as a systemd service. View the [**Deployment Guide**](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md)).
+- **Running as a Service**: For continuous, 24/7 monitoring, we recommend running the application as a systemd service. View the [Deployment Guide](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md).
+- **Running with Docker**: The application is also available as a multi-arch Docker image. For detailed instructions on how to run it with Docker, please see the [Deployment Guide](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md).
 - **Command-Line Overrides**: You can temporarily override settings in your `config.yaml` using command-line flags. For example, to enable the Prometheus exporter and set its port:
 
   ```bash
