@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from .app import run_app
 from .config import AppSettings
@@ -15,8 +16,16 @@ DEFAULTS = AppSettings()
 
 def cli_main():
     """Synchronous entry point for the command-line interface."""
+    try:
+        app_version = version("switchbot-actions")
+    except PackageNotFoundError:
+        app_version = "unknown"
+
     parser = argparse.ArgumentParser(
         description="A YAML-based automation engine for SwitchBot BLE devices."
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {app_version}"
     )
 
     # General settings

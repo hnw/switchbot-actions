@@ -116,3 +116,21 @@ def test_cli_main_check_invalid_config(
     )
     mock_run_app.assert_not_called()
     mock_asyncio_run.assert_not_called()
+
+
+@patch("sys.argv", ["cli_main", "--version"])
+@patch("sys.stdout", new_callable=MagicMock)
+@patch("switchbot_actions.cli.version")
+def test_cli_main_version_option(
+    mock_version,
+    mock_stdout,
+):
+    """Test that --version option displays the correct version and exits."""
+    mock_version.return_value = "1.2.3"
+
+    with pytest.raises(SystemExit) as e:
+        cli_main()
+
+    assert e.value.code == 0
+    mock_stdout.write.assert_called_once_with("cli_main 1.2.3\n")
+    mock_version.assert_called_once_with("switchbot-actions")
