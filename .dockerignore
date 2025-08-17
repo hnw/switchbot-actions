@@ -1,0 +1,26 @@
+# Ignore common development and build artifacts
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+node_modules
+.DS_Store
+*.egg-info/
+*.pyc
+*.bak
+*.swp
+*.tmp
+*.log
+
+# Project-specific ignores
+docs/
+tests/
+README.md
+LICENSE
+CONTRIBUTING.md
+RELEASING.md
+.pre-commit-config.yaml
+.coveragerc
+repomix-output.xml

@@ -161,3 +161,108 @@ After editing /etc/switchbot-actions/config.yaml, send a SIGHUP signal to apply 
 ```
 sudo systemctl reload switchbot-actions.service
 ```
+
+## **Method 3: Running with Docker**
+
+`switchbot-actions` is also provided as a Docker image, allowing for easy use without setting up a Python environment. This guide covers basic setup, key requirements for Bluetooth, and advanced use cases.
+
+### **Prerequisites**
+
+1.  **Docker Installed**: You must have a working installation of Docker and, optionally, Docker Compose.
+2.  **Configuration File**: Prepare your `config.yaml` file on the host machine.
+
+---
+
+### **Key Requirements for Bluetooth (BLE) Scanning**
+
+A Docker container is typically isolated from the host machine. To allow `switchbot-actions` to access the host's physical Bluetooth adapter for BLE scanning, two specific configurations are **mandatory**.
+
+1.  **Share the Host's Network Stack**: The container must share the host's network environment to see and control the physical Bluetooth hardware.
+2.  **Access the D-Bus System**: The application communicates with the host's system Bluetooth service (BlueZ) via the D-Bus messaging system. The container needs access to this system's communication socket.
+
+You can think of it like making a phone call: accessing D-Bus is like **knowing the right phone number**, while sharing the network is like **having permission to use the phone hardware**. You need both to connect.
+
+Here is how to apply these settings for both `docker run` and `docker-compose`:
+
+| Requirement       | `docker run` Flag                | `docker-compose.yml` Key                     |
+| :---------------- | :------------------------------- | :------------------------------------------- |
+| **Share Network** | `--net=host`                     | `network_mode: host`                         |
+| **Access D-Bus**  | `-v /var/run/dbus:/var/run/dbus` | `volumes: [ "/var/run/dbus:/var/run/dbus" ]` |
+
+---
+
+### **1. Running with `docker run`**
+
+This method is ideal for quick tests or manual execution.
+
+```bash
+docker run --rm \
+  --name switchbot-actions \
+  --net=host \
+  -v /var/run/dbus:/var/run/dbus \
+  -v "$(pwd)/config.yaml":/app/config.yaml \
+  ghcr.io/hnw/switchbot-actions:latest -c /app/config.yaml
+```
+
+- `--rm`: Automatically removes the container when it exits.
+- `--net=host`: **(Required for BLE)** Shares the host's network stack.
+- `-v /var/run/dbus:/var/run/dbus`: **(Required for BLE)** Mounts the D-Bus socket for system service communication.
+- `-v .../config.yaml:/app/config.yaml`: Mounts your configuration file into the container.
+
+---
+
+### **2. Running with `docker-compose` (Recommended)**
+
+For long-running services or managing multiple containers (e.g., `switchbot-actions` and Alloy), using a `docker-compose.yml` file is much more convenient.
+
+Here is an example `docker-compose.yml` file:
+
+```yaml
+# docker-compose.yml
+services:
+  switchbot-actions:
+    image: ghcr.io/hnw/switchbot-actions:latest
+    container_name: switchbot-actions
+    restart: unless-stopped
+    # --- Required settings for BLE scanning ---
+    network_mode: host
+    volumes:
+      - /var/run/dbus:/var/run/dbus
+      # -----------------------------------------
+      # Mount your configuration file
+      - ./config.yaml:/app/config.yaml
+      # (Optional) Mount a directory for host command scripts
+      # - ./scripts:/etc/switchbot-scripts
+    command: -c /app/config.yaml
+```
+
+You can start the service in the background with the command `docker compose up -d`.
+
+---
+
+### **3. Advanced Topics**
+
+#### **A. Calling Host Commands Safely**
+
+The `shell_command` action is designed to run commands _inside_ the container. To securely execute a command on the **host** (e.g., to play a sound or send a desktop notification), the recommended pattern is to use a "wrapper script".
+
+This involves creating a script on the host that only runs specific, pre-approved commands, and then mounting this script into the container.
+
+1.  **Create a script on the host** (e.g., at `./scripts/host-runner.sh`):
+    ```bash
+    #!/bin/sh
+    # This script acts as a safe gatekeeper for host commands.
+    ACTION="$1"
+    case "$ACTION" in
+      "play_doorbell") aplay /path/to/host/sound.wav ;;
+      *) echo "Error: Action not allowed" >&2; exit 1 ;;
+    esac
+    ```
+2.  **Mount the script** in your `docker-compose.yml` (as shown in the example above).
+3.  **Call the script** from your `config.yaml`:
+    ```yaml
+    then:
+      - type: shell_command
+        # Call the script mounted inside the container
+        command: ["/etc/switchbot-scripts/host-runner.sh", "play_doorbell"]
+    ```
