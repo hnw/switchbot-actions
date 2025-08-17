@@ -1,8 +1,9 @@
 import asyncio
 import sys
 
-import paho.mqtt.client as mqtt
 import pytest
+
+from .helpers import wait_for_log, wait_for_mqtt_message
 
 
 @pytest.mark.asyncio
@@ -12,14 +13,7 @@ async def test_mqtt_to_mqtt_publish_action(config_generator, mqtt_client):
     trigger_topic = "test/trigger_publish"
     publish_topic = "test/published_message"
     expected_payload = "Hello from MQTT Publish!"
-
-    received_message = None
-    message_received_event = asyncio.Event()
-
-    def on_message(client, userdata, msg):
-        nonlocal received_message
-        received_message = msg.payload.decode()
-        message_received_event.set()
+    app_ready_log = "MQTT client connected and subscribed."
 
     # 1. Generate config file
     config_content = {
@@ -51,21 +45,12 @@ async def test_mqtt_to_mqtt_publish_action(config_generator, mqtt_client):
 
     process = None
     try:
-        # 2. Set up MQTT subscriber
-        mqtt_client.on_message = on_message
-
-        result, mid = mqtt_client.subscribe(publish_topic)
-        if result != mqtt.MQTT_ERR_SUCCESS:
-            pytest.fail(
-                f"Failed to subscribe to topic '{publish_topic}'. "
-                f"MQTT error code: {result}"
-            )
-
-        # 3. Run switchbot-actions in a subprocess
+        # 2. Run switchbot-actions in a subprocess
         command = [
             sys.executable,
             "-m",
             "switchbot_actions.cli",
+            "-vv",
             "--config",
             str(config_path),
         ]
@@ -75,10 +60,19 @@ async def test_mqtt_to_mqtt_publish_action(config_generator, mqtt_client):
             stderr=asyncio.subprocess.PIPE,
         )
 
-        # Give the application some time to start up and connect to MQTT
-        await asyncio.sleep(5)
+        # Wait for the application to be ready
+        await wait_for_log(process, app_ready_log)
 
-        # 4. Publish MQTT message to trigger topic
+        # 3. Start listening for the result message in the background FIRST.
+        #    `create_task` starts the coroutine immediately.
+        listener_task = asyncio.create_task(
+            wait_for_mqtt_message(mqtt_client, publish_topic)
+        )
+
+        # Give the subscriber a moment to establish
+        await asyncio.sleep(0.1)
+
+        # 4. Now, publish the trigger message.
         try:
             message_info = mqtt_client.publish(trigger_topic, "trigger")
             message_info.wait_for_publish()
@@ -88,18 +82,31 @@ async def test_mqtt_to_mqtt_publish_action(config_generator, mqtt_client):
                 f"Error: {type(e).__name__} - {e}"
             )
 
-        # 5. Wait for the message to be received by the subscriber
-        try:
-            await asyncio.wait_for(message_received_event.wait(), timeout=10)
-        except asyncio.TimeoutError:
-            pytest.fail("Timeout waiting for MQTT published message.")
+        # 5. Finally, wait for the listener task to complete and get the payload.
+        received_payload = await listener_task
 
         # 6. Verify the received message
-        assert received_message == expected_payload, (
-            f"Expected '{expected_payload}' but received '{received_message}'"
+        assert received_payload is not None
+        assert received_payload.decode() == expected_payload, (
+            f"Expected '{expected_payload}' but received '{received_payload.decode()}'"
         )
 
     finally:
         if process and process.returncode is None:
             process.terminate()
             await process.wait()
+
+        if process:
+            stdout_data, stderr_data = await process.communicate()
+            stdout_lines = stdout_data.decode().splitlines()
+            stderr_lines = stderr_data.decode().splitlines()
+
+            print("\n--- switchbot-actions stdout ---")
+            for line in stdout_lines:
+                print(line)
+            print("--- End stdout ---\n")
+
+            print("\n--- switchbot-actions stderr ---")
+            for line in stderr_lines:
+                print(line)
+            print("--- End stderr ---\n")

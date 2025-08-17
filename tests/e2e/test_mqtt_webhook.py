@@ -3,6 +3,8 @@ import sys
 
 import pytest
 
+from .helpers import wait_for_log, wait_for_webhook
+
 
 @pytest.mark.asyncio
 async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_client):
@@ -11,6 +13,7 @@ async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_cli
     mqtt_topic = "test/webhook"
     webhook_url = "http://localhost:8080/webhook"
     expected_webhook_payload = {"status": "triggered", "source": "mqtt"}
+    app_ready_log = "MQTT client connected and subscribed."
 
     # 1. Generate config file
     config_content = {
@@ -49,6 +52,7 @@ async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_cli
             sys.executable,
             "-m",
             "switchbot_actions.cli",
+            "-vv",  # Verbose logging to ensure we get the ready message
             "--config",
             str(config_path),
         ]
@@ -58,10 +62,13 @@ async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_cli
             stderr=asyncio.subprocess.PIPE,
         )
 
-        # Give the application some time to start up and connect to MQTT
-        await asyncio.sleep(5)
+        # Wait for the application to be ready
+        await wait_for_log(process, app_ready_log)
 
-        # 3. Publish MQTT message
+        # 3. Start waiting for the webhook in the background
+        webhook_task = asyncio.create_task(wait_for_webhook(webhook_server))
+
+        # 4. Publish the MQTT trigger message
         try:
             message_info = mqtt_client.publish(mqtt_topic, "trigger")
             message_info.wait_for_publish()
@@ -71,10 +78,10 @@ async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_cli
                 f"Error: {type(e).__name__} - {e}"
             )
 
-        # Give some time for the action to be processed and webhook to be sent
-        await asyncio.sleep(5)
+        # 5. Wait for the webhook task to complete
+        await webhook_task
 
-        # 4. Verify webhook server received the request
+        # 6. Verify webhook server received the request
         assert len(webhook_server) == 1, (
             "Webhook server received incorrect number of requests."
         )
@@ -89,3 +96,18 @@ async def test_mqtt_to_webhook_action(config_generator, webhook_server, mqtt_cli
         if process and process.returncode is None:
             process.terminate()
             await process.wait()
+
+        if process:
+            stdout_data, stderr_data = await process.communicate()
+            stdout_lines = stdout_data.decode().splitlines()
+            stderr_lines = stderr_data.decode().splitlines()
+
+            print("\n--- switchbot-actions stdout ---")
+            for line in stdout_lines:
+                print(line)
+            print("--- End stdout ---\n")
+
+            print("\n--- switchbot-actions stderr ---")
+            for line in stderr_lines:
+                print(line)
+            print("--- End stderr ---\n")
