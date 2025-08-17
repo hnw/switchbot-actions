@@ -1,9 +1,13 @@
 import json
+import threading
 
+import paho.mqtt.client as mqtt
 import pytest
 import pytest_asyncio
 import yaml
 from aiohttp import web
+from paho.mqtt.client import MQTT_ERR_SUCCESS
+from paho.mqtt.enums import CallbackAPIVersion
 
 
 @pytest_asyncio.fixture
@@ -58,3 +62,51 @@ def config_generator(tmp_path):
         return config_path
 
     return _generate_config
+
+
+@pytest.fixture
+def mqtt_client():
+    """
+    Fixture for a connected MQTT client.
+    Connects to the broker, yields the client, and disconnects on teardown.
+    """
+    mqtt_broker_host = "127.0.0.1"
+    mqtt_broker_port = 1883
+
+    client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
+
+    connect_event = threading.Event()
+    connect_result_code = -1
+
+    def on_connect(client, userdata, flags, rc, properties=None):
+        nonlocal connect_result_code
+        connect_result_code = rc
+        connect_event.set()
+
+    client.on_connect = on_connect
+
+    try:
+        client.connect(mqtt_broker_host, mqtt_broker_port, 60)
+        client.loop_start()  # Start the network loop in a separate thread
+
+        if not connect_event.wait(timeout=10):  # 10 seconds timeout for connection
+            pytest.fail(
+                f"Timed out waiting for MQTT connection to "
+                f"{mqtt_broker_host}:{mqtt_broker_port}"
+            )
+
+        if connect_result_code != MQTT_ERR_SUCCESS:
+            pytest.fail(
+                f"Failed to connect to MQTT broker at "
+                f"{mqtt_broker_host}:{mqtt_broker_port}. "
+                f"Connection refused: {mqtt.connack_string(connect_result_code)}"
+            )
+        yield client
+    except Exception as e:
+        pytest.fail(
+            f"An unexpected error occurred during MQTT connection: "
+            f"{type(e).__name__} - {e}"
+        )
+    finally:
+        client.loop_stop()
+        client.disconnect()

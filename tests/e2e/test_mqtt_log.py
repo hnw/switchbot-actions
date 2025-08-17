@@ -1,17 +1,13 @@
 import asyncio
 import sys
-import threading
 
-import paho.mqtt.client as mqtt
 import pytest
-from paho.mqtt.client import MQTT_ERR_SUCCESS
-from paho.mqtt.enums import CallbackAPIVersion
 
 # Run switchbot-actions via CLI with config
 
 
 @pytest.mark.asyncio
-async def test_mqtt_to_log_action(config_generator):
+async def test_mqtt_to_log_action(config_generator, mqtt_client):
     mqtt_broker_host = "127.0.0.1"
     mqtt_broker_port = 1883
     mqtt_topic = "test/log"
@@ -68,53 +64,14 @@ async def test_mqtt_to_log_action(config_generator):
         await asyncio.sleep(5)
 
         # 3. Publish MQTT message
-        client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
-
-        # --- Start of new connection logic ---
-        connect_event = threading.Event()
-        connect_result_code = -1
-
-        def on_connect(client, userdata, flags, rc, properties=None):
-            nonlocal connect_result_code
-            connect_result_code = rc
-            connect_event.set()
-
-        client.on_connect = on_connect
-
         try:
-            client.connect(mqtt_broker_host, mqtt_broker_port, 60)
-            client.loop_start()  # Start the network loop in a separate thread
-
-            # Wait for the on_connect callback to be called
-            if not connect_event.wait(timeout=10):  # 10 seconds timeout for connection
-                pytest.fail(
-                    f"Timed out waiting for MQTT connection to "
-                    f"{mqtt_broker_host}:{mqtt_broker_port}"
-                )
-
-            if connect_result_code != MQTT_ERR_SUCCESS:
-                pytest.fail(
-                    f"Failed to connect to MQTT broker at "
-                    f"{mqtt_broker_host}:{mqtt_broker_port}. "
-                    f"Connection refused: {mqtt.connack_string(connect_result_code)}"
-                )
-        except Exception as e:  # Catch any other exceptions during connect/loop_start
-            pytest.fail(
-                f"An unexpected error occurred during MQTT connection: "
-                f"{type(e).__name__} - {e}"
-            )
-        finally:
-            client.loop_stop()  # Stop the network loop
-        # --- End of new connection logic ---
-        try:
-            message_info = client.publish(mqtt_topic, "trigger")
+            message_info = mqtt_client.publish(mqtt_topic, "trigger")
             message_info.wait_for_publish(timeout=3)
         except Exception as e:
             pytest.fail(
                 f"Failed to publish message to topic '{mqtt_topic}'. "
                 f"Error: {type(e).__name__} - {e}"
             )
-        client.disconnect()
 
         # Give some time for the action to be processed and logged
         await asyncio.sleep(5)
