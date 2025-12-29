@@ -1,49 +1,49 @@
 # syntax=docker/dockerfile:1.4
-
 ARG PYTHON_VERSION=3.13-slim
 FROM python:${PYTHON_VERSION} AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libffi-dev \
-    python3-dev
+# uv の導入
+COPY --from=ghcr.io/astral-sh/uv:0.9.18 /uv /bin/
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir build
-
-ARG TARGETPLATFORM
-ENV BUILD_PLATFORM=${TARGETPLATFORM}
+RUN uv venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY requirements.txt ./
 
-COPY --chmod=755 .docker/build-wheels.sh .docker/
-
-RUN .docker/build-wheels.sh deps
+RUN uv pip install -r requirements.txt
 
 COPY . .
 
-# Declare APP_VERSION and IS_PRERELEASE arguments
 ARG APP_VERSION
 ARG IS_PRERELEASE
 
-RUN .docker/build-wheels.sh project "${APP_VERSION}" "${IS_PRERELEASE}"
+RUN if [ -n "${APP_VERSION}" ]; then \
+      EXTRA_ARGS=""; \
+      if [ "${IS_PRERELEASE}" = "true" ]; then \
+        EXTRA_ARGS="--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple --index-strategy unsafe-best-match"; \
+      fi; \
+      # PyPI (TestPyPI) からインストール
+      uv pip install ${EXTRA_ARGS} "switchbot-actions==${APP_VERSION}"; \
+    else \
+      # ローカルソースからビルドしてインストール
+      uv pip install .; \
+    fi
 
+# Final Stage
 FROM python:${PYTHON_VERSION} AS final
 
 WORKDIR /app
 
+# ユーザー作成
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-COPY --from=builder /app/dist/wheels /wheels/
+# Builderで作った venv をそのままコピー
+COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
 
-ENV PYTHONUSERBASE=/home/appuser/.local
-ENV PATH="${PYTHONUSERBASE}/bin:${PATH}"
-
-RUN mkdir -p ${PYTHONUSERBASE} \
-    && chown -R appuser:appgroup ${PYTHONUSERBASE} /wheels \
-    && su -s /bin/sh -c "pip install --no-cache-dir --user --no-index --find-links=/wheels switchbot-actions" appuser \
-    && rm -rf /wheels
+# venv にパスを通す
+ENV PATH="/app/.venv/bin:$PATH"
 
 USER appuser
 

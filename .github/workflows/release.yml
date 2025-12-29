@@ -68,13 +68,10 @@ jobs:
           provenance: false
           set: |
             app.tags=ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}-app
-            app-armv6.tags=ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}-armv6
             *.args.APP_VERSION=${{ steps.meta.outputs.version }}
             *.args.IS_PRERELEASE=${{ github.event.release.prerelease }}
             app.cache-from=type=registry,ref=ghcr.io/${{ github.repository }}:build-cache
             app.cache-to=type=registry,ref=ghcr.io/${{ github.repository }}:build-cache,mode=max
-            app-armv6.cache-from=type=registry,ref=ghcr.io/${{ github.repository }}:build-cache-armv6
-            app-armv6.cache-to=type=registry,ref=ghcr.io/${{ github.repository }}:build-cache-armv6,mode=max
 
       - name: Create and push final manifest list
         run: |
@@ -82,19 +79,4 @@ jobs:
 
           docker buildx imagetools create \
             $TAGS \
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}-app \
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}-armv6
-
-#      - name: Clean up intermediate image tags
-#        if: always() # 前のステップが成功しても失敗しても実行
-#        run: |
-#          echo "Deleting intermediate tags..."
-#          gh api \
-#            --method DELETE \
-#            "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions?package_version_ids=$( \
-#              gh api "/orgs/${{ github.repository_owner }}/packages/container/${{ env.IMAGE_NAME }}/versions" \
-#                --jq '.[] | select(.metadata.container.tags[] | test("-app$|-armv6$")) | .id' | paste -sd ',' - \
-#            )"
-#        env:
-#          # パッケージ名を環境変数に設定しておくと便利です
-#          IMAGE_NAME: ${{ steps.meta.outputs.repository }}
+            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}-app
