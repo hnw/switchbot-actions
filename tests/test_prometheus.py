@@ -6,7 +6,11 @@ from prometheus_client import REGISTRY, CollectorRegistry
 
 from switchbot_actions.config import DeviceSettings, PrometheusExporterSettings
 from switchbot_actions.prometheus import PrometheusExporter
-from switchbot_actions.signals import switchbot_advertisement_received
+from switchbot_actions.signals import (
+    action_executed,
+    scan_executed,
+    switchbot_advertisement_received,
+)
 
 
 @pytest.fixture
@@ -25,6 +29,8 @@ def cleanup_registry():
         "switchbot_rssi",
         "switchbot_isOn",
         "switchbot_device_info",
+        "switchbot_scan_duration_seconds",
+        "switchbot_advertisements",
     ]
     collectors = list(REGISTRY._collector_to_names.keys())
     for collector in collectors:
@@ -385,6 +391,122 @@ async def test_apply_live_update_recreates_info_gauge(
                 "name": "new_device",
                 "model": "Unknown",
             },
+        )
+        == 1.0
+    )
+
+    await exporter.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.prometheus.start_http_server")
+async def test_action_duration_histogram_updates(mock_start_http_server, test_registry):
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    settings = PrometheusExporterSettings(enabled=True)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+    await exporter.start()
+
+    action_executed.send(exporter, action_type="webhook", duration=0.25)
+
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_action_duration_seconds_count",
+            labels={"action_type": "webhook"},
+        )
+        == 1.0
+    )
+    assert test_registry.get_sample_value(
+        "switchbot_action_duration_seconds_sum",
+        labels={"action_type": "webhook"},
+    ) == pytest.approx(0.25)
+
+    await exporter.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.prometheus.start_http_server")
+async def test_scan_duration_summary_updates(mock_start_http_server, test_registry):
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    settings = PrometheusExporterSettings(enabled=True)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+    await exporter.start()
+
+    scan_executed.send(exporter, interface=0, scan_duration=1.25, cycle_duration=1.75)
+
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_scan_duration_seconds_count",
+            labels={"interface": "0"},
+        )
+        == 1.0
+    )
+    assert test_registry.get_sample_value(
+        "switchbot_scan_duration_seconds_sum",
+        labels={"interface": "0"},
+    ) == pytest.approx(1.25)
+
+    assert test_registry.get_sample_value(
+        "switchbot_cycle_duration_seconds_sum",
+        labels={"interface": "0"},
+    ) == pytest.approx(1.75)
+
+    await exporter.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.prometheus.start_http_server")
+async def test_advertisements_counter_increments(
+    mock_start_http_server, mock_state_1, test_registry
+):
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    settings = PrometheusExporterSettings(enabled=True)  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+    await exporter.start()
+
+    switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
+
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_advertisements_total",
+            labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
+        )
+        == 1.0
+    )
+
+    await exporter.stop()
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.prometheus.start_http_server")
+async def test_advertisements_counter_respects_address_filtering(
+    mock_start_http_server, mock_state_1, mock_state_2, test_registry
+):
+    mock_start_http_server.return_value = [MagicMock(), Mock()]
+
+    settings = PrometheusExporterSettings(
+        enabled=True,
+        target={"addresses": ["DE:AD:BE:EF:44:44"]},  # only mock_state_2
+    )  # pyright:ignore[reportCallIssue]
+    exporter = PrometheusExporter(settings=settings, registry=test_registry)
+    await exporter.start()
+
+    switchbot_advertisement_received.send(exporter, new_state=mock_state_1)
+    switchbot_advertisement_received.send(exporter, new_state=mock_state_2)
+
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_advertisements_total",
+            labels={"address": "DE:AD:BE:EF:33:33", "model": "WoSensorTH"},
+        )
+        is None
+    )
+    assert (
+        test_registry.get_sample_value(
+            "switchbot_advertisements_total",
+            labels={"address": "DE:AD:BE:EF:44:44", "model": "WoHand"},
         )
         == 1.0
     )

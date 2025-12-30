@@ -20,6 +20,7 @@ from switchbot_actions.config import (
     SwitchBotCommandAction,
     WebhookAction,
 )
+from switchbot_actions.signals import action_executed
 from switchbot_actions.state import create_state_object
 from switchbot_actions.store import StateStore
 
@@ -163,6 +164,46 @@ async def test_webhook_executor_post(mock_send_request, mock_switchbot_advertise
     mock_send_request.assert_called_once_with(
         "http://example.com/hook", "POST", expected_payload, {}
     )
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.time.perf_counter")
+@patch.object(action_executed, "send")
+@patch("switchbot_actions.action_executor.WebhookExecutor._send_request")
+async def test_measure_execution_time_decorator_sends_signal_and_logs(
+    mock_send_request,
+    mock_action_executed_send,
+    mock_perf_counter,
+    caplog,
+    mock_switchbot_advertisement,
+):
+    caplog.set_level(logging.DEBUG)
+
+    # duration = 0.1234 sec => 123.4ms
+    mock_perf_counter.side_effect = [1.0, 1.1234]
+
+    raw_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:11:11",
+        data={"data": {"temperature": 29.0}},
+    )
+    state_object = create_state_object(raw_state)
+
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",
+        payload={"temp": "{temperature}"},
+    )
+    executor = WebhookExecutor(action_config)
+    await executor.execute(state_object)
+
+    assert "Action 'webhook' finished (took 123.4ms)" in caplog.text
+    mock_action_executed_send.assert_called_once()
+    sender = mock_action_executed_send.call_args.args[0]
+    kwargs = mock_action_executed_send.call_args.kwargs
+    assert sender is executor
+    assert kwargs["action_type"] == "webhook"
+    assert kwargs["duration"] == pytest.approx(0.1234)
 
 
 @pytest.mark.asyncio

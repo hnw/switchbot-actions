@@ -1,12 +1,13 @@
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from switchbot import GetSwitchbotDevices, SwitchBotAdvertisement
 
 from .component import BaseComponent
 from .config import ScannerSettings
-from .signals import switchbot_advertisement_received
+from .signals import scan_executed, switchbot_advertisement_received
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,29 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
 
     async def _scan_loop(self) -> None:
         """The continuous scanning loop for SwitchBot devices."""
+        last_scan_start = None
+        cycle_duration = None
         while True:
             try:
+                now = time.monotonic()
+                if last_scan_start is not None:
+                    cycle_duration = now - last_scan_start
+                last_scan_start = now
+
                 logger.debug(
                     f"Starting BLE scan for {self.settings.duration} seconds..."
                 )
+                start_time = time.monotonic()
                 devices = await self._scanner.discover(
                     scan_timeout=self.settings.duration
+                )
+                scan_duration = time.monotonic() - start_time
+
+                scan_executed.send(
+                    self,
+                    interface=self.settings.interface,
+                    scan_duration=scan_duration,
+                    cycle_duration=cycle_duration,
                 )
 
                 for address, device in devices.items():
