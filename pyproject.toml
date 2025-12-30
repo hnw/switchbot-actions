@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switchbot-actions"
-version = "2.1.0b6"
+version = "2.1.0"
 authors = [
     {name = "Yoshio HANAWA", email = "y@hnw.jp"},
 ]
@@ -29,13 +29,14 @@ classifiers = [
 ]
 dependencies = [
     "pydantic (>=2.11.7,<3.0.0)",
-    "pyswitchbot (>=0.74.0,<0.75.0)",
+    "pyswitchbot (>=0.75.0,<0.76.0)",
     "blinker (>=1.9.0,<2.0.0)",
     "prometheus-client (>=0.23.1,<0.24.0)",
     "ruamel-yaml (>=0.18.15,<0.19.0)",
     "httpx (>=0.28.1,<0.29.0)",
     "pytimeparse2 (>=1.7.1,<2.0.0)",
-    "aiomqtt (>=2.4.0,<3.0.0)"
+    "aiomqtt (>=2.4.0,<3.0.0)",
+    "bleak (>=2.1.0,<3.0.0)"
 ]
 
 [project.urls]
