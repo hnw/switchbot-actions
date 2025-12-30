@@ -2,11 +2,11 @@ import logging
 from http.server import HTTPServer
 from typing import Dict, Optional
 
-from prometheus_client import REGISTRY, Gauge, start_http_server
+from prometheus_client import REGISTRY, Counter, Gauge, Summary, start_http_server
 
 from .component import BaseComponent
 from .config import DeviceSettings, PrometheusExporterSettings
-from .signals import switchbot_advertisement_received
+from .signals import action_executed, scan_executed, switchbot_advertisement_received
 from .state import SwitchBotState, create_state_object
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,10 @@ class PrometheusExporter(BaseComponent[PrometheusExporterSettings]):
         self.registry = registry
         self._address_to_name_map: Dict[str, str] = {}
         self._info_gauge: Optional[Gauge] = None
+        self._action_duration_summary: Optional[Summary] = None
+        self._scan_duration_summary: Optional[Summary] = None
+        self._cycle_duration_summary: Optional[Summary] = None
+        self._advertisements_counter: Optional[Counter] = None
 
     def _is_enabled(
         self, settings: Optional[PrometheusExporterSettings] = None
@@ -83,6 +87,9 @@ class PrometheusExporter(BaseComponent[PrometheusExporterSettings]):
             "address": state.id,
             "model": state.get_values_dict().get("modelName", "Unknown"),
         }
+
+        if self._advertisements_counter:
+            self._advertisements_counter.labels(**label_values).inc()
         all_values = state.get_values_dict()
 
         for key, value in all_values.items():
@@ -106,10 +113,45 @@ class PrometheusExporter(BaseComponent[PrometheusExporterSettings]):
 
             self._gauges[metric_name].labels(**label_values).set(float(value))
 
+    def handle_action_execution(self, sender, **kwargs):
+        action_type = kwargs.get("action_type")
+        duration = kwargs.get("duration")
+        if not self._action_duration_summary:
+            return
+        if not action_type or not isinstance(action_type, str):
+            return
+        if duration is None:
+            return
+
+        self._action_duration_summary.labels(action_type=action_type).observe(
+            float(duration)
+        )
+
+    def handle_scan_execution(self, sender, **kwargs):
+        interface = kwargs.get("interface")
+        scan_duration = kwargs.get("scan_duration")
+        cycle_duration = kwargs.get("cycle_duration")
+
+        if not self._scan_duration_summary or not self._cycle_duration_summary:
+            return
+        if interface is None or scan_duration is None or cycle_duration is None:
+            return
+
+        self._scan_duration_summary.labels(interface=str(interface)).observe(
+            float(scan_duration)
+        )
+        self._cycle_duration_summary.labels(interface=str(interface)).observe(
+            float(cycle_duration)
+        )
+
     async def _start(self):
         """Creates gauges, connects signals, and starts the Prometheus HTTP server."""
         self._create_info_gauge_and_metrics(self.settings.devices)
+        self._initialize_metrics()
+
         switchbot_advertisement_received.connect(self.handle_advertisement)
+        action_executed.connect(self.handle_action_execution)
+        scan_executed.connect(self.handle_scan_execution)
         self.logger.info("PrometheusExporter connected to signals.")
 
         if self.server:
@@ -128,9 +170,65 @@ class PrometheusExporter(BaseComponent[PrometheusExporterSettings]):
             )
             raise
 
+    def _initialize_metrics(self):
+        if self._action_duration_summary:
+            try:
+                self.registry.unregister(self._action_duration_summary)
+            except KeyError:
+                pass
+
+        self._action_duration_summary = Summary(
+            "switchbot_action_duration_seconds",
+            "Execution duration of actions in seconds",
+            ["action_type"],
+            registry=self.registry,
+        )
+
+        if self._scan_duration_summary:
+            try:
+                self.registry.unregister(self._scan_duration_summary)
+            except KeyError:
+                pass
+
+        self._scan_duration_summary = Summary(
+            "switchbot_scan_duration_seconds",
+            "Duration of BLE scan loop iterations",
+            ["interface"],
+            registry=self.registry,
+        )
+
+        if self._cycle_duration_summary:
+            try:
+                self.registry.unregister(self._cycle_duration_summary)
+            except KeyError:
+                pass
+
+        self._cycle_duration_summary = Summary(
+            "switchbot_cycle_duration_seconds",
+            "Duration of BLE scan cycle",
+            ["interface"],
+            registry=self.registry,
+        )
+
+        if self._advertisements_counter:
+            try:
+                self.registry.unregister(self._advertisements_counter)
+            except KeyError:
+                pass
+
+        # Note: prometheus_client.Counter appends the "_total" suffix on exposition.
+        self._advertisements_counter = Counter(
+            "switchbot_advertisements",
+            "Total number of BLE advertisements received",
+            ["address", "model"],
+            registry=self.registry,
+        )
+
     async def _stop(self):
         """Stops the server and unregisters all gauges for a clean shutdown."""
         switchbot_advertisement_received.disconnect(self.handle_advertisement)
+        action_executed.disconnect(self.handle_action_execution)
+        scan_executed.disconnect(self.handle_scan_execution)
         self.logger.info("PrometheusExporter disconnected from signals.")
 
         all_gauges_to_unregister = list(self._gauges.values())
@@ -144,6 +242,27 @@ class PrometheusExporter(BaseComponent[PrometheusExporterSettings]):
                 pass
         self._gauges.clear()
         self._info_gauge = None
+
+        if self._action_duration_summary:
+            try:
+                self.registry.unregister(self._action_duration_summary)
+            except KeyError:
+                pass
+            self._action_duration_summary = None
+
+        if self._scan_duration_summary:
+            try:
+                self.registry.unregister(self._scan_duration_summary)
+            except KeyError:
+                pass
+            self._scan_duration_summary = None
+
+        if self._advertisements_counter:
+            try:
+                self.registry.unregister(self._advertisements_counter)
+            except KeyError:
+                pass
+            self._advertisements_counter = None
 
         self.logger.info("All Prometheus gauges have been unregistered.")
 

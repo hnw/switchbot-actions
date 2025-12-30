@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
+from functools import wraps
 from typing import Generic, TypeVar
 
 import httpx
@@ -14,7 +16,7 @@ from .config import (
     SwitchBotCommandAction,
     WebhookAction,
 )
-from .signals import publish_mqtt_message_request
+from .signals import action_executed, publish_mqtt_message_request
 from .state import StateObject
 from .store import StateStore
 from .switchbot_factory import create_switchbot_device
@@ -22,6 +24,24 @@ from .switchbot_factory import create_switchbot_device
 T_Action = TypeVar("T_Action", bound=AutomationAction)
 
 logger = logging.getLogger("switchbot_actions.automation")
+
+
+def measure_execution_time(func):
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        start = time.perf_counter()
+        try:
+            return await func(self, *args, **kwargs)
+        finally:
+            duration = time.perf_counter() - start
+            action_type = self._action_config.type
+
+            logger.debug(
+                f"Action '{action_type}' finished (took {duration * 1000.0:.1f}ms)"
+            )
+            action_executed.send(self, action_type=action_type, duration=duration)
+
+    return wrapper
 
 
 class ActionExecutor(ABC, Generic[T_Action]):
@@ -39,6 +59,7 @@ class ActionExecutor(ABC, Generic[T_Action]):
 class ShellCommandExecutor(ActionExecutor):
     """Executes a shell command."""
 
+    @measure_execution_time
     async def execute(self, state: StateObject) -> None:
         command_list = [state.format(arg) for arg in self._action_config.command]
         logger.debug(f"Executing command: {command_list}")
@@ -66,6 +87,7 @@ class ShellCommandExecutor(ActionExecutor):
 class WebhookExecutor(ActionExecutor):
     """Sends a webhook."""
 
+    @measure_execution_time
     async def execute(self, state: StateObject) -> None:
         url = state.format(self._action_config.url)
         method = self._action_config.method
@@ -138,6 +160,7 @@ class SwitchBotCommandExecutor(ActionExecutor[SwitchBotCommandAction]):
         super().__init__(action)
         self._state_store = state_store
 
+    @measure_execution_time
     async def execute(self, state: StateObject) -> None:
         # The address should be resolved by Pydantic validation before execution.
         address = self._action_config.address

@@ -380,6 +380,55 @@ Configures the Prometheus metrics endpoint.
   switchbot_temperature * on(address) group_left(name) switchbot_device_info{name="living_room_meter"}
   ```
 
+### **5.4.1 Metrics Reference**
+
+The exporter exposes three categories of metrics. All metrics are prefixed with `switchbot_`.
+
+#### **A. Device Metrics**
+
+These metrics represent the state and sensor readings from your SwitchBot devices. The availability of specific metrics depends on the device model (e.g., `temperature` is available for Meters, `isOn` for Bots).
+
+> **Note on Naming:** Metric names are generated dynamically based on the attribute names provided by the underlying [pySwitchbot](https://github.com/Danielhiversen/pySwitchbot) library. Consequently, metric names directly reflect the library's internal keys (e.g., `isOn`, `contact_open`), resulting in a mix of camelCase and snake_case.
+
+**Common Labels:** `address`, `model`
+
+| Metric Name                 | Type  | Description                                        |
+| :-------------------------- | :---- | :------------------------------------------------- |
+| `switchbot_temperature`     | Gauge | Temperature reading in Celsius.                    |
+| `switchbot_humidity`        | Gauge | Relative humidity percentage (%).                  |
+| `switchbot_battery`         | Gauge | Battery level percentage (%).                      |
+| `switchbot_rssi`            | Gauge | Received Signal Strength Indicator (dBm).          |
+| `switchbot_isOn`            | Gauge | Power state of the device (1.0 = On, 0.0 = Off).   |
+| `switchbot_contact_open`    | Gauge | Contact sensor state (1.0 = Open, 0.0 = Closed).   |
+| `switchbot_motion_detected` | Gauge | Motion sensor state (1.0 = Detected, 0.0 = Clear). |
+
+_Note: This list is not exhaustive. Any numeric or boolean field in the BLE advertisement data is automatically converted to a metric._
+
+#### **B. Internal Metrics**
+
+These metrics track the performance and health of the `switchbot-actions` application itself.
+
+| Metric Name                         | Type    | Labels             | Description                                                                                                              |
+| :---------------------------------- | :------ | :----------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| `switchbot_action_duration_seconds` | Summary | `action_type`      | Tracks the execution time of automation actions (e.g., `webhook`, `shell_command`). Useful for identifying slow actions. |
+| `switchbot_scan_duration_seconds`   | Summary | `interface`        | Measures the time taken to complete a BLE scan operation.                                                                |
+| `switchbot_cycle_duration_seconds`  | Summary | `interface`        | Measures the total time of a scan cycle (scan duration + wait time). Verifies scan frequency.                            |
+| `switchbot_advertisements_total`    | Counter | `address`, `model` | Counts the total number of valid BLE advertisements received per device.                                                 |
+
+#### **C. Metadata Metrics**
+
+Used to map `address` to human-readable names defined in your configuration.
+
+| Metric Name             | Type  | Labels                     | Description                            |
+| :---------------------- | :---- | :------------------------- | :------------------------------------- |
+| `switchbot_device_info` | Gauge | `address`, `name`, `model` | Information metric. Value is always 1. |
+
+**Example PromQL Query:**
+Join sensor data with device names:
+
+```promql
+switchbot_temperature * on(address) group_left(name) switchbot_device_info
+
 ### **5.5. `logging`**
 
 Configures logging behavior.
@@ -452,27 +501,31 @@ The application uses the `blinker` library for internal communication.
 ## **8. Project Structure**
 
 ```
+
 /switchbot-actions/
 ├── docs/
-│   ├── deployment.md
-│   └── specification.md
+│ ├── deployment.md
+│ └── specification.md
 ├── switchbot_actions/
-│   ├── app.py              # Application main logic
-│   ├── base_component.py   # Abstract base class for components
-│   ├── action_executor.py  # Action execution logic
-│   ├── action_runner.py    # ActionRunnerBase and concrete implementations
-│   ├── cli.py              # Command-line interface entry point
-│   ├── config.py           # Pydantic models for configuration
-│   ├── state.py            # StateObject class hierarchy for event data encapsulation
-│   ├── prometheus.py       # PrometheusExporter
-│   ├── handlers.py         # AutomationHandler
-│   ├── logging.py          # Logging setup
-│   ├── mqtt.py             # MqttClient
-│   ├── scanner.py          # SwitchbotScanner
-│   ├── signals.py          # Blinker signals
-│   ├── store.py            # StateStore
-│   └── timers.py           # Timer class
+│ ├── app.py # Application main logic
+│ ├── base_component.py # Abstract base class for components
+│ ├── action_executor.py # Action execution logic
+│ ├── action_runner.py # ActionRunnerBase and concrete implementations
+│ ├── cli.py # Command-line interface entry point
+│ ├── config.py # Pydantic models for configuration
+│ ├── state.py # StateObject class hierarchy for event data encapsulation
+│ ├── prometheus.py # PrometheusExporter
+│ ├── handlers.py # AutomationHandler
+│ ├── logging.py # Logging setup
+│ ├── mqtt.py # MqttClient
+│ ├── scanner.py # SwitchbotScanner
+│ ├── signals.py # Blinker signals
+│ ├── store.py # StateStore
+│ └── timers.py # Timer class
 ├── tests/
 ├── config.yaml.example
 └── README.md
+
+```
+
 ```
