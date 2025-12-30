@@ -29,6 +29,7 @@ Its efficiency makes it a great fit for resource-constrained hardware like a Ras
 - **Python**: Version 3.11 or newer is required.
 - **Operating System**: The application is tested and supported on Linux. It is also expected to work on other platforms like macOS and Windows, but BLE functionality may vary depending on the system's Bluetooth support.
 - **Permissions (Linux)**: The application needs permissions to access the Bluetooth adapter. This can typically be achieved by running with sudo or by setting the necessary capabilities (see the [Deployment Guide](https://github.com/hnw/switchbot-actions/blob/main/docs/deployment.md)).
+- **Supported Architectures (Docker)**: linux/amd64, linux/arm64
 
 ## **Quick Start**
 
