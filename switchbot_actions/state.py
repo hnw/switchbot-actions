@@ -157,19 +157,24 @@ class StateObject(ABC, Generic[T_State]):
     @overload
     def format(self, template_data: Dict[str, Any]) -> Dict[str, Any]: ...
 
+    @overload
+    def format(self, template_data: list[Any]) -> list[Any]: ...
+
     def format(
-        self, template_data: Union[str, Dict[str, Any]]
-    ) -> Union[str, Dict[str, Any]]:
+        self, template_data: Union[str, Dict[str, Any], list[Any]]
+    ) -> Union[str, Dict[str, Any], list[Any]]:
         context = {
             "__current_data__": self,
             "previous": self.previous,
             "snapshot": self.snapshot,
         }
         if isinstance(template_data, dict):
-            return {k: self.format(str(v)) for k, v in template_data.items()}
-        else:
+            return {k: self.format(v) for k, v in template_data.items()}
+        elif isinstance(template_data, list):
+            return [self.format(item) for item in template_data]
+        elif isinstance(template_data, str):
             try:
-                return _template_formatter.format(str(template_data), **context)
+                return _template_formatter.format(template_data, **context)
             except AttributeError as e:
                 raise ValueError(f"Invalid attribute access in placeholder: {e}") from e
             except KeyError as e:
@@ -178,6 +183,8 @@ class StateObject(ABC, Generic[T_State]):
                     f"Placeholder '{key_name}' could not be resolved. The key name is"
                     " likely incorrect."
                 ) from e
+        else:
+            return template_data
 
 
 class _NullState(StateObject):

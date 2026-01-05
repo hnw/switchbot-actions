@@ -103,14 +103,21 @@ class WebhookExecutor(ActionExecutor):
         await self._send_request(url, method, payload, headers)
 
     async def _send_request(
-        self, url: str, method: str, payload: dict | str, headers: dict
+        self, url: str, method: str, payload: dict | list | str, headers: dict
     ) -> None:
         try:
             async with httpx.AsyncClient() as client:
                 if method == "POST":
-                    response = await client.post(
-                        url, json=payload, headers=headers, timeout=10
-                    )
+                    if isinstance(payload, (dict, list)):
+                        response = await client.post(
+                            url, json=payload, headers=headers, timeout=10
+                        )
+                    else:
+                        if not any(k.lower() == "content-type" for k in headers):
+                            headers["Content-Type"] = "text/plain"
+                        response = await client.post(
+                            url, content=payload, headers=headers, timeout=10
+                        )
                 elif method == "GET":
                     response = await client.get(
                         url, params=payload, headers=headers, timeout=10
