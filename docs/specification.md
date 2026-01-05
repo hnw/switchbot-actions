@@ -304,11 +304,13 @@ The `then` block specifies one or more actions to execute when the `if` conditio
 - **`webhook`**: Sends an HTTP request.
   - `url`: (string, required) The target URL.
   - `method`: (string, optional, default: `POST`) `POST` or `GET`.
-  - `payload`: (map or string, optional) For `POST`, this is the JSON body. For `GET`, these are the URL query parameters.
+  - `payload`: (map, list, or string, optional)
+    - **POST**: Maps and lists are sent as **JSON**. Strings are sent as **raw body content**.
+    - **GET**: Must be a map (key-value pairs) or query string.
   - `headers`: (map, optional) Custom HTTP headers.
 - **`mqtt_publish`**: Publishes a message to an MQTT topic.
   - `topic`: (string, required) The target topic.
-  - `payload`: (map or string, optional) The message payload. Maps are sent as JSON.
+  - `payload`: (map, list, or string, optional) The message payload. Maps and lists are sent as JSON.
   - `qos`: (integer, optional, default: `0`) Quality of Service (`0`, `1`, or `2`).
   - `retain`: (boolean, optional, default: `false`) The retain flag.
 - **`switchbot_command`**: Directly controls another SwitchBot device.

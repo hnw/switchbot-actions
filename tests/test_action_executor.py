@@ -167,6 +167,56 @@ async def test_webhook_executor_post(mock_send_request, mock_switchbot_advertise
 
 
 @pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.WebhookExecutor._send_request")
+async def test_webhook_executor_post_with_list_payload(
+    mock_send_request, mock_switchbot_advertisement
+):
+    raw_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:11:11",
+        data={"data": {"temperature": 29.0}},
+    )
+    state_object = create_state_object(raw_state)
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",
+        payload=["item1", "item2", "{address}"],
+    )
+    executor = WebhookExecutor(action_config)
+    await executor.execute(state_object)
+
+    expected_payload = ["item1", "item2", "DE:AD:BE:EF:11:11"]
+    mock_send_request.assert_called_once_with(
+        "http://example.com/hook", "POST", expected_payload, {}
+    )
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.WebhookExecutor._send_request")
+async def test_webhook_executor_post_with_raw_string_payload(
+    mock_send_request, mock_switchbot_advertisement
+):
+    raw_state = mock_switchbot_advertisement(
+        address="DE:AD:BE:EF:11:11",
+        data={"data": {"temperature": 29.0}},
+    )
+    state_object = create_state_object(raw_state)
+    action_config = WebhookAction(
+        type="webhook",
+        url="http://example.com/hook",
+        method="POST",
+        payload="raw_string_{address}",
+    )
+    executor = WebhookExecutor(action_config)
+    await executor.execute(state_object)
+
+    expected_payload = "raw_string_DE:AD:BE:EF:11:11"
+    mock_send_request.assert_called_once_with(
+        "http://example.com/hook", "POST", expected_payload, {}
+    )
+
+
+@pytest.mark.asyncio
 @patch("switchbot_actions.action_executor.time.perf_counter")
 @patch.object(action_executed, "send")
 @patch("switchbot_actions.action_executor.WebhookExecutor._send_request")
@@ -226,6 +276,57 @@ async def test_webhook_send_request_post_success(mock_async_client, caplog):
 
 @pytest.mark.asyncio
 @patch("httpx.AsyncClient")
+async def test_webhook_send_request_post_with_list_payload(mock_async_client, caplog):
+    """Test that list payload is sent as JSON."""
+    caplog.set_level(logging.DEBUG)
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_async_client.return_value.__aenter__.return_value.post.return_value = (
+        mock_response
+    )
+
+    executor = WebhookExecutor(WebhookAction(type="webhook", url="http://test.com"))
+    list_payload = ["item1", "item2"]
+    await executor._send_request("http://test.com", "POST", list_payload, {})
+
+    # Verify that post was called with json parameter for list payload
+    mock_client = mock_async_client.return_value.__aenter__.return_value
+    mock_client.post.assert_called_once_with(
+        "http://test.com", json=list_payload, headers={}, timeout=10
+    )
+    assert "Webhook to http://test.com successful" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
+async def test_webhook_send_request_post_with_raw_string_payload(
+    mock_async_client, caplog
+):
+    """Test that raw string payload is sent as content without JSON encoding."""
+    caplog.set_level(logging.DEBUG)
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_async_client.return_value.__aenter__.return_value.post.return_value = (
+        mock_response
+    )
+
+    executor = WebhookExecutor(WebhookAction(type="webhook", url="http://test.com"))
+    raw_payload = "raw_string_data"
+    await executor._send_request("http://test.com", "POST", raw_payload, {})
+
+    # Verify that post was called with content parameter for string payload
+    mock_client = mock_async_client.return_value.__aenter__.return_value
+    mock_client.post.assert_called_once_with(
+        "http://test.com",
+        content=raw_payload,
+        headers={"Content-Type": "text/plain"},
+        timeout=10,
+    )
+    assert "Webhook to http://test.com successful" in caplog.text
+
+
+@pytest.mark.asyncio
+@patch("httpx.AsyncClient")
 async def test_webhook_send_request_get_failure(mock_async_client, caplog):
     caplog.set_level(logging.ERROR)
     mock_response = AsyncMock()
@@ -266,6 +367,54 @@ async def test_mqtt_publish_executor(mock_signal_send, mqtt_message_json):
         None,
         topic="home/actors/actor1",
         payload={"new_temp": "28.5"},
+        qos=0,
+        retain=False,
+    )
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.publish_mqtt_message_request.send")
+async def test_mqtt_publish_executor_with_list_payload(
+    mock_signal_send, mqtt_message_json
+):
+    """Test that list payload is published as-is to MQTT."""
+    action_config = MqttPublishAction(
+        type="mqtt_publish",
+        topic="home/actors/actor1",
+        payload=["item1", "item2", "{temperature}"],
+    )
+    executor = MqttPublishExecutor(action_config)
+    state_object = create_state_object(mqtt_message_json)
+    await executor.execute(state_object)
+
+    mock_signal_send.assert_called_once_with(
+        None,
+        topic="home/actors/actor1",
+        payload=["item1", "item2", "28.5"],
+        qos=0,
+        retain=False,
+    )
+
+
+@pytest.mark.asyncio
+@patch("switchbot_actions.action_executor.publish_mqtt_message_request.send")
+async def test_mqtt_publish_executor_with_raw_string_payload(
+    mock_signal_send, mqtt_message_json
+):
+    """Test that raw string payload is published as-is to MQTT."""
+    action_config = MqttPublishAction(
+        type="mqtt_publish",
+        topic="home/actors/actor1",
+        payload="raw_string_{temperature}",
+    )
+    executor = MqttPublishExecutor(action_config)
+    state_object = create_state_object(mqtt_message_json)
+    await executor.execute(state_object)
+
+    mock_signal_send.assert_called_once_with(
+        None,
+        topic="home/actors/actor1",
+        payload="raw_string_28.5",
         qos=0,
         retain=False,
     )

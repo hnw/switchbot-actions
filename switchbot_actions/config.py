@@ -147,7 +147,7 @@ class WebhookAction(BaseConfigModel):
     type: Literal["webhook"]
     url: str
     method: str = "POST"
-    payload: Union[str, Dict[str, Any]] = ""
+    payload: Union[Dict[str, Any], List[Any], str] = ""
     headers: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("method")
@@ -157,11 +157,20 @@ class WebhookAction(BaseConfigModel):
             raise ValueError("method must be POST or GET")
         return upper_v
 
+    @model_validator(mode="after")
+    def validate_payload_for_method(self) -> "WebhookAction":
+        if self.method == "GET" and isinstance(self.payload, list):
+            raise ValueError(
+                "Payload cannot be a list when method is GET. "
+                "Use a dictionary (key-value pairs) for query parameters."
+            )
+        return self
+
 
 class MqttPublishAction(BaseConfigModel):
     type: Literal["mqtt_publish"]
     topic: str
-    payload: Union[str, Dict[str, Any]] = ""
+    payload: Union[str, Dict[str, Any], List[Any]] = ""
     qos: Literal[0, 1, 2] = 0
     retain: bool = False
 
