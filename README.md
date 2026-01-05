@@ -80,11 +80,11 @@ automations:
 
 ### **3. Run**
 
-Launch the application with your configuration. Use the --debug flag first to ensure your devices are discovered.
+Launch the application with your configuration. Use the -vvv flag first to ensure your devices are discovered.
 
 ```
 # Run with sudo if you encounter permission errors
-switchbot-actions --debug -c config.yaml
+switchbot-actions -vvv -c config.yaml
 ```
 
 ## **What's Possible? (More Examples)**

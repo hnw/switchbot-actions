@@ -341,7 +341,7 @@ Settings are loaded in the following order, with later sources overriding earlie
 
 1. **Application Defaults**: Hardcoded default values.
 2. **config.yaml Settings**: Values loaded from your configuration file.
-3. **Command-Line Flags**: Arguments passed at runtime (e.g., --debug, --scan-duration).
+3. **Command-Line Flags**: Arguments passed at runtime (e.g., -v, --scan-duration).
 
 ### **5.2. `scanner`**
 
@@ -428,6 +428,7 @@ Join sensor data with device names:
 
 ```promql
 switchbot_temperature * on(address) group_left(name) switchbot_device_info
+```
 
 ### **5.5. `logging`**
 
@@ -501,7 +502,6 @@ The application uses the `blinker` library for internal communication.
 ## **8. Project Structure**
 
 ```
-
 /switchbot-actions/
 ├── docs/
 │ ├── deployment.md
@@ -525,7 +525,4 @@ The application uses the `blinker` library for internal communication.
 ├── tests/
 ├── config.yaml.example
 └── README.md
-
-```
-
 ```

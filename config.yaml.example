@@ -208,7 +208,7 @@ automations:
 
   - name: "Notify if MQTT sensor is offline for 5 minutes"
     if:
-      source: "mqtt_timer"
+      source: "mqtt"
       duration: "5m"
       topic: "home/sensors/+/status"
       conditions:
@@ -328,15 +328,15 @@ prometheus:
 # ----------------------------------------------------
 logging:
   # Default log level for the application: DEBUG, INFO, WARNING, ERROR
-  # This is overridden by the --debug flag.
+  # This is overridden by the -v flag.
   level: "INFO"
 
   # Log format, using Python's logging format syntax.
-  format: "% (asctime)s - %(name)s - %(levelname)s - %(message)s"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
   # Set specific log levels for noisy libraries.
   # This is useful for debugging specific components without enabling global debug.
-  # These settings are ignored if the --debug flag is used.
+  # These settings are ignored if the -v flag is used.
   loggers:
     bleak: "WARNING"
     # ----------------------------------------------------

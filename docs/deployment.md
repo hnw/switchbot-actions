@@ -13,11 +13,11 @@ This approach is perfect for easily testing the application or running it manual
 
 Before creating any configuration, it's crucial to first verify that your system's Bluetooth adapter is working correctly and can discover your SwitchBot devices. This helps separate hardware/permission issues from configuration issues.
 
-Run the application with the `--debug` flag and without a configuration file:
+Run the application with the `-vvv` flag and without a configuration file:
 
 ```
 # You may need sudo for BLE permissions.
-switchbot-actions --debug
+switchbot-actions -vvv
 ```
 
 If you see log lines containing `Received advertisement from...`, your hardware setup is correct and you can proceed to the next step. If you see permission errors, try running with `sudo`.
