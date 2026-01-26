@@ -20,10 +20,19 @@ def mock_ble_scanner(mock_switchbot_advertisement):
         data={"modelName": "WoHand", "data": {"isOn": True}},
     )
 
-    scanner.discover.side_effect = [
-        {"DE:AD:BE:EF:44:44": advertisement},
-        asyncio.CancelledError,  # To stop the loop after one iteration
-    ]
+    calls = 0
+
+    async def mock_discover(*args, **kwargs):
+        nonlocal calls
+        if calls == 0:
+            callback = getattr(scanner, "callback", None)
+            if callback:
+                callback(advertisement)
+            calls += 1
+            return None
+        raise asyncio.CancelledError()
+
+    scanner.discover.side_effect = mock_discover
 
     return scanner
 
@@ -43,7 +52,10 @@ def scanner_settings():
 @pytest.fixture
 def scanner(mock_ble_scanner, scanner_settings):
     """Provides a SwitchbotScanner with mock dependencies."""
-    return SwitchbotScanner(settings=scanner_settings, scanner=mock_ble_scanner)
+    scanner_obj = SwitchbotScanner(settings=scanner_settings, scanner=mock_ble_scanner)
+    # Set the callback on the mock if it's there
+    mock_ble_scanner.callback = scanner_obj._process_advertisement
+    return scanner_obj
 
 
 @pytest.mark.asyncio
@@ -196,7 +208,7 @@ async def test_switchbot_client_initializes_scanner_internally(scanner_settings)
 
         # Assert that GetSwitchbotDevices was called with the correct interface
         MockGetSwitchbotDevices.assert_called_once_with(
-            interface=scanner_settings.interface
+            interface=scanner_settings.interface, callback=client._process_advertisement
         )
 
         # Verify that the internal _scanner attribute is set to the mock instance
@@ -204,7 +216,7 @@ async def test_switchbot_client_initializes_scanner_internally(scanner_settings)
 
         # Configure mock discover to return empty dict then raise CancelledError
         MockGetSwitchbotDevices.return_value.discover.side_effect = [
-            {},
+            None,
             asyncio.CancelledError,
         ]
 

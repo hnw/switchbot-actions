@@ -25,7 +25,9 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
     ):
         super().__init__(settings)
         if scanner is None:
-            self._scanner = GetSwitchbotDevices(interface=self.settings.interface)
+            self._scanner = GetSwitchbotDevices(
+                interface=self.settings.interface, callback=self._process_advertisement
+            )
         else:
             self._scanner = scanner
         self.task: asyncio.Task | None = None
@@ -84,9 +86,7 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
                     f"Starting BLE scan for {self.settings.duration} seconds..."
                 )
                 start_time = time.monotonic()
-                devices = await self._scanner.discover(
-                    scan_timeout=self.settings.duration
-                )
+                await self._scanner.discover(scan_timeout=self.settings.duration)
                 scan_duration = time.monotonic() - start_time
 
                 scan_executed.send(
@@ -95,9 +95,6 @@ class SwitchbotScanner(BaseComponent[ScannerSettings]):
                     scan_duration=scan_duration,
                     cycle_duration=cycle_duration,
                 )
-
-                for address, device in devices.items():
-                    self._process_advertisement(device)
 
                 # Wait for the configured wait time
                 if self._running and self.settings.wait > 0:

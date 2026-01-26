@@ -2290,14 +2290,14 @@ nodejs = ["nodejs-wheel-binaries"]
 
 [[package]]
 name = "pyswitchbot"
-version = "0.75.0"
+version = "1.0.0"
 description = "A library to communicate with Switchbot"
 optional = false
 python-versions = ">=3.11"
 groups = ["main"]
 files = [
-    {file = "pyswitchbot-0.75.0-py3-none-any.whl", hash = "sha256:1c42d6c28f422bc55cf613dd0ad18e701353c42c1403f9f040ee5f7b3297f350"},
-    {file = "pyswitchbot-0.75.0.tar.gz", hash = "sha256:5e7dfbe17671737be3b76459f3c76bed0cccda657def92b7e64b9443507ba167"},
+    {file = "pyswitchbot-1.0.0-py3-none-any.whl", hash = "sha256:016c4d3500e824e7d8b0c6969736e8bad016a1563636650f2a372d98a281caa4"},
+    {file = "pyswitchbot-1.0.0.tar.gz", hash = "sha256:410c8aea9c2dae5a610d806c40375a21662187db13879c4eac7e620396042c7c"},
 ]
 
 [package.dependencies]
@@ -3541,4 +3541,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "<4.0,>=3.11"
-content-hash = "0ee8dcd5f762fd46f2b88d319f807c0a1c0d7afea68fc456ed880a4e062067ad"
+content-hash = "c09641e83d99c488240720ca5a6b7675f2689fe8219beb14952a6405fb9acab1"
